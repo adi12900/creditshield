@@ -13,6 +13,9 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven { url = uri("file://${System.getenv("HOME")}/.m2/repository") }
+        maven { url = uri("file://${System.getenv("HOME")}/Android/Sdk/extras/android/m2repository") }
+        maven { url = uri("file://${System.getenv("HOME")}/Android/Sdk/extras/google/m2repository") }
     }
 }
 
