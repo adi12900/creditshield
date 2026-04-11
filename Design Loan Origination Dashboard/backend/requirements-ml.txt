@@ -1,0 +1,4 @@
+# Optional ML stack (not required for API foundation)
+# scikit-learn>=1.4,<2
+# xgboost>=2.0,<3
+# shap>=0.44,<1
