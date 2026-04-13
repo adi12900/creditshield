@@ -1,0 +1,16 @@
+# Fraud and integrity — document, device, behaviour
+
+[FRAUD] Document tampering
+- Salary slip, bank PDF, or ITR: fail hash / incremental save / metadata anomaly on income-critical docs → HR-02 REJECT and fraud case.
+- Re-upload only after full re-verification; do not auto-clear prior tamper flag.
+
+[FRAUD] Identity mismatch
+- PAN vs Aadhaar vs bureau name/DOB mismatch beyond tolerance → manual fraud review; multiple conflicts → decline.
+- Mobile/email recently changed across application vs KYC records → step-up authentication before sanction.
+
+[FRAUD] Loan stacking and velocity
+- ≥3 new unsecured loans or enquiries in rolling 90 days → HR-05 REJECT (stacking).
+- Thin bureau + high velocity of new accounts → default manual review even if hard thresholds not yet hit.
+
+[FRAUD] Device and channel
+- Device fingerprint and IP geolocation inconsistent with declared residence and prior login pattern → elevated fraud score; combine with income and bureau signals.

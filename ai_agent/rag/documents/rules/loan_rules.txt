@@ -1,0 +1,19 @@
+# Credit — affordability and bureau (aligns with engine HR/SR codes)
+
+[CREDIT] FOIR (Fixed Obligations to Income Ratio)
+- Unsecured personal loan: FOIR must not exceed 65% unless board-approved exception path (manual).
+- FOIR = (all monthly EMIs + proposed EMI + fixed obligations) / verified gross monthly income.
+- Breach → HR-01 auto REJECT for standard retail personal loan.
+
+[CREDIT] CIBIL / bureau floor
+- Unsecured personal loan: minimum bureau score 550 (CIBIL or Experian per bureau policy).
+- Home loan programme: minimum 600 unless thin-file programme rules apply.
+- Score below floor → HR-06 auto REJECT for that product.
+
+[CREDIT] Income verification
+- Verified income (AA / bank analytics / ITR) is binding for FOIR; declared income used only when verified path incomplete → REVIEW not auto-approve.
+- Large declared vs verified gap (>50% vs verified) → HR-04 path.
+
+[CREDIT] Obligations and stacking
+- Count all reported live loans and CP enquiries in FOIR numerator per policy table.
+- Multiple new facilities in 90 days → stacking review; ≥3 new unsecured loans in 90 days → HR-05 REJECT unless documented secured top-up exception.

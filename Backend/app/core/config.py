@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     setu_sessions_get_path_template: str = "/v2/sessions/{session_id}"
     setu_request_timeout_seconds: float = 30.0
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
