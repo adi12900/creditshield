@@ -6,6 +6,7 @@ from app.schemas.setu import (
     CreateConsentRequest,
     CreateConsentResponse,
     CreateFIDataFetchRequest,
+    CreateFIDataFetchResponse,
     FetchDataResponse,
     FetchTransactionsRequest,
     FetchTransactionsResponse,
@@ -16,7 +17,7 @@ from app.schemas.setu import (
 )
 from app.services.risk.setu_aa_service import SetuServiceError, setu_aa_service
 
-router = APIRouter(tags=["setu-account-aggregator"], prefix="/setu")
+router = APIRouter(tags=["setu-account-aggregator"])
 
 
 def _setu_error_to_http_exception(exc: SetuServiceError) -> HTTPException:
@@ -62,8 +63,8 @@ async def create_consent(payload: CreateConsentRequest) -> CreateConsentResponse
         raise _setu_error_to_http_exception(exc) from exc
 
 
-@router.post("/consents/{consent_id}/data-fetch", response_model=FetchDataResponse)
-async def fetch_fi_data(consent_id: str, payload: CreateFIDataFetchRequest) -> FetchDataResponse:
+@router.post("/consents/{consent_id}/data-fetch", response_model=CreateFIDataFetchResponse)
+async def fetch_fi_data(consent_id: str, payload: CreateFIDataFetchRequest) -> CreateFIDataFetchResponse:
     """Fetch FI data using Setu AA v2 Sessions API"""
     try:
         session_data = await setu_aa_service.fetch_fi_data(
@@ -74,7 +75,7 @@ async def fetch_fi_data(consent_id: str, payload: CreateFIDataFetchRequest) -> F
             },
             format=payload.format,
         )
-        return FetchDataResponse(**session_data)
+        return CreateFIDataFetchResponse(**session_data)
     except SetuServiceError as exc:
         raise _setu_error_to_http_exception(exc) from exc
 

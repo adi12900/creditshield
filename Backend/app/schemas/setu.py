@@ -26,19 +26,18 @@ class DataRange(BaseModel):
     from_date: str = Field(alias="from", description="ISO 8601 format: 2023-01-01T00:00:00Z")
     to_date: str = Field(alias="to", description="ISO 8601 format: 2023-12-31T23:59:59Z")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class PurposeCategory(BaseModel):
-    type: str = "LOAN"
+    type: str = "Financial Information User Entity"
 
 
 class Purpose(BaseModel):
     code: str = Field(default="103", description="103=Loan underwriting")
     text: str = "Loan underwriting and risk assessment"
-    refUri: str = "https://www.setu.co/purpose"
-    category: PurposeCategory
+    refUri: str = "https://api.rebit.org.in/aa/purpose/103.xml"
+    category: PurposeCategory = Field(default_factory=PurposeCategory)
 
 
 class CreateConsentRequest(BaseModel):
@@ -53,8 +52,11 @@ class CreateConsentRequest(BaseModel):
         default_factory=lambda: ["PROFILE", "SUMMARY", "TRANSACTIONS"],
         description="Types of consent data"
     )
-    consentDuration: ConsentDuration = Field(description="How long to store data")
-    purpose: Purpose = Field(description="Purpose of consent")
+    consentDuration: ConsentDuration = Field(
+        default_factory=lambda: ConsentDuration(unit="MONTH", value=12),
+        description="How long to store data"
+    )
+    purpose: Purpose = Field(default_factory=Purpose, description="Purpose of consent")
     redirectUrl: str | None = None
     PAN: str | None = None
 
@@ -89,6 +91,13 @@ class CreateFIDataFetchRequest(BaseModel):
     consentId: str = Field(description="Consent ID from consent creation")
     dataRange: DataRange = Field(description="Date range for FI data")
     format: str = Field(default="json", description="json or xml")
+
+
+class CreateFIDataFetchResponse(BaseModel):
+    session_id: str
+    consent_id: str
+    status: str
+    txnid: str | None = None
 
 
 class FIAccount(BaseModel):

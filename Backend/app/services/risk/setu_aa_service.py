@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -124,16 +124,16 @@ class SetuAAService:
             purpose = {
                 "code": "103",
                 "text": "Loan underwriting and risk assessment",
-                "refUri": "https://www.setu.co/purpose",
-                "category": {"type": "LOAN"},
+                "refUri": "https://api.rebit.org.in/aa/purpose/103.xml",
+                "category": {"type": "Financial Information User Entity"},
             }
 
+        # Setu AA v2 minimal payload structure
+        # Note: Consent types, duration, and modes are configured at product level in Setu Bridge
         payload = {
             "vua": vua,
             "dataRange": data_range,
             "fiTypes": fi_types,
-            "consentTypes": consent_types or ["PROFILE", "SUMMARY", "TRANSACTIONS"],
-            "consentDuration": consent_duration or {"unit": "MONTH", "value": 24},
             "purpose": purpose,
         }
 
@@ -266,8 +266,12 @@ class SetuAAService:
         to_date: str | None = None,
     ) -> dict[str, Any]:
         """Legacy: Fetch transactions using v2 session-based flow"""
-        from_date = from_date or "2023-01-01T00:00:00Z"
-        to_date = to_date or datetime.now(tz=timezone.utc).isoformat()
+        now_utc = datetime.now(tz=timezone.utc)
+        default_from = (now_utc - timedelta(days=365)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        default_to = now_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+        from_date = from_date or default_from
+        to_date = to_date or default_to
 
         # Create session
         session_data = await self.fetch_fi_data(
@@ -287,6 +291,7 @@ class SetuAAService:
 
         return {
             "consent_id": consent_id,
+            "consent_status": str(self._consent_store.get(consent_id, {}).get("status", "UNKNOWN")),
             "session_id": session_id,
             "count": len(transactions),
             "transactions": transactions,
@@ -358,7 +363,7 @@ class SetuAAService:
             body = {"message": response.text}
 
         if response.status_code >= 400:
-            detail = self._extract_value(body, ["message", "error", "detail"]) or str(body)
+            detail = self._extract_value(body, ["message", "error", "detail", "errorMsg", "errorCode"]) or str(body)
             raise SetuServiceError(f"Setu API error ({response.status_code}): {detail}", response.status_code)
         return body
 
