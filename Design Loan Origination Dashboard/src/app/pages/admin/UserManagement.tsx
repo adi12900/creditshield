@@ -1,4 +1,5 @@
 import { UserPlus, Shield, Search, Edit, Users, Activity, BadgeCheck } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -9,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { workflowApi, type AdminUserRole } from '../../lib/workflowApi';
 
 const users = [
   {
@@ -159,10 +161,95 @@ const roleData = [
 
 const chartColors = ['#00A86B', '#1A4A7A', '#0F766E', '#FD7E14', '#64748B', '#0A2540'];
 
+type UiUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  lastLogin: string;
+  loansProcessed: number;
+};
+
+const apiRoleToLabel: Record<AdminUserRole, string> = {
+  loan_officer: 'Loan Officer',
+  credit_analyst: 'Credit Analyst',
+  underwriter: 'Underwriter',
+  compliance_officer: 'Compliance Officer',
+};
+
 export function UserManagementPage() {
-  const activeUsers = users.filter((user) => user.status === 'Active').length;
-  const inactiveUsers = users.length - activeUsers;
-  const averageLoans = Math.round(users.reduce((sum, user) => sum + user.loansProcessed, 0) / users.length);
+  const [managedUsers, setManagedUsers] = useState<UiUser[]>(users);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<AdminUserRole>('loan_officer');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const activeUsers = managedUsers.filter((user) => user.status === 'Active').length;
+  const inactiveUsers = managedUsers.length - activeUsers;
+  const averageLoans = Math.round(managedUsers.reduce((sum, user) => sum + user.loansProcessed, 0) / managedUsers.length);
+
+  const roleData = useMemo(
+    () => [
+      { role: 'Loan Officer', count: managedUsers.filter((user) => user.role === 'Loan Officer').length },
+      { role: 'Credit Analyst', count: managedUsers.filter((user) => user.role === 'Credit Analyst').length },
+      { role: 'Underwriter', count: managedUsers.filter((user) => user.role === 'Underwriter').length },
+      { role: 'Compliance', count: managedUsers.filter((user) => user.role === 'Compliance Officer').length },
+      { role: 'Operations', count: managedUsers.filter((user) => user.role === 'Operations Team').length },
+      { role: 'Admin', count: managedUsers.filter((user) => user.role === 'System Admin').length },
+    ],
+    [managedUsers]
+  );
+
+  const handleCreateUser = async () => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
+      setErrorMessage('Please fill all required fields.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const created = await workflowApi.createUser({
+        full_name: fullName,
+        email: email.trim(),
+        role,
+        password,
+        is_active: true,
+      });
+
+      setManagedUsers((prev) => [
+        {
+          id: created.id,
+          name: created.full_name,
+          email: created.email,
+          role: apiRoleToLabel[created.role],
+          status: created.is_active ? 'Active' : 'Inactive',
+          lastLogin: 'Never',
+          loansProcessed: 0,
+        },
+        ...prev,
+      ]);
+
+      setFirstName('');
+      setLastName('');
+      setEmail('');
+      setRole('loan_officer');
+      setPassword('');
+      setSuccessMessage('User created successfully.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to create user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -201,7 +288,7 @@ export function UserManagementPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-slate-900">Role Distribution</h3>
-              <p className="text-sm text-slate-600">All 15 internal users are represented below</p>
+              <p className="text-sm text-slate-600">All {managedUsers.length} internal users are represented below</p>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Activity className="w-4 h-4 text-green-600" />
@@ -240,7 +327,7 @@ export function UserManagementPage() {
           </div>
           <div className="mt-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
             <Users className="inline-block w-4 h-4 mr-2" />
-            15 users shown in the frontend with complete role coverage.
+            {managedUsers.length} users shown in the frontend with complete role coverage.
           </div>
         </div>
       </div>
@@ -286,7 +373,7 @@ export function UserManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {users.map((user) => (
+              {managedUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div>
@@ -339,6 +426,8 @@ export function UserManagementPage() {
                 <input
                   type="text"
                   placeholder="Enter first name..."
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
                 />
               </div>
@@ -347,6 +436,8 @@ export function UserManagementPage() {
                 <input
                   type="text"
                   placeholder="Enter last name..."
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
                 />
               </div>
@@ -356,20 +447,40 @@ export function UserManagementPage() {
               <input
                 type="email"
                 placeholder="user@lendco.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Role *</label>
-              <select className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
-                <option>Select role...</option>
-                <option>Loan Officer</option>
-                <option>Credit Analyst</option>
-                <option>Underwriter</option>
-                <option>Compliance Officer</option>
-                <option>Operations Team</option>
-                <option>System Admin</option>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as AdminUserRole)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+              >
+                <option value="loan_officer">Loan Officer</option>
+                <option value="credit_analyst">Credit Analyst</option>
+                <option value="underwriter">Underwriter</option>
+                <option value="compliance_officer">Compliance Officer</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Password *</label>
+              <input
+                type="password"
+                minLength={8}
+                pattern="^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"
+                title="Minimum 8 characters, including at least one uppercase letter, one number, and one symbol"
+                placeholder="Enter strong password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+                required
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Must contain at least 8 characters, 1 uppercase letter, 1 number, and 1 symbol.
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Delegated Authority (₹)</label>
@@ -385,8 +496,18 @@ export function UserManagementPage() {
                 <span className="text-sm text-slate-700">Send welcome email with credentials</span>
               </label>
             </div>
-            <button className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
-              Create User
+            {errorMessage ? (
+              <p className="text-sm text-red-600">{errorMessage}</p>
+            ) : null}
+            {successMessage ? (
+              <p className="text-sm text-green-700">{successMessage}</p>
+            ) : null}
+            <button
+              onClick={handleCreateUser}
+              disabled={isSubmitting}
+              className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-60"
+            >
+              {isSubmitting ? 'Creating...' : 'Create User'}
             </button>
           </div>
         </div>

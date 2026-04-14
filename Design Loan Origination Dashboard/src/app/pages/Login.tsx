@@ -2,23 +2,37 @@ import { useState } from 'react';
 import { LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore, UserRole } from '../store';
+import { setAuthToken, workflowApi } from '../lib/workflowApi';
 
 export function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('loan_officer');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const setUser = useStore((state) => state.setUser);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUser({
-      id: '1',
-      name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
-      email,
-      role,
-    });
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+    try {
+      const auth = await workflowApi.login(username, password);
+      setAuthToken(auth.access_token);
+
+      const loginRole = auth.role as UserRole;
+      setUser({
+        id: 'auth-user',
+        name: auth.full_name,
+        email: username,
+        role: loginRole,
+      });
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -67,13 +81,13 @@ export function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+                Username / Email
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@company.com"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="system_admin or your.email@company.com"
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent"
                 required
               />
@@ -93,30 +107,11 @@ export function LoginPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Select Role
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent"
-              >
-                <option value="loan_officer">Loan Officer</option>
-                <option value="credit_analyst">Credit Analyst</option>
-                <option value="underwriter">Underwriter</option>
-                <option value="compliance_officer">Compliance Officer</option>
-                <option value="ops_team">Operations Team</option>
-                <option value="system_admin">System Admin</option>
-                <option value="board_member">Board / Credit Committee</option>
-                <option value="chief_compliance_officer">Chief Compliance Officer</option>
-                <option value="nodal_grievance_officer">Nodal Grievance Officer</option>
-                <option value="lsp_governance_officer">LSP Governance Officer</option>
-                <option value="data_protection_officer">Data Protection Officer</option>
-                <option value="recovery_governance_officer">Recovery Governance Officer</option>
-                <option value="internal_auditor">Internal Auditor</option>
-              </select>
-            </div>
+            {error ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
 
             <div className="flex items-center justify-between">
               <label className="flex items-center">
@@ -130,9 +125,10 @@ export function LoginPage() {
 
             <button
               type="submit"
+              disabled={loading}
               className="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
             >
-              Sign In
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 

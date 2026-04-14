@@ -15,8 +15,50 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
+  Future<bool> _ensureKycCompleted(AppState appState) async {
+    if (appState.kycCompleted) {
+      return true;
+    }
+
+    final shouldComplete = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('KYC Required'),
+        content: const Text('Please complete KYC before applying for a loan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Later'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Complete KYC'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (shouldComplete == true) {
+      context.push('/kyc');
+    }
+
+    return false;
+  }
+
   // Req 20.4 — guard: if active application exists, prompt resume or abandon
-  void _onApplyTap(BuildContext context, AppState appState) {
+  Future<void> _onApplyTap(AppState appState) async {
+    final canApply = await _ensureKycCompleted(appState);
+    if (!mounted) {
+      return;
+    }
+    if (!canApply) {
+      return;
+    }
+
     if (appState.resumeLoanType != null) {
       showDialog(
         context: context,
@@ -84,8 +126,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final appState = context.watch<AppState>();
 
     final tabs = [
-      _HomeTab(appState: appState),
-      _ApplyTab(onStartApply: () => _onApplyTap(context, appState)),
+      _HomeTab(
+        appState: appState,
+        onApply: () async {
+          await _onApplyTap(appState);
+        },
+      ),
+      _ApplyTab(onStartApply: () async {
+        await _onApplyTap(appState);
+      }),
       const _TrackTab(),
       const _DashboardTab(),
       _ProfileTab(appState: appState),
@@ -125,7 +174,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _HomeTab extends StatelessWidget {
   final AppState appState;
-  const _HomeTab({required this.appState});
+  final Future<void> Function() onApply;
+
+  const _HomeTab({required this.appState, required this.onApply});
 
   @override
   Widget build(BuildContext context) {
@@ -276,8 +327,9 @@ class _HomeTab extends StatelessWidget {
                           icon: Icons.calculate_outlined,
                           label: 'EMI Calculator',
                           secondary: secondary,
-                          onTap: () =>
-                              context.push('/loan-application/personal'),
+                          onTap: () {
+                            onApply();
+                          },
                         ),
                         const SizedBox(width: 12),
                         _QuickAction(
@@ -345,7 +397,9 @@ class _HomeTab extends StatelessWidget {
         button: true,
         label: loan['title'] as String,
         child: GestureDetector(
-          onTap: () => context.push('/loan-application/${loan['type']}'),
+          onTap: () {
+            onApply();
+          },
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -487,7 +541,7 @@ class _QuickAction extends StatelessWidget {
 }
 
 class _ApplyTab extends StatelessWidget {
-  final VoidCallback onStartApply;
+  final Future<void> Function() onStartApply;
 
   const _ApplyTab({required this.onStartApply});
 
@@ -531,7 +585,9 @@ class _ApplyTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: onStartApply,
+                      onPressed: () {
+                        onStartApply();
+                      },
                       child: const Text('Choose Loan Type'),
                     ),
                   ],

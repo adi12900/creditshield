@@ -16,6 +16,9 @@ The SQL below is designed for PostgreSQL and uses `IF NOT EXISTS` where possible
 
 ### Core Tables
 - `users`
+- `borrowers`
+- `borrower_kyc_profiles`
+- `borrower_digilocker_artifacts`
 - `loan_applications`
 - `application_stage_history`
 - `application_assignments`
@@ -111,6 +114,56 @@ CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS ix_users_role ON users (role);
 
 -- =====================================================
+-- BORROWER & DIGILOCKER KYC
+-- =====================================================
+CREATE TABLE IF NOT EXISTS borrowers (
+    id BIGSERIAL PRIMARY KEY,
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    mobile_number VARCHAR(15) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_borrowers_email ON borrowers (email);
+CREATE INDEX IF NOT EXISTS ix_borrowers_mobile_number ON borrowers (mobile_number);
+
+CREATE TABLE IF NOT EXISTS borrower_kyc_profiles (
+    id BIGSERIAL PRIMARY KEY,
+    borrower_id BIGINT NOT NULL UNIQUE REFERENCES borrowers(id) ON DELETE CASCADE,
+    kyc_status VARCHAR(20) NOT NULL CHECK (kyc_status IN ('Pending', 'Verified', 'Rejected')),
+    kyc_provider VARCHAR(30) NOT NULL DEFAULT 'digilocker',
+    kyc_reference_id VARCHAR(100),
+    verified_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_borrower_kyc_profiles_borrower_id ON borrower_kyc_profiles (borrower_id);
+CREATE INDEX IF NOT EXISTS ix_borrower_kyc_profiles_kyc_status ON borrower_kyc_profiles (kyc_status);
+
+CREATE TABLE IF NOT EXISTS borrower_digilocker_artifacts (
+    id BIGSERIAL PRIMARY KEY,
+    borrower_id BIGINT NOT NULL REFERENCES borrowers(id) ON DELETE CASCADE,
+    artifact_type VARCHAR(40) NOT NULL CHECK (artifact_type IN ('AADHAAR_XML', 'PAN_PDF', 'CKYC_XML', 'PHOTO', 'ADDRESS_PROOF')),
+    artifact_id VARCHAR(120) NOT NULL,
+    issuer_name VARCHAR(120),
+    artifact_number_masked VARCHAR(50),
+    issue_date DATE,
+    payload_json JSONB NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    verified_at TIMESTAMPTZ,
+    UNIQUE (borrower_id, artifact_type, artifact_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_borrower_digilocker_artifacts_borrower_id ON borrower_digilocker_artifacts (borrower_id);
+CREATE INDEX IF NOT EXISTS ix_borrower_digilocker_artifacts_artifact_type ON borrower_digilocker_artifacts (artifact_type);
+
+-- =====================================================
 -- LOAN APPLICATION CORE
 -- =====================================================
 CREATE TABLE IF NOT EXISTS loan_applications (
@@ -130,6 +183,11 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE loan_applications
+ADD COLUMN IF NOT EXISTS borrower_id BIGINT REFERENCES borrowers(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS ix_loan_applications_borrower_id ON loan_applications (borrower_id);
 
 CREATE INDEX IF NOT EXISTS ix_loan_applications_stage ON loan_applications (stage);
 CREATE INDEX IF NOT EXISTS ix_loan_applications_risk_grade ON loan_applications (risk_grade);
@@ -413,22 +471,225 @@ COMMIT;
 
 If you want a minimal rollout first, create these tables first:
 1. `users`
-2. `loan_applications`
-3. `documents`
-4. `communications`
-5. `credit_memos`
-6. `loan_offers`
-7. `policy_overrides`
-8. `kyc_aml_checks`
-9. `fraud_signals`
-10. `audit_logs`
-11. `regulatory_reports`
-12. `rbi_compliance_checks`
+2. `borrowers`
+3. `borrower_kyc_profiles`
+4. `borrower_digilocker_artifacts`
+5. `loan_applications`
+6. `documents`
+7. `communications`
+8. `credit_memos`
+9. `loan_offers`
+10. `policy_overrides`
+11. `kyc_aml_checks`
+12. `fraud_signals`
+13. `audit_logs`
+14. `regulatory_reports`
+15. `rbi_compliance_checks`
 
 Then add the rest in Phase 2.
 
 ## 4) Notes
 
 - Your currently added user API already expects a `users` table with `user_role` enum values.
+- Borrower authentication APIs require `borrowers` with `password_hash`.
+- Borrower KYC APIs should use `borrower_kyc_profiles` and `borrower_digilocker_artifacts` instead of in-memory storage for production.
 - The current workflow API in backend is in-memory; these tables are what you need to persist that workflow in production.
 - Add migration tooling (Alembic) so table updates are versioned and repeatable.
+
+## 5) Demo DigiLocker CSV Import (Your Format)
+
+Use this flow to import your DigiLocker CSV data directly into borrower and KYC tables.
+
+Expected CSV header:
+
+```text
+id,full_name,gender,date_of_birth,phone,email,aadhaar_number,pan_number,address,state,pincode,document_type,document_id,issue_date
+```
+
+### Step A: Create CSV staging table
+
+```sql
+CREATE TABLE IF NOT EXISTS digilocker_demo_csv_stage (
+        id BIGINT,
+        full_name VARCHAR(120),
+        gender VARCHAR(20),
+        date_of_birth DATE,
+        phone VARCHAR(15),
+        email VARCHAR(255),
+        aadhaar_number VARCHAR(20),
+        pan_number VARCHAR(20),
+        address VARCHAR(255),
+        state VARCHAR(80),
+        pincode VARCHAR(10),
+        document_type VARCHAR(80),
+        document_id VARCHAR(120),
+        issue_date DATE
+);
+```
+
+### Step B: Upsert Borrowers, KYC Profiles, and DigiLocker Artifacts
+
+Populate `digilocker_demo_csv_stage` yourself first, then run:
+
+```sql
+BEGIN;
+
+-- 1) Borrower records (password hash is demo placeholder for KYC-only datasets)
+WITH stage_clean AS (
+    SELECT
+        s.id,
+        s.full_name,
+        LOWER(TRIM(s.email)) AS email_norm,
+        REGEXP_REPLACE(COALESCE(s.phone, ''), '\\D', '', 'g') AS phone_digits,
+        s.issue_date
+    FROM digilocker_demo_csv_stage s
+    WHERE COALESCE(TRIM(s.email), '') <> ''
+        AND COALESCE(TRIM(s.phone), '') <> ''
+),
+stage_dedup AS (
+    SELECT DISTINCT ON (email_norm)
+        full_name,
+        email_norm,
+        phone_digits
+    FROM stage_clean
+    ORDER BY email_norm, issue_date DESC NULLS LAST, id DESC
+)
+INSERT INTO borrowers (full_name, email, mobile_number, password_hash, is_active)
+SELECT
+        s.full_name,
+        s.email_norm,
+        s.phone_digits,
+        'DEMO_LOGIN_DISABLED',
+        TRUE
+FROM stage_dedup s
+ON CONFLICT (email) DO UPDATE
+SET full_name = EXCLUDED.full_name,
+        mobile_number = EXCLUDED.mobile_number,
+        is_active = TRUE,
+        updated_at = NOW();
+
+-- 2) KYC profile (marked verified because record exists in DigiLocker dataset)
+WITH stage_clean AS (
+    SELECT
+        s.id,
+        LOWER(TRIM(s.email)) AS email_norm,
+        s.issue_date
+    FROM digilocker_demo_csv_stage s
+    WHERE COALESCE(TRIM(s.email), '') <> ''
+),
+stage_dedup AS (
+    SELECT DISTINCT ON (email_norm)
+        id,
+        email_norm
+    FROM stage_clean
+    ORDER BY email_norm, issue_date DESC NULLS LAST, id DESC
+)
+INSERT INTO borrower_kyc_profiles (borrower_id, kyc_status, kyc_provider, kyc_reference_id, verified_at)
+SELECT
+        b.id,
+        'Verified',
+        'digilocker',
+        CONCAT('DL-KYC-', LPAD(s.id::text, 6, '0')),
+        NOW()
+FROM stage_dedup s
+JOIN borrowers b ON b.email = s.email_norm
+ON CONFLICT (borrower_id) DO UPDATE
+SET kyc_status = 'Verified',
+        kyc_provider = 'digilocker',
+        kyc_reference_id = EXCLUDED.kyc_reference_id,
+        verified_at = NOW(),
+        rejection_reason = NULL,
+        updated_at = NOW();
+
+-- 3) DigiLocker artifacts from document_type + CSV payload
+INSERT INTO borrower_digilocker_artifacts (
+        borrower_id,
+        artifact_type,
+        artifact_id,
+        issuer_name,
+        artifact_number_masked,
+        issue_date,
+        payload_json,
+        is_verified,
+        verified_at
+)
+    WITH stage_mapped AS (
+        SELECT
+        s.id,
+        LOWER(TRIM(s.email)) AS email_norm,
+        s.document_id,
+        s.document_type,
+        s.aadhaar_number,
+        s.pan_number,
+        s.issue_date,
+        s.full_name,
+        s.gender,
+        s.date_of_birth,
+        s.phone,
+        s.email,
+        s.address,
+        s.state,
+        s.pincode,
+        CASE
+            WHEN LOWER(TRIM(s.document_type)) IN ('aadhaar card', 'aadhaar') THEN 'AADHAAR_XML'
+            WHEN LOWER(TRIM(s.document_type)) IN ('pan card', 'pan') THEN 'PAN_PDF'
+            WHEN LOWER(TRIM(s.document_type)) IN ('driving license', 'driving licence') THEN 'ADDRESS_PROOF'
+            WHEN LOWER(TRIM(s.document_type)) = 'marksheet' THEN 'ADDRESS_PROOF'
+            ELSE 'ADDRESS_PROOF'
+        END AS artifact_type_mapped
+        FROM digilocker_demo_csv_stage s
+        WHERE COALESCE(TRIM(s.email), '') <> ''
+        AND COALESCE(TRIM(s.document_id), '') <> ''
+    ),
+    stage_dedup AS (
+        SELECT DISTINCT ON (email_norm, artifact_type_mapped, document_id)
+        *
+        FROM stage_mapped
+        ORDER BY email_norm, artifact_type_mapped, document_id, issue_date DESC NULLS LAST, id DESC
+    )
+SELECT
+        b.id,
+        s.artifact_type_mapped,
+        s.document_id,
+        CASE
+                WHEN LOWER(TRIM(s.document_type)) IN ('aadhaar card', 'aadhaar') THEN 'UIDAI'
+                WHEN LOWER(TRIM(s.document_type)) IN ('pan card', 'pan') THEN 'Income Tax Department'
+                WHEN LOWER(TRIM(s.document_type)) IN ('driving license', 'driving licence') THEN 'State Transport Department'
+                WHEN LOWER(TRIM(s.document_type)) = 'marksheet' THEN 'Education Board'
+                ELSE 'DigiLocker'
+        END,
+        CASE
+                WHEN COALESCE(TRIM(s.aadhaar_number), '') <> '' THEN CONCAT('XXXX-XXXX-', RIGHT(s.aadhaar_number, 4))
+                WHEN COALESCE(TRIM(s.pan_number), '') <> '' THEN CONCAT(LEFT(s.pan_number, 5), '****', RIGHT(s.pan_number, 1))
+                ELSE 'MASKED'
+        END,
+        s.issue_date,
+        jsonb_build_object(
+                'source', 'digilocker-csv',
+                'csv_id', s.id,
+                'full_name', s.full_name,
+                'gender', s.gender,
+                'date_of_birth', s.date_of_birth,
+                'phone', s.phone,
+                'email', s.email,
+                'aadhaar_number', s.aadhaar_number,
+                'pan_number', s.pan_number,
+                'address', s.address,
+                'state', s.state,
+                'pincode', s.pincode,
+                'document_type', s.document_type,
+                'document_id', s.document_id,
+                'issue_date', s.issue_date
+        ),
+        TRUE,
+        NOW()
+    FROM stage_dedup s
+    JOIN borrowers b ON b.email = s.email_norm
+ON CONFLICT (borrower_id, artifact_type, artifact_id) DO UPDATE
+SET payload_json = EXCLUDED.payload_json,
+        issue_date = EXCLUDED.issue_date,
+        is_verified = TRUE,
+        verified_at = NOW();
+
+COMMIT;
+```

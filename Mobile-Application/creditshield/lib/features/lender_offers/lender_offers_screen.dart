@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../app/app_state.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/design_system/components/cs_components.dart';
+import '../auth/auth_api_service.dart';
 
 class LenderOffersScreen extends StatefulWidget {
   const LenderOffersScreen({super.key});
@@ -15,47 +19,109 @@ class _LenderOffersScreenState extends State<LenderOffersScreen> {
   final Set<int> _compareSet = {};
   bool _compareMode = false;
   int? _expandedOffer;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _offers = [];
+  final AuthApiService _authApi = AuthApiService();
 
-  static final _offers = [
-    {
-      'id': '1',
-      'lender': 'HDFC Bank',
-      'amount': 50000.0,
-      'emi': 4428.0,
-      'rate': 10.5,
-      'tenure': 12,
-      'total': 53136.0,
-      'processingFee': '1% of loan amount',
-      'prepayment': 'No prepayment charges after 6 months',
-    },
-    {
-      'id': '2',
-      'lender': 'ICICI Bank',
-      'amount': 50000.0,
-      'emi': 4512.0,
-      'rate': 11.5,
-      'tenure': 12,
-      'total': 54144.0,
-      'processingFee': '₹999 flat',
-      'prepayment': '2% prepayment charge within 12 months',
-    },
-    {
-      'id': '3',
-      'lender': 'Bajaj Finserv',
-      'amount': 45000.0,
-      'emi': 4050.0,
-      'rate': 13.0,
-      'tenure': 12,
-      'total': 48600.0,
-      'processingFee': '2% of loan amount',
-      'prepayment': 'No prepayment allowed in first 3 months',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadOffers();
+    });
+  }
+
+  Future<void> _loadOffers() async {
+    final token = context.read<AppState>().authToken;
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Session expired. Please login again.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final offers = await _authApi.getOffers(token);
+      final mapped = offers.map((o) {
+        final monthlyRate = (o.apr / 12) / 100;
+        final emi = (o.tenure > 0 && monthlyRate > 0)
+            ? (o.amount * monthlyRate * (1 + monthlyRate) * o.tenure) /
+                ((1 + monthlyRate) * o.tenure - 1)
+            : (o.tenure > 0 ? (o.amount / o.tenure) : o.amount);
+        final total = emi * (o.tenure <= 0 ? 1 : o.tenure);
+        return <String, dynamic>{
+          'id': o.offerId,
+          'lender': o.lender,
+          'amount': o.amount,
+          'emi': emi,
+          'rate': o.apr,
+          'tenure': o.tenure,
+          'total': total,
+          'processingFee': 'As per lender policy',
+          'prepayment': 'Refer lender terms',
+        };
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _offers = mapped;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
+
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Lender Offers')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!, style: AppTypography.body),
+                const SizedBox(height: AppSpacing.sm),
+                ElevatedButton(onPressed: _loadOffers, child: const Text('Retry')),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_offers.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Lender Offers')),
+        body: Center(
+          child: Text('No offers available right now', style: AppTypography.body),
+        ),
+      );
+    }
 
     // Sort by EMI ascending
     final sorted = List.from(_offers)..sort((a, b) => (a['emi'] as double).compareTo(b['emi'] as double));
