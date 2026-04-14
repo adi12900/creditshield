@@ -4,6 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppState extends ChangeNotifier {
   String _language = 'English';
   bool _isLoggedIn = false;
+  String? _authToken;
+  String? _borrowerName;
+  String? _borrowerEmail;
+  String? _borrowerMobile;
+  bool _kycCompleted = false;
   bool _onboardingDone = false;
   bool _isOffline = false;
   String? _resumeLoanType;
@@ -12,6 +17,11 @@ class AppState extends ChangeNotifier {
 
   String get language => _language;
   bool get isLoggedIn => _isLoggedIn;
+  String? get authToken => _authToken;
+  String? get borrowerName => _borrowerName;
+  String? get borrowerEmail => _borrowerEmail;
+  String? get borrowerMobile => _borrowerMobile;
+  bool get kycCompleted => _kycCompleted;
   bool get onboardingDone => _onboardingDone;
   bool get isOffline => _isOffline;
   String? get resumeLoanType => _resumeLoanType;
@@ -31,6 +41,11 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _language = prefs.getString('language') ?? '';
     _isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    _authToken = prefs.getString('authToken');
+    _borrowerName = prefs.getString('borrowerName');
+    _borrowerEmail = prefs.getString('borrowerEmail');
+    _borrowerMobile = prefs.getString('borrowerMobile');
+    _kycCompleted = prefs.getBool('kycCompleted') ?? false;
     _onboardingDone = prefs.getBool('onboardingDone') ?? false;
     _resumeLoanType = prefs.getString('resumeLoanType');
     _resumeStep = prefs.getInt('resumeStep') ?? 0;
@@ -48,6 +63,55 @@ class AppState extends ChangeNotifier {
     _isLoggedIn = val;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', val);
+    notifyListeners();
+  }
+
+  Future<void> setAuthSession({
+    required String token,
+    required String name,
+    required String email,
+    required String mobile,
+    bool kycCompleted = false,
+  }) async {
+    _authToken = token;
+    _borrowerName = name;
+    _borrowerEmail = email;
+    _borrowerMobile = mobile;
+    _kycCompleted = kycCompleted;
+    _isLoggedIn = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('authToken', token);
+    await prefs.setString('borrowerName', name);
+    await prefs.setString('borrowerEmail', email);
+    await prefs.setString('borrowerMobile', mobile);
+    await prefs.setBool('kycCompleted', kycCompleted);
+    await prefs.setBool('isLoggedIn', true);
+    notifyListeners();
+  }
+
+  Future<void> setKycCompleted(bool value) async {
+    _kycCompleted = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('kycCompleted', value);
+    notifyListeners();
+  }
+
+  Future<void> clearAuthSession() async {
+    _authToken = null;
+    _borrowerName = null;
+    _borrowerEmail = null;
+    _borrowerMobile = null;
+    _kycCompleted = false;
+    _isLoggedIn = false;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('authToken');
+    await prefs.remove('borrowerName');
+    await prefs.remove('borrowerEmail');
+    await prefs.remove('borrowerMobile');
+    await prefs.remove('kycCompleted');
+    await prefs.setBool('isLoggedIn', false);
     notifyListeners();
   }
 

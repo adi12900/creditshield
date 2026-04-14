@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../app/app_state.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../auth/auth_api_service.dart';
 
 enum StageStatus { completed, active, pending, actionRequired }
 
 class _Stage {
   final String label;
   final StageStatus status;
-  final String? completedAt;
 
-  const _Stage(this.label, this.status, {this.completedAt});
+  const _Stage(this.label, this.status);
 }
 
 class LoanTrackerScreen extends StatefulWidget {
@@ -23,19 +26,12 @@ class LoanTrackerScreen extends StatefulWidget {
 class _LoanTrackerScreenState extends State<LoanTrackerScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
-
-  static const _stages = [
-    _Stage('Submitted', StageStatus.completed, completedAt: '12 Jan, 10:30 AM'),
-    _Stage('KYC Verified', StageStatus.completed, completedAt: '12 Jan, 11:45 AM'),
-    _Stage('Address Verified', StageStatus.completed, completedAt: '12 Jan, 2:00 PM'),
-    _Stage('Employment Verified', StageStatus.active),
-    _Stage('Financial Verification Complete', StageStatus.pending),
-    _Stage('Under Review', StageStatus.pending),
-    _Stage('Approved / Rejected', StageStatus.pending),
-    _Stage('Agreement Sent', StageStatus.pending),
-    _Stage('Agreement Signed', StageStatus.pending),
-    _Stage('Disbursed', StageStatus.pending),
-  ];
+  final AuthApiService _authApi = AuthApiService();
+  bool _loading = true;
+  String? _error;
+  String? _applicationId;
+  String _currentStage = 'No active application';
+  List<_Stage> _stages = const [];
 
   @override
   void initState() {
@@ -44,6 +40,74 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTracker();
+    });
+  }
+
+  Future<void> _loadTracker() async {
+    final token = context.read<AppState>().authToken;
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Session expired. Please login again.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final tracker = await _authApi.getTracker(token);
+      if (!mounted) return;
+      setState(() {
+        _applicationId = tracker.applicationId;
+        _currentStage = tracker.stage;
+        _stages = _buildStages(tracker.stage);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  List<_Stage> _buildStages(String currentStage) {
+    if (currentStage == 'No active application') {
+      return const [_Stage('No active application', StageStatus.pending)];
+    }
+
+    const ordered = [
+      'Submitted',
+      'KYC Verified',
+      'Underwriting',
+      'Offer Sent',
+      'Disbursed',
+    ];
+
+    var currentIndex = ordered.indexWhere(
+      (s) => s.toLowerCase() == currentStage.toLowerCase(),
+    );
+    if (currentIndex < 0) {
+      currentIndex = 0;
+    }
+
+    return List.generate(ordered.length, (i) {
+      if (i < currentIndex) {
+        return _Stage(ordered[i], StageStatus.completed);
+      }
+      if (i == currentIndex) {
+        return _Stage(ordered[i], StageStatus.active);
+      }
+      return _Stage(ordered[i], StageStatus.pending);
+    });
   }
 
   @override
@@ -57,6 +121,31 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
     final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Application Tracker')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!, style: AppTypography.body),
+                const SizedBox(height: AppSpacing.sm),
+                ElevatedButton(onPressed: _loadTracker, child: const Text('Retry')),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -85,7 +174,7 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Reference No.', style: AppTypography.caption.copyWith(color: muted)),
-                        Text('CS-2024-78432',
+                        Text(_applicationId ?? 'NA',
                             style: AppTypography.body.copyWith(fontWeight: FontWeight.w700)),
                       ],
                     ),
@@ -94,7 +183,7 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text('Submitted', style: AppTypography.caption.copyWith(color: muted)),
-                      Text('12 Jan 2025', style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
+                      Text(_currentStage, style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ],
@@ -183,11 +272,6 @@ class _StageItem extends StatelessWidget {
                       color: stage.status == StageStatus.pending ? muted : null,
                     ),
                   ),
-                  if (stage.completedAt != null) ...[
-                    const SizedBox(height: 2),
-                    Text(stage.completedAt!,
-                        style: AppTypography.caption.copyWith(color: muted)),
-                  ],
                   if (stage.status == StageStatus.active) ...[
                     const SizedBox(height: 4),
                     Text('In progress — We\'ll notify you as soon as there\'s an update.',

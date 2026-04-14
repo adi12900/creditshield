@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import 'package:creditshield/app/app_state.dart';
 import 'package:creditshield/core/constants/app_colors.dart';
 import 'package:creditshield/core/constants/app_typography.dart';
 import 'package:creditshield/core/design_system/components/cs_components.dart';
+import 'package:creditshield/features/auth/auth_api_service.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -30,6 +29,9 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _passwordError;
   String? _confirmPasswordError;
   String? _termsError;
+  String? _apiError;
+
+  final AuthApiService _authApi = AuthApiService();
 
   @override
   void dispose() {
@@ -63,6 +65,7 @@ class _SignupScreenState extends State<SignupScreen> {
       _passwordError = null;
       _confirmPasswordError = null;
       _termsError = null;
+      _apiError = null;
     });
 
     if (name.length < 2) {
@@ -85,8 +88,17 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    if (password.length < 6) {
-      setState(() => _passwordError = 'Password must be at least 6 characters');
+    if (password.length < 8) {
+      setState(() => _passwordError = 'Password must be at least 8 characters');
+      return;
+    }
+
+    final passwordRule = RegExp(r'^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$');
+    if (!passwordRule.hasMatch(password)) {
+      setState(() {
+        _passwordError =
+            'Password must include 1 uppercase letter, 1 number, and 1 symbol';
+      });
       return;
     }
 
@@ -104,14 +116,24 @@ class _SignupScreenState extends State<SignupScreen> {
       _isLoading = true;
     });
 
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
+    try {
+      await _authApi.signup(
+        fullName: name,
+        email: email,
+        mobileNumber: digits,
+        password: password,
+      );
 
-    await context.read<AppState>().setLoggedIn(true);
-    if (!mounted) return;
-
-    setState(() => _isLoading = false);
-    context.go('/kyc');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      context.go('/login');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _apiError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
@@ -146,7 +168,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 errorText: _nameError,
                 prefixIcon: Icon(Icons.person_outline, color: secondary),
                 onChanged: (_) {
-                  if (_nameError != null) setState(() => _nameError = null);
+                  if (_nameError != null) {
+                    setState(() => _nameError = null);
+                  }
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -158,7 +182,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 errorText: _phoneError,
                 prefixIcon: Icon(Icons.phone_android, color: secondary),
                 onChanged: (_) {
-                  if (_phoneError != null) setState(() => _phoneError = null);
+                  if (_phoneError != null) {
+                    setState(() => _phoneError = null);
+                  }
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -170,8 +196,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 prefixIcon: Icon(Icons.location_on_outlined, color: secondary),
                 maxLines: 2,
                 onChanged: (_) {
-                  if (_addressError != null)
+                  if (_addressError != null) {
                     setState(() => _addressError = null);
+                  }
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -183,7 +210,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 errorText: _emailError,
                 prefixIcon: Icon(Icons.alternate_email, color: secondary),
                 onChanged: (_) {
-                  if (_emailError != null) setState(() => _emailError = null);
+                  if (_emailError != null) {
+                    setState(() => _emailError = null);
+                  }
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -195,8 +224,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 obscureText: true,
                 prefixIcon: Icon(Icons.lock_outline, color: secondary),
                 onChanged: (_) {
-                  if (_passwordError != null)
+                  if (_passwordError != null) {
                     setState(() => _passwordError = null);
+                  }
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -246,6 +276,15 @@ class _SignupScreenState extends State<SignupScreen> {
                 onPressed: _isLoading ? null : _createAccount,
                 isLoading: _isLoading,
               ),
+              if (_apiError != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  _apiError!,
+                  style: AppTypography.caption.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.sm),
               Center(
                 child: TextButton(

@@ -5,6 +5,7 @@ import 'package:creditshield/app/app_state.dart';
 import 'package:creditshield/core/constants/app_colors.dart';
 import 'package:creditshield/core/constants/app_typography.dart';
 import 'package:creditshield/core/design_system/components/cs_components.dart';
+import 'package:creditshield/features/auth/auth_api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +20,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _phoneError;
   String? _passwordError;
+  String? _apiError;
+
+  final AuthApiService _authApi = AuthApiService();
 
   @override
   void dispose() {
@@ -41,23 +45,39 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       setState(() => _passwordError = 'Enter a valid password');
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _apiError = null;
     });
 
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
+    try {
+      final auth = await _authApi.login(identifier: digits, password: password);
+      final kycStatus = await _authApi.getKycStatus(auth.accessToken);
+      if (!mounted) return;
 
-    await context.read<AppState>().setLoggedIn(true);
-    if (!mounted) return;
+      await context.read<AppState>().setAuthSession(
+        token: auth.accessToken,
+        name: auth.borrower.fullName,
+        email: auth.borrower.email,
+        mobile: auth.borrower.mobileNumber,
+        kycCompleted: kycStatus.kycCompleted,
+      );
 
-    setState(() => _isLoading = false);
-    context.go('/kyc');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      context.go(kycStatus.kycCompleted ? '/home' : '/kyc');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _apiError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
@@ -116,6 +136,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: _isLoading ? null : _continue,
                 isLoading: _isLoading,
               ),
+              if (_apiError != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  _apiError!,
+                  style: AppTypography.caption.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.sm),
               Center(
                 child: TextButton(
