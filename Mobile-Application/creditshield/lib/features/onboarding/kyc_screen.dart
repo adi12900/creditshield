@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:creditshield/app/app_state.dart';
+import 'package:creditshield/features/auth/auth_api_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/design_system/components/cs_components.dart';
@@ -18,6 +21,9 @@ class _KycScreenState extends State<KycScreen> {
   bool _loading = false;
   bool _usePanFallback = false;
   String? _aadhaarError;
+  String? _apiError;
+
+  final AuthApiService _authApi = AuthApiService();
 
   @override
   void dispose() {
@@ -39,11 +45,12 @@ class _KycScreenState extends State<KycScreen> {
         _loading = true;
       });
       Future.delayed(const Duration(seconds: 1), () {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _loading = false;
             _step = 3;
           });
+        }
       });
       return;
     }
@@ -51,11 +58,12 @@ class _KycScreenState extends State<KycScreen> {
       if (_otpCtrl.text.length != 6) return;
       setState(() => _loading = true);
       Future.delayed(const Duration(seconds: 1), () {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _loading = false;
             _step = 4;
           });
+        }
       });
       return;
     }
@@ -431,9 +439,58 @@ class _KycScreenState extends State<KycScreen> {
             ],
           ),
         ),
+        if (_apiError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _apiError!,
+              style: AppTypography.caption.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
         CsButton(
           label: 'I Understand & Agree',
-          onPressed: () => context.go('/profile-setup'),
+          isLoading: _loading,
+          onPressed: _loading
+              ? null
+              : () async {
+                  final appState = context.read<AppState>();
+                  final token = appState.authToken;
+                  if (token == null || token.isEmpty) {
+                    setState(() => _apiError = 'Session expired. Please login again.');
+                    return;
+                  }
+
+                  setState(() {
+                    _loading = true;
+                    _apiError = null;
+                  });
+                  try {
+                    await _authApi.completeKyc(token);
+                    if (!mounted) return;
+                    await appState.setKycCompleted(true);
+                    if (!mounted) return;
+                    setState(() => _loading = false);
+                    context.go('/home');
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() {
+                      _loading = false;
+                      _apiError = e.toString().replaceFirst('Exception: ', '');
+                    });
+                  }
+                },
+        ),
+        const SizedBox(height: 8),
+        CsButton(
+          label: 'Do KYC Later',
+          variant: CsButtonVariant.secondary,
+          onPressed: () async {
+            await context.read<AppState>().setKycCompleted(false);
+            if (!mounted) return;
+            context.go('/home');
+          },
         ),
       ],
     );

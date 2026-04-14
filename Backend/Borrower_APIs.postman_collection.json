@@ -1,0 +1,291 @@
+{
+  "info": {
+    "name": "CreditShield Borrower APIs",
+    "description": "Postman collection for borrower authentication and borrower journey APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response received', function () {",
+          "  pm.expect(pm.response.code).to.be.a('number');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "borrowerToken", "value": "" },
+    { "key": "borrowerFullName", "value": "Aditi Verma" },
+    { "key": "borrowerEmail", "value": "aditi.verma@example.com" },
+    { "key": "borrowerMobile", "value": "9876500001" },
+    { "key": "borrowerPassword", "value": "Aditi@123" },
+    { "key": "offerId", "value": "offer-1" }
+  ],
+  "item": [
+    {
+      "name": "Borrower Auth",
+      "item": [
+        {
+          "name": "POST /api/v1/borrower/auth/signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"{{borrowerFullName}}\",\n  \"email\": \"{{borrowerEmail}}\",\n  \"mobile_number\": \"{{borrowerMobile}}\",\n  \"password\": \"{{borrowerPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/borrower/auth/signup"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Signup returns 201 or 409 for existing borrower', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('Signup response has access token', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('access_token');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/borrower/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{borrowerEmail}}\",\n  \"password\": \"{{borrowerPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/borrower/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login success', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Store borrower token', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('access_token');",
+                  "  pm.collectionVariables.set('borrowerToken', body.access_token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/borrower/auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Borrower Journey",
+      "item": [
+        {
+          "name": "GET /api/v1/borrower/kyc/status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/kyc/status"
+          }
+        },
+        {
+          "name": "POST /api/v1/borrower/kyc/complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/kyc/complete"
+          }
+        },
+        {
+          "name": "POST /api/v1/borrower/eligibility/check",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthly_income\": 85000,\n  \"existing_obligations\": 22000\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/borrower/eligibility/check"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/loan-types",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/loan-types"
+          }
+        },
+        {
+          "name": "POST /api/v1/borrower/applications",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loan_type\": \"personal\",\n  \"loan_amount\": 300000\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/borrower/applications"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/applications/current",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/applications/current"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/documents/required",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/documents/required"
+          }
+        },
+        {
+          "name": "POST /api/v1/borrower/consent/submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_version\": \"v1\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/borrower/consent/submit"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/rbi/checkpoint",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/rbi/checkpoint"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/risk-score",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/risk-score"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/offers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/offers"
+          }
+        },
+        {
+          "name": "POST /api/v1/borrower/offers/{offer_id}/select",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/offers/{{offerId}}/select"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/agreement",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/agreement"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/dashboard"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/tracker",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/tracker"
+          }
+        },
+        {
+          "name": "GET /api/v1/borrower/notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{borrowerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/borrower/notifications"
+          }
+        }
+      ]
+    }
+  ]
+}
