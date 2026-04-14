@@ -2,6 +2,7 @@ import { AlertTriangle, Radar, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 const fraudSignals = [
   { label: 'Identity Fraud', score: 14, severity: 'Low', source: 'Face match and KYC checks' },
@@ -14,10 +15,22 @@ const fraudSignals = [
 export function FraudSignalsPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
 
   const aggregateScore = Math.round(fraudSignals.reduce((sum, item) => sum + item.score, 0) / fraudSignals.length);
   const riskBand = aggregateScore <= 30 ? 'Low' : aggregateScore <= 60 ? 'Medium' : aggregateScore <= 85 ? 'High' : 'Critical';
+
+  const handleFalsePositive = async () => {
+    if (!user || user.role !== 'compliance_officer') return;
+    try {
+      await workflowApi.markFraudFalsePositive(selectedApplication.arn, user.role, 'Signal reviewed and classified as false positive.');
+      window.alert('Fraud signal marked as false positive.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update fraud signal';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -98,7 +111,7 @@ export function FraudSignalsPage() {
             <AlertTriangle className="w-5 h-5 text-red-600" />
             <h3 className="font-semibold text-slate-900">Action</h3>
           </div>
-          <button className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button onClick={handleFalsePositive} className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             Mark False Positive
           </button>
         </div>

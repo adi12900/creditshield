@@ -1,28 +1,34 @@
 import { TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const scoreData = [
-  { month: 'Oct', score: 680 },
-  { month: 'Nov', score: 695 },
-  { month: 'Dec', score: 710 },
-  { month: 'Jan', score: 720 },
-  { month: 'Feb', score: 720 },
-  { month: 'Mar', score: 720 },
-];
-
-const tradelines = [
-  { lender: 'HDFC Credit Card', type: 'Credit Card', limit: 500000, balance: 125000, status: 'Active', dpd: 0 },
-  { lender: 'SBI Home Loan', type: 'Home Loan', limit: 5000000, balance: 3500000, status: 'Active', dpd: 0 },
-  { lender: 'Bajaj Finserv PL', type: 'Personal Loan', limit: 300000, balance: 0, status: 'Closed', dpd: 0 },
-];
+import { workflowApi, type WorkflowBureauReport } from '../../lib/workflowApi';
 
 export function BureauReportPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [bureauReport, setBureauReport] = useState<WorkflowBureauReport | null>(null);
+
+  useEffect(() => {
+    if (!user || user.role !== 'credit_analyst') return;
+    workflowApi
+      .getBureauReport(selectedApplicationArn, user.role)
+      .then((report) => setBureauReport(report))
+      .catch(() => setBureauReport(null));
+  }, [selectedApplicationArn, user]);
+
+  const scoreData = bureauReport?.score_trend ?? [];
+  const tradelines = bureauReport?.tradelines ?? [];
+  const creditScore = bureauReport?.credit_score ?? selectedApplication.creditScore;
+  const totalLimit = tradelines.reduce((sum, line) => sum + line.limit, 0);
+  const totalBalance = tradelines.reduce((sum, line) => sum + line.balance, 0);
+  const utilizationPct = totalLimit > 0 ? Math.round((totalBalance / totalLimit) * 100) : 0;
+  const derogatoryMarks = tradelines.filter((line) => line.dpd > 0).length;
+  const activeAccounts = tradelines.filter((line) => line.status === 'Active').length;
 
   return (
     <div className="space-y-6">
@@ -42,7 +48,7 @@ export function BureauReportPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <p className="text-sm text-slate-600 mb-2">CIBIL Score</p>
-          <p className="text-4xl font-bold text-slate-900">{selectedApplication.creditScore}</p>
+          <p className="text-4xl font-bold text-slate-900">{creditScore}</p>
           <div className="flex items-center gap-1 mt-2 text-green-600">
             <TrendingUp className="w-4 h-4" />
             <span className="text-sm">Good</span>
@@ -51,22 +57,24 @@ export function BureauReportPage() {
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <p className="text-sm text-slate-600 mb-2">Credit Utilization</p>
-          <p className="text-4xl font-bold text-slate-900">25%</p>
+          <p className="text-4xl font-bold text-slate-900">{utilizationPct}%</p>
           <div className="mt-3 bg-slate-100 rounded-full h-2">
-            <div className="bg-green-600 h-2 rounded-full" style={{ width: '25%' }}></div>
+            <div className="bg-green-600 h-2 rounded-full" style={{ width: `${Math.min(utilizationPct, 100)}%` }}></div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <p className="text-sm text-slate-600 mb-2">Total Accounts</p>
-          <p className="text-4xl font-bold text-slate-900">{selectedApplication.riskGrade === 'C' ? 5 : selectedApplication.riskGrade === 'B' ? 6 : 8}</p>
-          <p className="text-sm text-slate-600 mt-2">3 Active</p>
+          <p className="text-4xl font-bold text-slate-900">{tradelines.length}</p>
+          <p className="text-sm text-slate-600 mt-2">{activeAccounts} Active</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <p className="text-sm text-slate-600 mb-2">Derogatory Marks</p>
-          <p className="text-4xl font-bold text-green-600">{selectedApplication.riskGrade === 'C' ? 2 : 0}</p>
-          <p className="text-sm text-green-600 mt-2">Clean Record</p>
+          <p className={`text-4xl font-bold ${derogatoryMarks === 0 ? 'text-green-600' : 'text-red-600'}`}>{derogatoryMarks}</p>
+          <p className={`text-sm mt-2 ${derogatoryMarks === 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {derogatoryMarks === 0 ? 'Clean Record' : 'Review Required'}
+          </p>
         </div>
       </div>
 
@@ -104,13 +112,13 @@ export function BureauReportPage() {
             <div>
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-slate-600">Recent Inquiries (6M)</span>
-                  <span className="text-sm font-semibold">{selectedApplication.slaBreached ? 5 : 4}</span>
+                  <span className="text-sm font-semibold">{Math.max(1, Math.ceil(tradelines.length / 2))}</span>
               </div>
             </div>
             <div>
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-slate-600">Total Debt</span>
-                  <span className="text-sm font-semibold">₹{(selectedApplication.loanAmount / 100000).toFixed(2)}L</span>
+                  <span className="text-sm font-semibold">₹{(totalBalance / 100000).toFixed(2)}L</span>
               </div>
             </div>
           </div>

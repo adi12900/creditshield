@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function LoanStructuringPage() {
   const [loanAmount, setLoanAmount] = useState(850000);
@@ -10,6 +11,7 @@ export function LoanStructuringPage() {
   const [interestRate, setInterestRate] = useState(12.5);
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
 
   const calculateEMI = () => {
@@ -29,6 +31,22 @@ export function LoanStructuringPage() {
     const emi = calculateEMI();
     const grossIncome = 75000;
     return ((emi / grossIncome) * 100).toFixed(2);
+  };
+
+  const handleGenerateOffer = async () => {
+    if (!user || user.role !== 'underwriter') return;
+    try {
+      const offer = await workflowApi.generateLoanOffer(selectedApplication.arn, user.role, {
+        loan_amount: loanAmount,
+        tenure_months: tenure,
+        interest_rate: interestRate,
+      });
+      window.alert(`Offer generated. EMI ₹${offer.emi}`);
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate offer';
+      window.alert(message);
+    }
   };
 
   return (
@@ -230,7 +248,7 @@ export function LoanStructuringPage() {
             </div>
           </div>
 
-          <button className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+          <button onClick={handleGenerateOffer} className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
             Generate Loan Offer
           </button>
         </div>

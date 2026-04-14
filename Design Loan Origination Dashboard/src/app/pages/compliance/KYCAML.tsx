@@ -3,14 +3,28 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function KYCAMLPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const complianceProfile = buildRBIComplianceProfile(selectedApplication);
   const digitalLendingItems = complianceProfile.items.filter((item) => item.id.startsWith('dl-'));
   const criticalPending = complianceProfile.items.filter((item) => item.isCritical && item.status !== 'Compliant');
+
+  const handleClearHold = async () => {
+    if (!user || user.role !== 'compliance_officer') return;
+    try {
+      await workflowApi.clearComplianceHold(selectedApplication.arn, user.role, 'Manual verification completed and controls passed.');
+      window.alert('Compliance hold cleared.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to clear compliance hold';
+      window.alert(message);
+    }
+  };
 
   const checks = [
     { name: 'Aadhaar OTP', result: 'Passed', confidence: 99, provider: 'UIDAI' },
@@ -145,6 +159,7 @@ export function KYCAMLPage() {
           </div>
           <button
             disabled={criticalPending.length > 0}
+            onClick={handleClearHold}
             className="mt-2 w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             Clear Compliance Hold

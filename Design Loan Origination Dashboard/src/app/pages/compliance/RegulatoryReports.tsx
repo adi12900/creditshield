@@ -1,7 +1,9 @@
 import { FileText, Download, Calendar, CheckCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 const reports = [
   {
@@ -51,7 +53,45 @@ const reports = [
 export function RegulatoryReportsPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [reportName, setReportName] = useState('RBI NBFC Returns');
+  const [reportType, setReportType] = useState('Quarterly');
+  const [reportingPeriod, setReportingPeriod] = useState('Q2 2026 (Apr-Jun)');
+  const [reportRows, setReportRows] = useState(reports);
+
+  useEffect(() => {
+    if (!user || user.role !== 'compliance_officer') return;
+    workflowApi
+      .getRegulatoryReports(user.role)
+      .then((rows: any[]) => {
+        const mapped = rows.map((row) => ({
+          name: row.name,
+          type: row.report_type,
+          dueDate: row.due_date,
+          status: row.status,
+          completeness: row.completeness,
+        }));
+        setReportRows(mapped.length > 0 ? mapped : reports);
+      })
+      .catch(() => undefined);
+  }, [user]);
+
+  const handleGenerateReport = async () => {
+    if (!user || user.role !== 'compliance_officer') return;
+    try {
+      await workflowApi.generateRegulatoryReport(user.role, {
+        name: reportName,
+        report_type: reportType,
+        reporting_period: reportingPeriod,
+      });
+      window.alert('Regulatory report generation started.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate report';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -107,7 +147,7 @@ export function RegulatoryReportsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-semibold text-slate-900 mb-4">Upcoming & Recent Reports</h3>
         <div className="space-y-4">
-          {reports.map((report, idx) => (
+          {reportRows.map((report, idx) => (
             <div key={idx} className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -176,25 +216,35 @@ export function RegulatoryReportsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Report Type *</label>
-            <select className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
-              <option>Select report type...</option>
-              <option>RBI NBFC Returns</option>
-              <option>Fair Lending Compliance</option>
-              <option>AML/KYC Summary</option>
-              <option>Consumer Protection</option>
-              <option>Data Privacy Compliance</option>
-              <option>RBI DLA Registry (CIMS)</option>
-              <option>CIC Digital Lending Submission</option>
+            <select
+              value={reportName}
+              onChange={(e) => {
+                const value = e.target.value;
+                setReportName(value);
+                setReportType(value.includes('Monthly') ? 'Monthly' : value.includes('Quarterly') ? 'Quarterly' : 'Event-based');
+              }}
+              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
+              <option value="RBI NBFC Returns">RBI NBFC Returns</option>
+              <option value="Fair Lending Compliance">Fair Lending Compliance</option>
+              <option value="AML/KYC Summary">AML/KYC Summary</option>
+              <option value="Consumer Protection">Consumer Protection</option>
+              <option value="Data Privacy Compliance">Data Privacy Compliance</option>
+              <option value="RBI DLA Registry (CIMS)">RBI DLA Registry (CIMS)</option>
+              <option value="CIC Digital Lending Submission">CIC Digital Lending Submission</option>
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Reporting Period *</label>
-            <select className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
-              <option>Select period...</option>
-              <option>Q1 2026 (Jan-Mar)</option>
-              <option>Q2 2026 (Apr-Jun)</option>
-              <option>March 2026</option>
-              <option>April 2026</option>
+            <select
+              value={reportingPeriod}
+              onChange={(e) => setReportingPeriod(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
+              <option value="Q1 2026 (Jan-Mar)">Q1 2026 (Jan-Mar)</option>
+              <option value="Q2 2026 (Apr-Jun)">Q2 2026 (Apr-Jun)</option>
+              <option value="March 2026">March 2026</option>
+              <option value="April 2026">April 2026</option>
             </select>
           </div>
           <div className="md:col-span-2">
@@ -219,7 +269,7 @@ export function RegulatoryReportsPage() {
             </div>
           </div>
           <div className="md:col-span-2">
-            <button className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
+            <button onClick={handleGenerateReport} className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
               <CheckCircle className="w-5 h-5" />
               Generate Report
             </button>

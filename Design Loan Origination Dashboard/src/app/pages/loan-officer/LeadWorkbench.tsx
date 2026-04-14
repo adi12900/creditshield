@@ -1,17 +1,32 @@
 import { BadgeCheck, Filter, PhoneCall, UserPlus2 } from 'lucide-react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
-import { getLoanApplicationByArn, loanApplications } from '../../data/loanApplications';
+import { getLoanApplicationByArn, getLoanApplications } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { getRBIFlowGate } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function LeadWorkbenchPage() {
+  const user = useStore((state) => state.user);
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const intakeGate = getRBIFlowGate(selectedApplication, 'intake');
+  const loanApplications = getLoanApplications();
 
   const leads = loanApplications.filter((application) => application.stage === 'Lead');
   const qualifiedLeads = leads.filter((application) => application.riskGrade === 'A+' || application.riskGrade === 'A').length;
+
+  const handleMoveToIntake = async () => {
+    if (!user || user.role !== 'loan_officer') return;
+    try {
+      await workflowApi.moveLeadToIntake(selectedApplication.arn, user.role);
+      window.alert('Lead moved to intake successfully.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to move lead to intake';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -65,6 +80,7 @@ export function LeadWorkbenchPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
           disabled={!intakeGate.canProceed}
+          onClick={handleMoveToIntake}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           Move To Application Intake

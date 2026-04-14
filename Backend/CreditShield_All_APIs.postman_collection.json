@@ -1,0 +1,570 @@
+{
+  "info": {
+    "name": "CreditShield Backend - All APIs",
+    "description": "Postman collection covering all currently exposed backend APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response received', function () {",
+          "  pm.expect(pm.response.code).to.be.a('number');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "arn", "value": "ARN202600001" },
+    { "key": "consentId", "value": "consent_123" },
+    { "key": "sessionId", "value": "session_123" },
+    { "key": "userId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "GET /health/db",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health/db"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setu Account Aggregator",
+      "item": [
+        {
+          "name": "POST /api/v1/setu/setu/token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force_refresh\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/setu/setu/token"
+          }
+        },
+        {
+          "name": "POST /api/v1/setu/setu/consents",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vua\": \"9999999999@onemoney\",\n  \"dataRange\": {\n    \"from\": \"2023-01-01T00:00:00Z\",\n    \"to\": \"2023-12-31T23:59:59Z\"\n  },\n  \"fiTypes\": [\"DEPOSIT\"],\n  \"consentTypes\": [\"PROFILE\", \"SUMMARY\", \"TRANSACTIONS\"],\n  \"consentDuration\": {\n    \"unit\": \"MONTH\",\n    \"value\": 6\n  },\n  \"purpose\": {\n    \"code\": \"103\",\n    \"text\": \"Loan underwriting and risk assessment\",\n    \"refUri\": \"https://www.setu.co/purpose\",\n    \"category\": {\n      \"type\": \"LOAN\"\n    }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/setu/setu/consents"
+          }
+        },
+        {
+          "name": "POST /api/v1/setu/setu/consents/{consent_id}/data-fetch",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consentId\": \"{{consentId}}\",\n  \"dataRange\": {\n    \"from\": \"2023-01-01T00:00:00Z\",\n    \"to\": \"2023-12-31T23:59:59Z\"\n  },\n  \"format\": \"json\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/setu/setu/consents/{{consentId}}/data-fetch"
+          }
+        },
+        {
+          "name": "GET /api/v1/setu/setu/sessions/{session_id}",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/setu/setu/sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "POST /api/v1/setu/setu/webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"event_123\",\n  \"consentId\": \"{{consentId}}\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/setu/setu/webhook"
+          }
+        },
+        {
+          "name": "POST /api/v1/setu/setu/fetch-transactions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consent_id\": \"{{consentId}}\",\n  \"from_date\": \"2023-01-01\",\n  \"to_date\": \"2023-12-31\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/setu/setu/fetch-transactions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "POST /api/v1/users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Aarav Sharma\",\n  \"email\": \"aarav@example.com\",\n  \"role\": \"loan_officer\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/users"
+          }
+        },
+        {
+          "name": "GET /api/v1/users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users"
+          }
+        },
+        {
+          "name": "GET /api/v1/users?role=loan_officer",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users?role=loan_officer"
+          }
+        },
+        {
+          "name": "GET /api/v1/users/{user_id}",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}"
+          }
+        },
+        {
+          "name": "PATCH /api/v1/users/{user_id}",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Aarav Sharma Updated\",\n  \"role\": \"underwriter\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow - Shared",
+      "item": [
+        {
+          "name": "GET /api/v1/workflow/applications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/workflow/applications"
+          }
+        },
+        {
+          "name": "GET /api/v1/workflow/applications?stage=Lead",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/workflow/applications?stage=Lead"
+          }
+        },
+        {
+          "name": "GET /api/v1/workflow/applications/{arn}",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/workflow/applications/{{arn}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow - Loan Officer",
+      "item": [
+        {
+          "name": "GET /loan-officer/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/dashboard"
+          }
+        },
+        {
+          "name": "GET /loan-officer/documents/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/documents/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /loan-officer/documents/{arn}/review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"901\",\n  \"decision\": \"approve\",\n  \"reason\": \"Document is valid\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/documents/{{arn}}/review"
+          }
+        },
+        {
+          "name": "GET /loan-officer/communications/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/communications/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /loan-officer/communications/{arn}/send",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"email\",\n  \"subject\": \"Application Update\",\n  \"message\": \"Your application is under review\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/communications/{{arn}}/send"
+          }
+        },
+        {
+          "name": "POST /loan-officer/leads/{arn}/move-to-intake",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/leads/{{arn}}/move-to-intake"
+          }
+        },
+        {
+          "name": "POST /loan-officer/intake/{arn}/submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/intake/{{arn}}/submit"
+          }
+        },
+        {
+          "name": "POST /loan-officer/esign/{arn}/send-link",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "loan_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/loan-officer/esign/{{arn}}/send-link"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow - Credit Analyst",
+      "item": [
+        {
+          "name": "GET /credit-analyst/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/dashboard"
+          }
+        },
+        {
+          "name": "GET /credit-analyst/bureau/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/bureau/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /credit-analyst/ratios/{arn}/recalculate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthly_income\": 150000,\n  \"existing_obligations\": 25000,\n  \"proposed_emi\": 18000,\n  \"loan_amount\": 1200000,\n  \"asset_value\": 2000000\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/ratios/{{arn}}/recalculate"
+          }
+        },
+        {
+          "name": "GET /credit-analyst/ai-score/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/ai-score/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /credit-analyst/memo/{arn}/draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"summary\": \"Strong repayment profile\",\n  \"strengths\": \"Stable income and clean history\",\n  \"risk_factors\": \"Sector cyclicality\",\n  \"recommendation\": \"Approve\",\n  \"conditions\": \"Standard documentation\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/memo/{{arn}}/draft"
+          }
+        },
+        {
+          "name": "POST /credit-analyst/memo/{arn}/submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "credit_analyst" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"summary\": \"Strong repayment profile\",\n  \"strengths\": \"Stable income and clean history\",\n  \"risk_factors\": \"Sector cyclicality\",\n  \"recommendation\": \"Approve\",\n  \"conditions\": \"Standard documentation\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/credit-analyst/memo/{{arn}}/submit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow - Underwriter",
+      "item": [
+        {
+          "name": "GET /underwriter/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "underwriter" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/underwriter/dashboard"
+          }
+        },
+        {
+          "name": "GET /underwriter/decision-engine/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "underwriter" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/underwriter/decision-engine/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /underwriter/loan-structuring/{arn}/offer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "underwriter" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loan_amount\": 1200000,\n  \"tenure_months\": 60,\n  \"interest_rate\": 10.5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/underwriter/loan-structuring/{{arn}}/offer"
+          }
+        },
+        {
+          "name": "POST /underwriter/policy-override/{arn}/submit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "underwriter" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"override_category\": \"LTV Exception\",\n  \"justification\": \"Applicant has strong repayment record and collateral coverage with approved compensating factors and management sign-off.\",\n  \"decision\": \"approve\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/underwriter/policy-override/{{arn}}/submit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow - Compliance",
+      "item": [
+        {
+          "name": "GET /compliance/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/dashboard"
+          }
+        },
+        {
+          "name": "GET /compliance/kyc-aml/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/kyc-aml/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /compliance/kyc-aml/{arn}/clear-hold",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Verified with supporting evidence\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/kyc-aml/{{arn}}/clear-hold"
+          }
+        },
+        {
+          "name": "GET /compliance/fraud-signals/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/fraud-signals/{{arn}}"
+          }
+        },
+        {
+          "name": "POST /compliance/fraud-signals/{arn}/false-positive",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Reviewed and cleared\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/fraud-signals/{{arn}}/false-positive"
+          }
+        },
+        {
+          "name": "GET /compliance/audit-logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/audit-logs"
+          }
+        },
+        {
+          "name": "GET /compliance/audit-logs with filters",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/audit-logs?action=Login&user=Compliance%20Officer&resource={{arn}}&risk=Low"
+          }
+        },
+        {
+          "name": "GET /compliance/regulatory-reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/regulatory-reports"
+          }
+        },
+        {
+          "name": "POST /compliance/regulatory-reports/generate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"RBI Monthly Compliance Report\",\n  \"report_type\": \"RBI\",\n  \"reporting_period\": \"2026-03\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/regulatory-reports/generate"
+          }
+        },
+        {
+          "name": "GET /compliance/rbi-compliance/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/rbi-compliance/{{arn}}"
+          }
+        },
+        {
+          "name": "GET /compliance/rbi-audit-export/{arn}",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-role", "value": "compliance_officer" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/compliance/rbi-audit-export/{{arn}}"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,12 +1,35 @@
 import { Calculator, TrendingUp, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function FinancialRatiosPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [monthlyIncome, setMonthlyIncome] = useState(Math.round(selectedApplication.loanAmount / 12));
+  const [existingObligations, setExistingObligations] = useState(Math.round(selectedApplication.loanAmount / 25));
+  const [proposedEmi, setProposedEmi] = useState(Math.round(selectedApplication.loanAmount / 30));
+
+  const handleSaveAdjustments = async () => {
+    if (!user || user.role !== 'credit_analyst') return;
+    try {
+      const result = await workflowApi.recalculateRatios(selectedApplication.arn, user.role, {
+        monthly_income: monthlyIncome,
+        existing_obligations: existingObligations,
+        proposed_emi: proposedEmi,
+        loan_amount: selectedApplication.loanAmount,
+        asset_value: selectedApplication.loanAmount / 0.65,
+      });
+      window.alert(`Recalculated ratios saved. DTI ${result.dti}%, FOIR ${result.foir}%, LTV ${result.ltv}%`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to recalculate ratios';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -98,7 +121,8 @@ export function FinancialRatiosPage() {
               </label>
               <input
                 type="number"
-                defaultValue={Math.round(selectedApplication.loanAmount / 12)}
+                value={monthlyIncome}
+                onChange={(e) => setMonthlyIncome(Number(e.target.value))}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
@@ -108,7 +132,8 @@ export function FinancialRatiosPage() {
               </label>
               <input
                 type="number"
-                defaultValue={Math.round(selectedApplication.loanAmount / 25)}
+                value={existingObligations}
+                onChange={(e) => setExistingObligations(Number(e.target.value))}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
@@ -118,7 +143,8 @@ export function FinancialRatiosPage() {
               </label>
               <input
                 type="number"
-                defaultValue={Math.round(selectedApplication.loanAmount / 30)}
+                value={proposedEmi}
+                onChange={(e) => setProposedEmi(Number(e.target.value))}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
@@ -140,7 +166,7 @@ export function FinancialRatiosPage() {
                 <span className="font-bold text-green-600">✓ Pass</span>
               </div>
             </div>
-            <button className="w-full mt-4 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+            <button onClick={handleSaveAdjustments} className="w-full mt-4 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
               Save Adjustments
             </button>
           </div>

@@ -1,7 +1,9 @@
 import { AlertTriangle, FileText } from 'lucide-react';
+import { useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 const failedRules = [
   { rule: 'DTI Threshold', evaluated: '42%', threshold: '40%', severity: 'Medium' },
@@ -11,7 +13,10 @@ const failedRules = [
 export function PolicyOverridePage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [overrideCategory, setOverrideCategory] = useState('Compensating Factors');
+  const [justification, setJustification] = useState('');
 
   const failedRules = [
     {
@@ -27,6 +32,26 @@ export function PolicyOverridePage() {
       severity: selectedApplication.slaBreached ? 'Medium' : 'Low',
     },
   ];
+
+  const handleSubmitOverride = async () => {
+    if (!user || user.role !== 'underwriter') return;
+    if (justification.trim().length < 50) {
+      window.alert('Justification must be at least 50 characters.');
+      return;
+    }
+    try {
+      await workflowApi.submitPolicyOverride(selectedApplication.arn, user.role, {
+        override_category: overrideCategory,
+        justification,
+        decision: 'approve',
+      });
+      window.alert('Policy override submitted.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit override';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -86,7 +111,7 @@ export function PolicyOverridePage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Override Category *
                   </label>
-                  <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
+                  <select value={overrideCategory} onChange={(e) => setOverrideCategory(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
                     <option>Select category...</option>
                     <option>Compensating Factors</option>
                     <option>Manual Underwriting</option>
@@ -100,6 +125,8 @@ export function PolicyOverridePage() {
                   </label>
                   <textarea
                     rows={3}
+                    value={justification}
+                    onChange={(e) => setJustification(e.target.value)}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
                     placeholder="Enter detailed justification for override..."
                   />
@@ -142,7 +169,7 @@ export function PolicyOverridePage() {
           <button className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium">
             Cancel
           </button>
-          <button className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+          <button onClick={handleSubmitOverride} className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
             Submit Override & Approve
           </button>
         </div>

@@ -1,9 +1,10 @@
 import { Send, Mail, MessageSquare, Phone, Clock, CheckCircle, ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createCommunicationHistory, getLoanApplicationByArn } from '../../data/loanApplications';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 const mockTemplates = [
   { id: '1', name: 'Document Request', category: 'Request' },
@@ -16,14 +17,67 @@ export function CommunicationPage() {
   const navigate = useNavigate();
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [message, setMessage] = useState('');
+  const [subject, setSubject] = useState('');
+  const [history, setHistory] = useState<Array<{ id: string; channel?: string; type?: 'email' | 'sms' | 'call'; subject: string; message?: string; preview?: string; sent_at?: string; date?: string; status?: string; duration?: string }>>([]);
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const mockHistory = createCommunicationHistory(selectedApplication);
 
-  const emailCount = mockHistory.filter(h => h.type === 'email').length;
-  const smsCount = mockHistory.filter(h => h.type === 'sms').length;
-  const callCount = mockHistory.filter(h => h.type === 'call').length;
+  useEffect(() => {
+    if (!user || user.role !== 'loan_officer') {
+      setHistory(mockHistory);
+      return;
+    }
+
+    workflowApi
+      .getCommunications(selectedApplication.arn, user.role)
+      .then((rows) => {
+        const mapped = rows.map((row: any) => ({
+          id: row.id,
+          type: row.channel,
+          subject: row.subject,
+          preview: row.message,
+          date: new Date(row.sent_at).toLocaleString(),
+          status: 'Delivered',
+        }));
+        setHistory(mapped.length > 0 ? mapped : mockHistory);
+      })
+      .catch(() => setHistory(mockHistory));
+  }, [selectedApplication.arn, user]);
+
+  const handleSendMessage = async () => {
+    if (!user || user.role !== 'loan_officer') return;
+    if (!subject.trim() || !message.trim()) {
+      window.alert('Subject and message are required.');
+      return;
+    }
+
+    try {
+      await workflowApi.sendCommunication(selectedApplication.arn, user.role, 'email', subject, message);
+      const rows = await workflowApi.getCommunications(selectedApplication.arn, user.role);
+      setHistory(
+        rows.map((row: any) => ({
+          id: row.id,
+          type: row.channel,
+          subject: row.subject,
+          preview: row.message,
+          date: new Date(row.sent_at).toLocaleString(),
+          status: 'Delivered',
+        }))
+      );
+      setMessage('');
+      setSubject('');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Failed to send message';
+      window.alert(detail);
+    }
+  };
+
+  const emailCount = history.filter(h => h.type === 'email').length;
+  const smsCount = history.filter(h => h.type === 'sms').length;
+  const callCount = history.filter(h => h.type === 'call').length;
 
   return (
     <div className="space-y-6">
@@ -164,6 +218,8 @@ export function CommunicationPage() {
                 <input
                   type="text"
                   placeholder="Enter subject..."
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
                 />
               </div>
@@ -184,7 +240,7 @@ export function CommunicationPage() {
                 </p>
               </div>
 
-              <button className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
+              <button onClick={handleSendMessage} className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
                 <Send className="w-4 h-4" />
                 Send Message
               </button>
@@ -197,7 +253,7 @@ export function CommunicationPage() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h3 className="font-semibold text-slate-900 mb-4">Communication Timeline</h3>
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
-              {mockHistory.map((item) => (
+              {history.map((item) => (
                 <div
                   key={item.id}
                   className="p-3 border border-slate-200 rounded-lg hover:border-green-600 transition-colors cursor-pointer"
@@ -281,7 +337,7 @@ export function CommunicationPage() {
                 <div className="w-full bg-slate-200 rounded-full h-2">
                   <div
                     className="bg-green-600 h-2 rounded-full"
-                    style={{ width: `${(emailCount / mockHistory.length) * 100}%` }}
+                    style={{ width: `${history.length > 0 ? (emailCount / history.length) * 100 : 0}%` }}
                   ></div>
                 </div>
               </div>
@@ -296,7 +352,7 @@ export function CommunicationPage() {
                 <div className="w-full bg-slate-200 rounded-full h-2">
                   <div
                     className="bg-blue-600 h-2 rounded-full"
-                    style={{ width: `${(smsCount / mockHistory.length) * 100}%` }}
+                    style={{ width: `${history.length > 0 ? (smsCount / history.length) * 100 : 0}%` }}
                   ></div>
                 </div>
               </div>
@@ -311,7 +367,7 @@ export function CommunicationPage() {
                 <div className="w-full bg-slate-200 rounded-full h-2">
                   <div
                     className="bg-purple-600 h-2 rounded-full"
-                    style={{ width: `${(callCount / mockHistory.length) * 100}%` }}
+                    style={{ width: `${history.length > 0 ? (callCount / history.length) * 100 : 0}%` }}
                   ></div>
                 </div>
               </div>

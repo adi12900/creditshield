@@ -1,12 +1,51 @@
 import { Save, Send, FileText } from 'lucide-react';
+import { useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function CreditMemoPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [summary, setSummary] = useState(`The applicant ${selectedApplication.borrowerName} demonstrates a ${selectedApplication.riskGrade} grade risk profile with a CIBIL score of ${selectedApplication.creditScore}. The current loan amount is ₹${selectedApplication.loanAmount.toLocaleString('en-IN')} and the selected file is in ${selectedApplication.stage} stage. Recommendation should be aligned to the live queue selection.`);
+  const [strengths, setStrengths] = useState(`• Strong credit score (${selectedApplication.creditScore})\n• Current stage: ${selectedApplication.stage}\n• Risk grade: ${selectedApplication.riskGrade}`);
+  const [riskFactors, setRiskFactors] = useState(`• Recent inquiries: ${selectedApplication.slaBreached ? 'Above threshold' : 'Within threshold'}\n• Employment type: ${selectedApplication.employmentType}`);
+  const [recommendation, setRecommendation] = useState<'Approve' | 'Approve with Conditions' | 'Decline'>('Approve');
+  const [conditions, setConditions] = useState('');
+
+  const payload = {
+    summary,
+    strengths,
+    risk_factors: riskFactors,
+    recommendation,
+    conditions,
+  };
+
+  const handleSaveDraft = async () => {
+    if (!user || user.role !== 'credit_analyst') return;
+    try {
+      await workflowApi.saveCreditMemoDraft(selectedApplication.arn, user.role, payload);
+      window.alert('Credit memo draft saved.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save draft';
+      window.alert(message);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!user || user.role !== 'credit_analyst') return;
+    try {
+      await workflowApi.submitCreditMemo(selectedApplication.arn, user.role, payload);
+      window.alert('Credit memo submitted to underwriter.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit memo';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -47,9 +86,10 @@ export function CreditMemoPage() {
             </label>
             <textarea
               rows={6}
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
               className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               placeholder="Enter detailed credit analysis..."
-              defaultValue={`The applicant ${selectedApplication.borrowerName} demonstrates a ${selectedApplication.riskGrade} grade risk profile with a CIBIL score of ${selectedApplication.creditScore}. The current loan amount is ₹${selectedApplication.loanAmount.toLocaleString('en-IN')} and the selected file is in ${selectedApplication.stage} stage. Recommendation should be aligned to the live queue selection.`}
             />
           </div>
 
@@ -59,9 +99,10 @@ export function CreditMemoPage() {
             </label>
             <textarea
               rows={3}
+              value={strengths}
+              onChange={(e) => setStrengths(e.target.value)}
               className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               placeholder="List key strengths..."
-              defaultValue={`• Strong credit score (${selectedApplication.creditScore})&#10;• Current stage: ${selectedApplication.stage}&#10;• Risk grade: ${selectedApplication.riskGrade}`}
             />
           </div>
 
@@ -71,9 +112,10 @@ export function CreditMemoPage() {
             </label>
             <textarea
               rows={3}
+              value={riskFactors}
+              onChange={(e) => setRiskFactors(e.target.value)}
               className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               placeholder="List risk factors..."
-              defaultValue={`• Recent inquiries: ${selectedApplication.slaBreached ? 'Above threshold' : 'Within threshold'}&#10;• Employment type: ${selectedApplication.employmentType}`}
             />
           </div>
 
@@ -81,9 +123,13 @@ export function CreditMemoPage() {
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Recommendation *
             </label>
-            <select className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
+            <select
+              value={recommendation}
+              onChange={(e) => setRecommendation(e.target.value as 'Approve' | 'Approve with Conditions' | 'Decline')}
+              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
               <option>Select recommendation...</option>
-              <option selected>Approve</option>
+              <option>Approve</option>
               <option>Approve with Conditions</option>
               <option>Decline</option>
             </select>
@@ -95,17 +141,19 @@ export function CreditMemoPage() {
             </label>
             <textarea
               rows={3}
+              value={conditions}
+              onChange={(e) => setConditions(e.target.value)}
               className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               placeholder="Enter any conditions for approval..."
             />
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium flex items-center justify-center gap-2">
+            <button onClick={handleSaveDraft} className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium flex items-center justify-center gap-2">
               <Save className="w-4 h-4" />
               Save Draft
             </button>
-            <button className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
+            <button onClick={handleSubmit} className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
               <Send className="w-4 h-4" />
               Submit to Underwriter
             </button>

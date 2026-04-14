@@ -1,13 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useStore } from '../../store';
+import { setRuntimeLoanApplications, type LoanApplication } from '../../data/loanApplications';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function DashboardLayout() {
   const { user } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const role = user.role;
+    const supportedRole = role === 'loan_officer' || role === 'credit_analyst' || role === 'underwriter' || role === 'compliance_officer';
+    if (!supportedRole) return;
+
+    workflowApi
+      .listApplications()
+      .then((rows) => {
+        const mapped: LoanApplication[] = rows.map((item, index) => ({
+          id: String(index + 1),
+          arn: item.arn,
+          borrowerName: item.borrower_name,
+          email: `${item.borrower_name.toLowerCase().replace(/\s+/g, '.')}@email.com`,
+          phone: '+91 90000 00000',
+          loanAmount: item.loan_amount,
+          loanType: 'digital_personal_loan',
+          stage: item.stage as LoanApplication['stage'],
+          riskGrade: item.risk_grade,
+          daysInStage: 1,
+          slaBreached: false,
+          creditScore: item.credit_score,
+          kycStatus: item.kyc_status,
+          processingTime: '1.0 days',
+          employmentType: item.employment_type,
+          purpose: item.purpose,
+          applicationDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
+          dob: '01-Jan-1990',
+          panNumber: 'ABCDE1234F',
+          tenureMonths: 36,
+          interestRate: '12.5% p.a.',
+          emi: '₹25,000',
+        }));
+
+        setRuntimeLoanApplications(mapped);
+      })
+      .catch(() => {
+        // Keep fallback local data if API is unavailable.
+      });
+  }, [user]);
 
   if (!user) return null;
 

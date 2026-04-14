@@ -1,40 +1,70 @@
 import { Shield, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { StatCard } from '../../components/ui/StatCard';
-import { DataTable } from '../../components/ui/DataTable';
 import { RiskBadge } from '../../components/ui/RiskBadge';
 import { useNavigate } from 'react-router-dom';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
-const mockPendingDecisions = [
-  // Completed Decisions (10)
-  { arn: 'ARN202600001', borrowerName: 'Rajesh Kumar', loanAmount: 500000, riskGrade: 'A+', creditScore: 730, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600002', borrowerName: 'Priya Sharma', loanAmount: 750000, riskGrade: 'A', creditScore: 710, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600003', borrowerName: 'Amit Patel', loanAmount: 1200000, riskGrade: 'A', creditScore: 745, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600004', borrowerName: 'Vikram Singh', loanAmount: 850000, riskGrade: 'A+', creditScore: 720, recommendation: 'Approved with Conditions', status: 'Completed' },
-  { arn: 'ARN202600005', borrowerName: 'Neha Gupta', loanAmount: 650000, riskGrade: 'B', creditScore: 680, recommendation: 'Approved with Conditions', status: 'Completed' },
-  { arn: 'ARN202600006', borrowerName: 'Arjun Reddy', loanAmount: 2000000, riskGrade: 'A+', creditScore: 780, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600007', borrowerName: 'Sanjay Mehta', loanAmount: 950000, riskGrade: 'B', creditScore: 695, recommendation: 'Approved with Conditions', status: 'Completed' },
-  { arn: 'ARN202600008', borrowerName: 'Kavita Iyer', loanAmount: 1100000, riskGrade: 'A', creditScore: 750, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600009', borrowerName: 'Rahul Verma', loanAmount: 800000, riskGrade: 'A+', creditScore: 735, recommendation: 'Approved', status: 'Completed' },
-  { arn: 'ARN202600010', borrowerName: 'Meera Krishnan', loanAmount: 1350000, riskGrade: 'A', creditScore: 725, recommendation: 'Approved', status: 'Completed' },
-
-  // In Progress (5)
-  { arn: 'ARN202600011', borrowerName: 'Suresh Rao', loanAmount: 1200000, riskGrade: 'A', creditScore: 715, recommendation: 'Pending Review', status: 'In Progress' },
-  { arn: 'ARN202600012', borrowerName: 'Lakshmi Nair', loanAmount: 900000, riskGrade: 'B', creditScore: 665, recommendation: 'Pending Review', status: 'In Progress' },
-  { arn: 'ARN202600013', borrowerName: 'Karthik Menon', loanAmount: 1500000, riskGrade: 'A+', creditScore: 760, recommendation: 'Pending Review', status: 'In Progress' },
-  { arn: 'ARN202600014', borrowerName: 'Pooja Desai', loanAmount: 700000, riskGrade: 'B', creditScore: 690, recommendation: 'Pending Review', status: 'In Progress' },
-  { arn: 'ARN202600015', borrowerName: 'Anil Kumar', loanAmount: 1100000, riskGrade: 'A', creditScore: 740, recommendation: 'Pending Review', status: 'In Progress' },
-];
+type UnderwritingQueueItem = {
+  arn: string;
+  borrowerName: string;
+  loanAmount: number;
+  riskGrade: string;
+  creditScore: number;
+  recommendation: string;
+  status: 'Completed' | 'In Progress';
+};
 
 export function UnderwriterDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const rbiProfile = buildRBIComplianceProfile(selectedApplication);
+  const [queueCount, setQueueCount] = useState(0);
+  const [underwritingQueue, setUnderwritingQueue] = useState<UnderwritingQueueItem[]>([]);
+
+  const completedCount = underwritingQueue.filter((item) => item.status === 'Completed').length;
+  const approvedCount = underwritingQueue.filter((item) => item.recommendation === 'Approved').length;
+  const conditionalCount = underwritingQueue.filter((item) => item.recommendation === 'Approved with Conditions').length;
+  const declinedCount = underwritingQueue.filter((item) => item.recommendation === 'Declined').length;
+  const approvalRate = underwritingQueue.length
+    ? Math.round(((approvedCount + conditionalCount) / underwritingQueue.length) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (!user || user.role !== 'underwriter') return;
+    Promise.all([workflowApi.underwriterDashboard(user.role), workflowApi.listApplications()])
+      .then(([dashboard, applications]) => {
+        const queue = applications.map((app) => {
+          const recommendation = app.risk_grade === 'A+' || app.risk_grade === 'A'
+            ? 'Approved'
+            : app.risk_grade === 'B'
+              ? 'Approved with Conditions'
+              : 'Declined';
+
+          return {
+            arn: app.arn,
+            borrowerName: app.borrower_name,
+            loanAmount: app.loan_amount,
+            riskGrade: app.risk_grade,
+            creditScore: app.credit_score,
+            recommendation,
+            status: app.current_stage === 'Underwriting' ? 'In Progress' : 'Completed',
+          };
+        });
+
+        const queueStat = dashboard?.stats?.find((item) => item.key === 'underwriting_queue');
+        setUnderwritingQueue(queue);
+        setQueueCount(queueStat?.value !== undefined ? Number(queueStat.value) : queue.filter((item) => item.status === 'In Progress').length);
+      })
+      .catch(() => undefined);
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -46,24 +76,24 @@ export function UnderwriterDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Reviewed"
-          value={15}
+          value={underwritingQueue.length}
           icon={Shield}
         />
         <StatCard
           title="Completed"
-          value={10}
+          value={completedCount}
           icon={CheckCircle}
           trend={{ value: '3 more than yesterday', isPositive: true }}
         />
         <StatCard
           title="In Progress"
-          value={5}
+          value={queueCount}
           icon={Clock}
           subtitle="pending decision"
         />
         <StatCard
           title="Approval Rate"
-          value="78%"
+          value={`${approvalRate}%`}
           icon={AlertTriangle}
         />
       </div>
@@ -119,7 +149,7 @@ export function UnderwriterDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {mockPendingDecisions.map((app) => (
+              {underwritingQueue.map((app) => (
                 <tr
                   key={app.arn}
                   className="hover:bg-slate-50 cursor-pointer"
@@ -174,15 +204,15 @@ export function UnderwriterDashboard() {
           <div className="grid grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-slate-600 mb-1">Approved</p>
-              <p className="text-2xl font-bold text-green-600">7</p>
+              <p className="text-2xl font-bold text-green-600">{approvedCount}</p>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Approved with Conditions</p>
-              <p className="text-2xl font-bold text-orange-500">3</p>
+              <p className="text-2xl font-bold text-orange-500">{conditionalCount}</p>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Declined</p>
-              <p className="text-2xl font-bold text-red-600">0</p>
+              <p className="text-2xl font-bold text-red-600">{declinedCount}</p>
             </div>
           </div>
         </div>

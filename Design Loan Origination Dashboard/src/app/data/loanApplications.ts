@@ -420,10 +420,20 @@ export const loanApplications: LoanApplication[] = [
   },
 ];
 
+let runtimeLoanApplications: LoanApplication[] = [...loanApplications];
+
+export function setRuntimeLoanApplications(applications: LoanApplication[]) {
+  runtimeLoanApplications = applications.length > 0 ? applications : [...loanApplications];
+}
+
+export function getLoanApplications() {
+  return runtimeLoanApplications;
+}
+
 export const defaultApplicationArn = 'ARN202600004';
 
 export function getLoanApplicationByArn(arn?: string | null) {
-  return loanApplications.find((application) => application.arn === arn) ?? loanApplications[3];
+  return runtimeLoanApplications.find((application) => application.arn === arn) ?? runtimeLoanApplications[3] ?? loanApplications[3];
 }
 
 export function getApplicationDisplayStatus(application: LoanApplication) {

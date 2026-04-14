@@ -1,0 +1,445 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from app.schemas.workflow import AuditLogItem, RegulatoryReport
+
+
+class WorkflowServiceError(Exception):
+    def __init__(self, message: str, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class WorkflowService:
+    def __init__(self) -> None:
+        self._applications: dict[str, dict[str, Any]] = {
+            "ARN202600001": {
+                "arn": "ARN202600001",
+                "borrower_name": "Rajesh Kumar",
+                "loan_amount": 500000,
+                "stage": "Lead",
+                "risk_grade": "A+",
+                "credit_score": 730,
+                "kyc_status": "Pending",
+                "employment_type": "Salaried",
+                "purpose": "Home Renovation",
+            },
+            "ARN202600004": {
+                "arn": "ARN202600004",
+                "borrower_name": "Vikram Singh",
+                "loan_amount": 850000,
+                "stage": "Submitted",
+                "risk_grade": "A+",
+                "credit_score": 720,
+                "kyc_status": "Verified",
+                "employment_type": "Salaried",
+                "purpose": "Business Expansion",
+            },
+            "ARN202600005": {
+                "arn": "ARN202600005",
+                "borrower_name": "Neha Gupta",
+                "loan_amount": 650000,
+                "stage": "Documents Pending",
+                "risk_grade": "B",
+                "credit_score": 680,
+                "kyc_status": "Pending",
+                "employment_type": "Salaried",
+                "purpose": "Medical Expenses",
+            },
+            "ARN202600009": {
+                "arn": "ARN202600009",
+                "borrower_name": "Rahul Verma",
+                "loan_amount": 800000,
+                "stage": "Underwriting",
+                "risk_grade": "A+",
+                "credit_score": 735,
+                "kyc_status": "Verified",
+                "employment_type": "Self Employed",
+                "purpose": "Inventory Funding",
+            },
+            "ARN202600011": {
+                "arn": "ARN202600011",
+                "borrower_name": "Suresh Rao",
+                "loan_amount": 1200000,
+                "stage": "Offer Sent",
+                "risk_grade": "A",
+                "credit_score": 715,
+                "kyc_status": "Verified",
+                "employment_type": "Salaried",
+                "purpose": "Debt Consolidation",
+            },
+            "ARN202600015": {
+                "arn": "ARN202600015",
+                "borrower_name": "Anil Kumar",
+                "loan_amount": 1100000,
+                "stage": "Rejected",
+                "risk_grade": "C",
+                "credit_score": 640,
+                "kyc_status": "Verified",
+                "employment_type": "Self Employed",
+                "purpose": "Working Capital",
+            },
+        }
+
+        self._documents: dict[str, list[dict[str, Any]]] = {
+            arn: [
+                {"id": "901", "type": "Aadhaar Card", "status": "Verified", "confidence": 98},
+                {"id": "902", "type": "PAN Card", "status": "Verified", "confidence": 96},
+                {"id": "903", "type": "Bank Statement", "status": "Verified", "confidence": 94},
+            ]
+            for arn in self._applications
+        }
+
+        self._communications: dict[str, list[dict[str, Any]]] = {
+            arn: [
+                {
+                    "id": "c1",
+                    "channel": "email",
+                    "subject": "Application Received",
+                    "message": f"Thank you for applying. ARN: {arn}",
+                    "sent_at": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            ]
+            for arn in self._applications
+        }
+
+        self._credit_memos: dict[str, dict[str, Any]] = {}
+        self._policy_overrides: dict[str, list[dict[str, Any]]] = {}
+
+        self._reports: list[RegulatoryReport] = [
+            RegulatoryReport(
+                id="REP-001",
+                name="RBI NBFC Returns - Q1 2026",
+                report_type="Quarterly",
+                due_date="2026-04-15",
+                status="In Progress",
+                completeness=85,
+            ),
+            RegulatoryReport(
+                id="REP-002",
+                name="AML/KYC Compliance Summary",
+                report_type="Monthly",
+                due_date="2026-04-05",
+                status="Submitted",
+                completeness=100,
+            ),
+        ]
+
+        self._audit_logs: list[AuditLogItem] = [
+            AuditLogItem(
+                timestamp=datetime.now(tz=timezone.utc),
+                user="System",
+                action="Workflow service initialized",
+                resource="workflow",
+                details="Role APIs bootstrapped",
+                risk="Low",
+            )
+        ]
+
+    def _get_application(self, arn: str) -> dict[str, Any]:
+        app = self._applications.get(arn)
+        if not app:
+            raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
+        return app
+
+    def list_applications(self, stage: str | None = None) -> list[dict[str, Any]]:
+        applications = list(self._applications.values())
+        if stage:
+            applications = [app for app in applications if app["stage"] == stage]
+        return applications
+
+    def get_application(self, arn: str) -> dict[str, Any]:
+        return self._get_application(arn)
+
+    def role_dashboard(self, role: str) -> dict[str, Any]:
+        apps = list(self._applications.values())
+        if role == "loan_officer":
+            return {
+                "role": role,
+                "stats": [
+                    {"key": "active_applications", "value": len([a for a in apps if a["stage"] not in {"Disbursed", "Rejected"}])},
+                    {"key": "sla_breaches", "value": len([a for a in apps if a["stage"] == "Documents Pending"])},
+                ],
+            }
+        if role == "credit_analyst":
+            return {
+                "role": role,
+                "stats": [
+                    {"key": "in_progress", "value": len([a for a in apps if a["stage"] in {"Submitted", "Documents Pending"}])},
+                    {"key": "avg_credit_score", "value": int(sum(a["credit_score"] for a in apps) / len(apps))},
+                ],
+            }
+        if role == "underwriter":
+            return {
+                "role": role,
+                "stats": [
+                    {"key": "underwriting_queue", "value": len([a for a in apps if a["stage"] == "Underwriting"])},
+                    {"key": "approval_rate", "value": "78%"},
+                ],
+            }
+        return {
+            "role": role,
+            "stats": [
+                {"key": "kyc_pending", "value": len([a for a in apps if a["kyc_status"] == "Pending"])},
+                {"key": "reports_due", "value": len([r for r in self._reports if r.status != "Submitted"])},
+            ],
+        }
+
+    def get_documents(self, arn: str) -> list[dict[str, Any]]:
+        self._get_application(arn)
+        return self._documents.get(arn, [])
+
+    def review_document(self, arn: str, document_id: str, decision: str, reason: str | None) -> dict[str, Any]:
+        docs = self.get_documents(arn)
+        target = next((doc for doc in docs if doc["id"] == document_id), None)
+        if not target:
+            raise WorkflowServiceError(f"Document {document_id} not found", 404)
+
+        target["status"] = "Verified" if decision == "approve" else "Flagged"
+        self.add_audit_log(
+            user="Loan Officer",
+            action=f"Document {decision.title()}",
+            resource=f"{arn}:{document_id}",
+            details=reason or "No reason provided",
+            risk="Low" if decision == "approve" else "Medium",
+        )
+        return target
+
+    def get_communications(self, arn: str) -> list[dict[str, Any]]:
+        self._get_application(arn)
+        return self._communications.get(arn, [])
+
+    def send_communication(self, arn: str, channel: str, subject: str, message: str) -> dict[str, Any]:
+        self._get_application(arn)
+        history = self._communications.setdefault(arn, [])
+        item = {
+            "id": f"c{len(history) + 1}",
+            "channel": channel,
+            "subject": subject,
+            "message": message,
+            "sent_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        history.insert(0, item)
+        self.add_audit_log(
+            user="Loan Officer",
+            action="Communication Sent",
+            resource=arn,
+            details=f"{channel.upper()} - {subject}",
+            risk="Low",
+        )
+        return item
+
+    def move_stage(self, arn: str, new_stage: str, action: str, actor: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        previous = app["stage"]
+        app["stage"] = new_stage
+        self.add_audit_log(
+            user=actor,
+            action=action,
+            resource=arn,
+            details=f"Stage moved from {previous} to {new_stage}",
+            risk="Low",
+        )
+        return app
+
+    def recalculate_ratios(
+        self,
+        monthly_income: float,
+        existing_obligations: float,
+        proposed_emi: float,
+        loan_amount: float,
+        asset_value: float,
+    ) -> dict[str, Any]:
+        dti = ((existing_obligations + proposed_emi) / monthly_income) * 100
+        foir = (existing_obligations / monthly_income) * 100
+        ltv = (loan_amount / asset_value) * 100
+        return {
+            "dti": round(dti, 2),
+            "foir": round(foir, 2),
+            "ltv": round(ltv, 2),
+            "policy_pass": dti <= 45 and foir <= 40 and ltv <= 80,
+        }
+
+    def save_credit_memo(self, arn: str, payload: dict[str, Any], submitted: bool) -> dict[str, Any]:
+        self._get_application(arn)
+        payload = dict(payload)
+        payload["submitted"] = submitted
+        payload["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
+        self._credit_memos[arn] = payload
+        if submitted:
+            self.move_stage(arn, "Underwriting", "Credit Memo Submitted", "Credit Analyst")
+        return payload
+
+    def generate_offer(self, arn: str, loan_amount: float, tenure_months: int, interest_rate: float) -> dict[str, Any]:
+        app = self._get_application(arn)
+        monthly_rate = interest_rate / 12 / 100
+        emi = (loan_amount * monthly_rate * (1 + monthly_rate) ** tenure_months) / (((1 + monthly_rate) ** tenure_months) - 1)
+        total_payable = emi * tenure_months
+        total_interest = total_payable - loan_amount
+        app["stage"] = "Offer Sent"
+        self.add_audit_log(
+            user="Underwriter",
+            action="Loan Offer Generated",
+            resource=arn,
+            details=f"Amount {loan_amount}, tenure {tenure_months}, rate {interest_rate}",
+            risk="Low",
+        )
+        return {
+            "arn": arn,
+            "emi": round(emi, 2),
+            "total_interest": round(total_interest, 2),
+            "total_payable": round(total_payable, 2),
+        }
+
+    def submit_policy_override(self, arn: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self._get_application(arn)
+        overrides = self._policy_overrides.setdefault(arn, [])
+        item = {
+            "id": f"ovr-{len(overrides) + 1}",
+            **payload,
+            "submitted_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        overrides.append(item)
+        self.add_audit_log(
+            user="Underwriter",
+            action="Policy Override Submitted",
+            resource=arn,
+            details=payload["override_category"],
+            risk="Medium",
+        )
+        return item
+
+    def get_kyc_aml(self, arn: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        return {
+            "arn": arn,
+            "kyc_status": app["kyc_status"],
+            "aml_status": "Clear" if app["risk_grade"] in {"A+", "A", "B"} else "Pending Review",
+            "fraud_score": 22 if app["risk_grade"] in {"A+", "A"} else 45,
+            "can_clear_hold": app["kyc_status"] == "Verified",
+        }
+
+    def clear_compliance_hold(self, arn: str, reason: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        app["kyc_status"] = "Verified"
+        self.add_audit_log(
+            user="Compliance Officer",
+            action="Compliance Hold Cleared",
+            resource=arn,
+            details=reason,
+            risk="Medium",
+        )
+        return {"arn": arn, "status": "hold_cleared"}
+
+    def get_fraud_signals(self, arn: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        score = 18 if app["risk_grade"] in {"A+", "A"} else 39
+        return {
+            "arn": arn,
+            "aggregate_score": score,
+            "risk_band": "Low" if score <= 30 else "Medium",
+            "signals": [
+                {"label": "Identity Fraud", "score": max(score - 8, 5), "severity": "Low"},
+                {"label": "Document Fraud", "score": score, "severity": "Medium" if score > 30 else "Low"},
+            ],
+        }
+
+    def mark_false_positive(self, arn: str, reason: str) -> dict[str, str]:
+        self._get_application(arn)
+        self.add_audit_log(
+            user="Compliance Officer",
+            action="Fraud Signal Marked False Positive",
+            resource=arn,
+            details=reason,
+            risk="Low",
+        )
+        return {"arn": arn, "status": "false_positive_marked"}
+
+    def list_audit_logs(
+        self,
+        action: str | None = None,
+        user: str | None = None,
+        resource: str | None = None,
+        risk: str | None = None,
+    ) -> list[AuditLogItem]:
+        logs = self._audit_logs
+        if action:
+            logs = [item for item in logs if action.lower() in item.action.lower()]
+        if user:
+            logs = [item for item in logs if user.lower() in item.user.lower()]
+        if resource:
+            logs = [item for item in logs if resource.lower() in item.resource.lower()]
+        if risk:
+            logs = [item for item in logs if item.risk.lower() == risk.lower()]
+        return logs
+
+    def add_audit_log(self, user: str, action: str, resource: str, details: str, risk: str) -> None:
+        item = AuditLogItem(
+            timestamp=datetime.now(tz=timezone.utc),
+            user=user,
+            action=action,
+            resource=resource,
+            details=details,
+            risk=risk,
+        )
+        self._audit_logs.insert(0, item)
+
+    def list_reports(self) -> list[RegulatoryReport]:
+        return self._reports
+
+    def generate_report(self, name: str, report_type: str, reporting_period: str) -> RegulatoryReport:
+        report = RegulatoryReport(
+            id=f"REP-{len(self._reports) + 1:03d}",
+            name=f"{name} ({reporting_period})",
+            report_type=report_type,
+            due_date=datetime.now(tz=timezone.utc).date().isoformat(),
+            status="In Progress",
+            completeness=5,
+        )
+        self._reports.insert(0, report)
+        self.add_audit_log(
+            user="Compliance Officer",
+            action="Regulatory Report Generated",
+            resource=report.id,
+            details=report.name,
+            risk="Low",
+        )
+        return report
+
+    def get_rbi_compliance(self, arn: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        missing = 1 if app["kyc_status"] == "Pending" else 0
+        return {
+            "arn": arn,
+            "score": 93 if missing == 0 else 81,
+            "blocking_issues": missing,
+            "items": [
+                {
+                    "id": "dl-001",
+                    "clause": "3.2",
+                    "requirement": "KFS disclosure before execution",
+                    "status": "Compliant",
+                    "value": "Provided",
+                },
+                {
+                    "id": "dl-004",
+                    "clause": "5.1",
+                    "requirement": "KYC/AML must be verified",
+                    "status": "Missing" if missing else "Compliant",
+                    "value": app["kyc_status"],
+                },
+            ],
+        }
+
+    def get_rbi_audit_export(self, arn: str) -> dict[str, Any]:
+        data = self.get_rbi_compliance(arn)
+        return {
+            "arn": arn,
+            "exported_at": datetime.now(tz=timezone.utc).isoformat(),
+            "rows": data["items"],
+        }
+
+
+workflow_service = WorkflowService()
