@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:creditshield/app/app_state.dart';
 import 'package:creditshield/app/router/app_router.dart';
@@ -23,7 +24,26 @@ class CreditShieldApp extends StatefulWidget {
 }
 
 class _CreditShieldAppState extends State<CreditShieldApp> {
-  late final _router = createRouter(context.read<AppState>());
+  late GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = createRouter(context.read<AppState>());
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _router.dispose();
+    _router = createRouter(context.read<AppState>());
+  }
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +60,9 @@ class _CreditShieldAppState extends State<CreditShieldApp> {
         final mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(
-            textScaler: TextScaler.linear(mq.textScaler.scale(1).clamp(0.8, 1.3)),
+            textScaler: TextScaler.linear(
+              mq.textScaler.scale(1).clamp(0.8, 1.3),
+            ),
           ),
           child: child!,
         );
