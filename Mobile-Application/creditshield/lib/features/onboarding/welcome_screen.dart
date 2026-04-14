@@ -19,17 +19,20 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     {
       'icon': Icons.flash_on_outlined,
       'title': 'Check Eligibility in Seconds',
-      'desc': 'Get an instant estimate of your loan eligibility with just 3 simple inputs — no paperwork needed.',
+      'desc':
+          'Get an instant estimate of your loan eligibility with just 3 simple inputs — no paperwork needed.',
     },
     {
       'icon': Icons.compare_arrows_outlined,
       'title': 'Compare Offers from Multiple Lenders',
-      'desc': 'Apply once and receive personalised loan offers from multiple lenders. Choose what works best for you.',
+      'desc':
+          'Apply once and receive personalised loan offers from multiple lenders. Choose what works best for you.',
     },
     {
       'icon': Icons.lock_outline,
       'title': 'Your Data, Your Control',
-      'desc': 'You decide what data to share. Full transparency on every step, compliant with DPDPA 2023.',
+      'desc':
+          'You decide what data to share. Full transparency on every step, compliant with DPDPA 2023.',
     },
   ];
 
@@ -71,22 +74,29 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             ),
                             borderRadius: BorderRadius.circular(32),
                           ),
-                          child: Icon(slide['icon'] as IconData,
-                              size: 60, color: Colors.white),
+                          child: Icon(
+                            slide['icon'] as IconData,
+                            size: 60,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.lg),
-                        Text(slide['title'] as String,
-                            style: AppTypography.heading,
-                            textAlign: TextAlign.center),
+                        Text(
+                          slide['title'] as String,
+                          style: AppTypography.heading,
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: AppSpacing.sm),
-                        Text(slide['desc'] as String,
-                            style: AppTypography.body.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                              height: 1.6,
-                            ),
-                            textAlign: TextAlign.center),
+                        Text(
+                          slide['desc'] as String,
+                          style: AppTypography.body.copyWith(
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                            height: 1.6,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   );
@@ -102,7 +112,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   width: _currentPage == i ? 24 : 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: _currentPage == i ? secondary : secondary.withValues(alpha: 0.3),
+                    color: _currentPage == i
+                        ? secondary
+                        : secondary.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 );
@@ -124,16 +136,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           curve: Curves.easeInOut,
                         );
                       } else {
-                        context.go('/kyc');
+                        context.go('/login');
                       }
                     },
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   if (_currentPage < _slides.length - 1)
                     TextButton(
-                      onPressed: () => context.go('/kyc'),
-                      child: Text('Skip',
-                          style: AppTypography.body.copyWith(color: secondary)),
+                      onPressed: () => context.go('/login'),
+                      child: Text(
+                        'Skip',
+                        style: AppTypography.body.copyWith(color: secondary),
+                      ),
                     ),
                 ],
               ),

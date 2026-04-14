@@ -3,6 +3,8 @@ import 'package:creditshield/app/app_state.dart';
 import 'package:creditshield/features/splash/splash_screen.dart';
 import 'package:creditshield/features/onboarding/language_screen.dart';
 import 'package:creditshield/features/onboarding/welcome_screen.dart';
+import 'package:creditshield/features/auth/login_screen.dart';
+import 'package:creditshield/features/auth/signup_screen.dart';
 import 'package:creditshield/features/onboarding/kyc_screen.dart';
 import 'package:creditshield/features/onboarding/profile_setup_screen.dart';
 import 'package:creditshield/features/home/home_screen.dart';
@@ -32,12 +34,26 @@ GoRouter createRouter(AppState appState) {
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/language', builder: (_, __) => const LanguageScreen()),
       GoRoute(path: '/welcome', builder: (_, __) => const WelcomeScreen()),
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/signup', builder: (_, __) => const SignupScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
-      GoRoute(path: '/profile-setup', builder: (_, __) => const ProfileSetupScreen()),
-      GoRoute(path: '/eligibility', builder: (_, __) => const EligibilityScreen()),
+      GoRoute(
+        path: '/profile-setup',
+        builder: (_, __) => const ProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: '/eligibility',
+        builder: (_, __) => const EligibilityScreen(),
+      ),
       GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
-      GoRoute(path: '/maintenance', builder: (_, __) => const MaintenanceScreen()),
-      GoRoute(path: '/session-reauth', builder: (_, __) => const SessionReauthScreen()),
+      GoRoute(
+        path: '/maintenance',
+        builder: (_, __) => const MaintenanceScreen(),
+      ),
+      GoRoute(
+        path: '/session-reauth',
+        builder: (_, __) => const SessionReauthScreen(),
+      ),
       GoRoute(
         path: '/loan-type',
         builder: (context, state) {
@@ -49,8 +65,12 @@ GoRouter createRouter(AppState appState) {
         path: '/loan-application/:loanType',
         builder: (context, state) {
           final loanType = state.pathParameters['loanType']!;
-          final resumeStep = int.tryParse(state.uri.queryParameters['step'] ?? '1') ?? 1;
-          return LoanApplicationScreen(loanType: loanType, initialStep: resumeStep);
+          final resumeStep =
+              int.tryParse(state.uri.queryParameters['step'] ?? '1') ?? 1;
+          return LoanApplicationScreen(
+            loanType: loanType,
+            initialStep: resumeStep,
+          );
         },
       ),
       GoRoute(
@@ -61,10 +81,19 @@ GoRouter createRouter(AppState appState) {
         },
       ),
       GoRoute(path: '/consent', builder: (_, __) => const ConsentScreen()),
-      GoRoute(path: '/consent-dashboard', builder: (_, __) => const ConsentDashboardScreen()),
-      GoRoute(path: '/rbi-compliance', builder: (_, __) => const RbiComplianceScreen()),
+      GoRoute(
+        path: '/consent-dashboard',
+        builder: (_, __) => const ConsentDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/rbi-compliance',
+        builder: (_, __) => const RbiComplianceScreen(),
+      ),
       GoRoute(path: '/risk-score', builder: (_, __) => const RiskScoreScreen()),
-      GoRoute(path: '/lender-offers', builder: (_, __) => const LenderOffersScreen()),
+      GoRoute(
+        path: '/lender-offers',
+        builder: (_, __) => const LenderOffersScreen(),
+      ),
       GoRoute(
         path: '/offer-selection/:offerId',
         builder: (context, state) {
@@ -72,11 +101,26 @@ GoRouter createRouter(AppState appState) {
           return OfferSelectionScreen(offerId: offerId);
         },
       ),
-      GoRoute(path: '/loan-tracker', builder: (_, __) => const LoanTrackerScreen()),
-      GoRoute(path: '/loan-agreement', builder: (_, __) => const LoanAgreementScreen()),
-      GoRoute(path: '/loan-dashboard', builder: (_, __) => const LoanDashboardScreen()),
-      GoRoute(path: '/rejection-recovery', builder: (_, __) => const RejectionRecoveryScreen()),
-      GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
+      GoRoute(
+        path: '/loan-tracker',
+        builder: (_, __) => const LoanTrackerScreen(),
+      ),
+      GoRoute(
+        path: '/loan-agreement',
+        builder: (_, __) => const LoanAgreementScreen(),
+      ),
+      GoRoute(
+        path: '/loan-dashboard',
+        builder: (_, __) => const LoanDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/rejection-recovery',
+        builder: (_, __) => const RejectionRecoveryScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (_, __) => const NotificationsScreen(),
+      ),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     ],
   );

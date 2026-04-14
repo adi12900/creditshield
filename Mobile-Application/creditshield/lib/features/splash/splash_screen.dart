@@ -25,12 +25,14 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
-    _scaleAnim = Tween<double>(begin: 0.8, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _fadeAnim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
+    _scaleAnim = Tween<double>(
+      begin: 0.8,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller.forward();
     _navigate();
   }
@@ -44,7 +46,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (appState.language.isEmpty) {
       context.go('/language');
     } else if (!appState.isLoggedIn) {
-      context.go('/welcome');
+      context.go('/login');
     } else {
       context.go('/home');
     }
@@ -82,23 +84,32 @@ class _SplashScreenState extends State<SplashScreen>
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
                       ),
-                      child: const Icon(Icons.shield_outlined,
-                          size: 56, color: AppColors.secondary),
+                      child: const Icon(
+                        Icons.shield_outlined,
+                        size: 56,
+                        color: AppColors.secondary,
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    Text('CreditShield',
-                        style: AppTypography.heading.copyWith(
-                          color: Colors.white,
-                          fontSize: 32,
-                          letterSpacing: 1.2,
-                        )),
+                    Text(
+                      'CreditShield',
+                      style: AppTypography.heading.copyWith(
+                        color: Colors.white,
+                        fontSize: 32,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text('AI-Powered Loan Risk Assessment',
-                        style: AppTypography.body.copyWith(
-                          color: Colors.white.withValues(alpha: 0.8),
-                        )),
+                    Text(
+                      'AI-Powered Loan Risk Assessment',
+                      style: AppTypography.body.copyWith(
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                    ),
                     const SizedBox(height: 48),
                     SizedBox(
                       width: 32,
