@@ -1,10 +1,19 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 sqlalchemy==2.0.43
-psycopg2-binary==2.9.10
+
 pydantic==2.11.7
 pydantic-settings==2.10.1
 email-validator==2.2.0
 python-dotenv==1.1.1
 httpx==0.28.1
 
+# ai_agent (orchestrator + RAG + Bedrock client)
+boto3>=1.34.0
+botocore>=1.34.0
+tiktoken>=0.7.0
+sentence-transformers>=2.7.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+pandas>=2.0.0
+httpx>=0.27.0

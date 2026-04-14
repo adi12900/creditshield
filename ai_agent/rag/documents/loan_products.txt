@@ -1,0 +1,35 @@
+CreditShield Loan Programmes — Eligibility snapshot (illustrative; board-approved tables are source of truth)
+
+Personal Loan
+- Typical verified income minimum: ₹25,000/month (metro tier may differ).
+- FOIR cap: 65% (auto engine).
+- Typical CIBIL floor: 550 unsecured.
+- Tenure: 12–60 months (programme dependent).
+
+Home Loan
+- Typical verified income minimum: ₹35,000/month.
+- FOIR cap: 65% (some LTV bands stricter).
+- Typical CIBIL floor: 600.
+- Tenure: up to 30 years subject to retirement age policy.
+
+MSME / Business
+- Typical minimum annual turnover evidence: programme-specific; often GST + 12M banking.
+- FOIR / DSCR blended metrics apply; FOIR auto rule may be supplemented by analyst DSCR.
+- Tenure: 12–84 months common for working capital term loans.
+
+Vehicle Loan
+- Typical verified income minimum: ₹20,000/month.
+- FOIR cap: 65% with LTV adjustments.
+- Secured bureau floors typically lower than unsecured personal but policy still enforces HR-06 variant by product code.
+
+BNPL
+- Typical verified income minimum: ₹15,000/month for revolving BNPL lines.
+- Lower ticket sizes; stricter velocity and stacking checks (HR-05 especially).
+- Tenure: revolving; pay-in-4 products use shorter windows.
+
+Risk score bands (engine output 0–100)
+- 0–35 REJECT
+- 36–50 REVIEW
+- 51–65 CAUTION
+- 66–80 APPROVE
+- 81–100 PREMIUM APPROVE

@@ -1,4 +1,6 @@
 import logging
+import sys
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, status
 from sqlalchemy import text
@@ -9,7 +11,14 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.risk.setu_aa_service import setu_aa_service
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from ai_agent.fastapi_router import agent_router  # noqa: E402
+
 app = FastAPI(title=settings.app_name)
+app.include_router(agent_router, prefix="/api/v1/agent")
 logger = logging.getLogger("uvicorn.error")
 
 

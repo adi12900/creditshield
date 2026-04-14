@@ -1,0 +1,57 @@
+Synthetic Indian loan case #1: Priya Sharma, Nagpur, Rajasthan.
+Loan type: Gold Loan; requested principal ₹3,639,336; declared monthly income ₹79,196.
+Bank/UPI behaviour: approximately 62 UPI-linked transactions per month.
+Utility bill payment streak: 4 months; GST returns filed in 11 of the last 12 months.
+Active loans across lenders: 2; CIBIL: 796.
+Underwriting outcome (synthetic label): APPROVE.
+IVL-style parameters highlighted in review: IS-03.
+Hard rules flagged in narrative: none.
+Soft rules / policy warnings in narrative: SR-BANK-015.
+
+---CASE---
+
+Synthetic Indian loan case #2: Aarav Mehta, Hyderabad, Madhya Pradesh.
+Loan type: Home Loan; requested principal ₹2,954,228; declared monthly income ₹124,974.
+Bank/UPI behaviour: approximately 61 UPI-linked transactions per month.
+Utility bill payment streak: 14 months; GST returns filed in 9 of the last 12 months.
+Active loans across lenders: 5; CIBIL: 453.
+Underwriting outcome (synthetic label): CAUTION.
+IVL-style parameters highlighted in review: CF-02, DF-02, EP-05.
+Hard rules flagged in narrative: none.
+Soft rules / policy warnings in narrative: none.
+
+---CASE---
+
+Synthetic Indian loan case #3: Suresh Verma, Chennai, Uttar Pradesh.
+Loan type: Personal Loan; requested principal ₹761,023; declared monthly income ₹173,263.
+Bank/UPI behaviour: approximately 72 UPI-linked transactions per month.
+Utility bill payment streak: 1 months; GST returns filed in 11 of the last 12 months.
+Active loans across lenders: 8; CIBIL: 724.
+Underwriting outcome (synthetic label): CAUTION.
+IVL-style parameters highlighted in review: DF-02, LB-03, FD-01.
+Hard rules flagged in narrative: HR-KYC-002.
+Soft rules / policy warnings in narrative: none.
+
+---CASE---
+
+Synthetic Indian loan case #4: Vihaan Kulkarni, Hyderabad, Rajasthan.
+Loan type: Auto Loan; requested principal ₹3,205,303; declared monthly income ₹35,916.
+Bank/UPI behaviour: approximately 64 UPI-linked transactions per month.
+Utility bill payment streak: 3 months; GST returns filed in 6 of the last 12 months.
+Active loans across lenders: 5; CIBIL: 682.
+Underwriting outcome (synthetic label): REVIEW.
+IVL-style parameters highlighted in review: CF-02, LB-03, EP-05.
+Hard rules flagged in narrative: HR-DTI-001, HR-FRAUD-010.
+Soft rules / policy warnings in narrative: SR-BANK-015.
+
+---CASE---
+
+Synthetic Indian loan case #5: Kavya Singh, Kolkata, Rajasthan.
+Loan type: Personal Loan; requested principal ₹369,276; declared monthly income ₹182,772.
+Bank/UPI behaviour: approximately 181 UPI-linked transactions per month.
+Utility bill payment streak: 17 months; GST returns filed in 3 of the last 12 months.
+Active loans across lenders: 6; CIBIL: 843.
+Underwriting outcome (synthetic label): REVIEW.
+IVL-style parameters highlighted in review: ST-04, EP-05, IS-03.
+Hard rules flagged in narrative: none.
+Soft rules / policy warnings in narrative: SR-BANK-015, SR-GST-008.

@@ -1,0 +1,50 @@
+CreditShield Hard Rejection Rules (HR-01 — HR-07)
+
+HR-01 — FOIR maximum breach
+- Condition: Fixed Obligations to Income Ratio exceeds product cap.
+- Threshold: FOIR > 65% → auto REJECT.
+- RBI / policy reference: Internal credit policy aligned to prudent retail underwriting; FOIR caps mirror board-approved risk appetite.
+- Exceptions: None for unsecured retail; secured products may use board-approved lower FOIR if documented (not auto-approved here).
+- Example: Declared income ₹50,000; existing EMIs ₹36,000; FOIR 72% → HR-01.
+
+HR-02 — Document tamper / integrity failure
+- Condition: Cryptographic or forensic integrity check fails on salary slip, bank statement, or ITR XML/hash mismatch.
+- Threshold: Any tamper flag on income-critical docs → REJECT + fraud flag.
+- Reference: Digital lending conduct + internal fraud policy.
+- Exceptions: Re-upload allowed only after full re-verification workflow.
+- Example: PDF incremental save mismatch on salary slip → HR-02.
+
+HR-03 — NPA / write-off history
+- Condition: Borrower or guarantor NPA / write-off in last 36 months on bureau or internal watchlist.
+- Threshold: Any confirmed event → REJECT.
+- Reference: Board credit policy + RBI prudential norms context.
+- Exceptions: Fully settled with documented NOC and committee waiver (manual path outside auto engine).
+- Example: Write-off ₹45k settled 14 months ago still on bureau narrative → HR-03.
+
+HR-04 — Declared vs verified income variance
+- Condition: |declared − verified| / verified > 50%.
+- Threshold: Breach → REJECT.
+- Reference: Income verification SOP.
+- Exceptions: None for auto path.
+- Example: Declared ₹80k; AA-verified ₹38k → HR-04.
+
+HR-05 — Loan stacking
+- Condition: New loan enquiries / disbursals in rolling 90 days.
+- Threshold: ≥3 new loans → REJECT.
+- Reference: Internal affordability policy.
+- Exceptions: None auto; secured top-up with lien may be manual exception.
+- Example: Four new unsecured facilities in 60 days → HR-05.
+
+HR-06 — Bureau score floor
+- Condition: CIBIL / Experian bureau score below product floor.
+- Threshold: Unsecured personal <550; home loan <600 → REJECT (product-specific tables).
+- Reference: Credit bureau usage policy.
+- Exceptions: Thin-file programme with guarantor (manual).
+- Example: CIBIL 531 personal loan → HR-06.
+
+HR-07 — Income below product minimum
+- Condition: Verified monthly income below product threshold.
+- Threshold: Per loan_products.txt → REJECT.
+- Reference: Product programme rules.
+- Exceptions: Co-borrower income aggregation if policy allows (manual verification).
+- Example: Verified ₹18k vs personal loan min ₹25k → HR-07.

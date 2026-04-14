@@ -1,0 +1,22 @@
+CreditShield IVL grid — Income Verification Layer parameters (7 categories; 48 coded IDs)
+
+Category weights (default retail unsecured personal loan engine):
+- IS Income Stability — 28%
+- CF Cash Flow Behaviour — 22%
+- EP Expense Pattern — 15%
+- ST Suspicious Transactions — 18%
+- FD Financial Discipline — 10%
+- LB Liabilities & Obligations — 4%
+- DF Digital Footprint — 3%
+
+Per-parameter score: 0–100 where higher is better unless noted as “inverted” in computation spec.
+
+IS-01..IS-07: pay continuity, employer stability, payroll regularity, bonus predictability, secondary income share, probation status, industry risk overlay.
+CF-01..CF-07: inflow cadence, AA vs stated income reconciliation, EMI bounce history, surplus after EMIs, liquidity buffer days, volatile credits %, round-tripping flags.
+EP-01..EP-07: essential spend ratio, discretionary spike index, rent-to-income, medical/education stress markers, lifestyle drift, subscription burden, cash withdrawal pattern.
+ST-01..ST-07: velocity vs peers, counterpart risk, circular transfers, crypto / gaming adjacency, high-risk MCC concentration, structuring heuristics, dormant account reactivation.
+FD-01..FD-07: savings rate trend, insurance discipline, tax filing consistency, emergency fund proxy, delinquency recency, utilisation of revolving credit, limit increase behaviour.
+LB-01..LB-06: FOIR components, guarantor load, contingent liabilities, lease obligations, child support / court orders, co-applicant DTI.
+DF-01..DF-07: device risk, geo consistency, KYC digital trail age, email/phone tenure, consent log quality, LSP interaction anomalies, account takeover indicators.
+
+Weighting note: Category weight applies to the mean of parameter scores inside the category for the composite IVL score in the mock engine; production may use loan-type-specific matrices from the model governance catalogue.

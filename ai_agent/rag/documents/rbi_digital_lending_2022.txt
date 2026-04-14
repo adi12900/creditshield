@@ -1,0 +1,19 @@
+RBI Master Direction — Digital Lending (2022) — Key excerpts for CreditShield policy alignment
+
+1. Key Fact Statement (KFS)
+Regulated entities must provide a standardised Key Fact Statement before contract execution. The KFS must disclose all-inclusive cost of digital loans (annualised interest, fees, insurance, other charges), cooling-off rights, grievance redressal, and loan servicing terms. Any material change post-sanction requires refreshed consent and updated KFS where applicable.
+
+2. Cooling-off period
+Borrowers must be given an explicit cooling-off period (look-off window) during which they may exit the digital loan without penalty, paying only principal and pro-rata interest as specified. The cooling-off mechanism must be disclosed in KFS and accessible in the borrower journey.
+
+3. Direct disbursement mandate
+Loan proceeds must be disbursed directly to the borrower’s bank account with the RE (or as permitted under applicable structure). Pass-through of disbursal solely to third-party pools without borrower visibility is not permitted except where regulation explicitly allows documented escrow structures.
+
+4. Loan recovery conduct
+Recovery agents must follow fair practices: no harassment, no impersonation, prescribed calling windows, documented authorisation trail, and alignment with RBI fair practices code. Digital lending service providers (LSPs) remain accountable for outsourced recovery behaviour under outsourcing governance.
+
+5. Account Aggregator (AA) framework
+Where cash-flow underwriting uses consented bank data, entities should prefer Account Aggregator–mediated flows with clear purpose limitation, FIP–FIU consent artefacts, and data minimisation. AA usage does not replace KYC, fraud controls, or internal credit policy.
+
+6. Data localisation note (operational)
+For Indian lending operations, store and process borrower PII and credit data in jurisdictions and cloud regions compliant with RBI circulars on storage, access logging, and breach notification. ap-south-1 (Mumbai) is commonly used for in-region processing when architecting cloud AI workloads.

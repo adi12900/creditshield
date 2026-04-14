@@ -1,0 +1,16 @@
+# KYC — identity and address (CreditShield retail)
+
+[KYC] PAN format
+- PAN must be 10 characters: five letters, four digits, one letter (e.g. ABCDE1234F). Fifth character is entity type (P = individual).
+- PAN name must match application name after normalisation (spacing, initials); material mismatch → manual review or reject per HR-KYC linkage checks.
+
+[KYC] Aadhaar
+- Aadhaar number is 12 digits; verify VID / masked Aadhaar handling per UIDAI and internal SOP.
+- Aadhaar name and DOB must be consistent with PAN and application; >1 material conflict across ID triangulation → escalate or reject.
+
+[KYC] Address proof
+- Acceptable: utility bill, bank statement, municipal tax, registered lease (within validity window per product).
+- Address must fall in serviceable geography for the product; PO Box only as supplementary, not sole proof.
+
+[KYC] PEP and sanctions
+- Screen against internal and external watchlists at application stage; open match → no auto-approval until clearance.

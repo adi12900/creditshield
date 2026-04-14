@@ -1,0 +1,36 @@
+CreditShield Soft Review Rules (SR-01 — SR-05)
+
+SR-01 — Income coefficient of variation
+- Condition: Income CV > 30% on verified inflows (AA / bank analytics).
+- Action: MANUAL REVIEW.
+- Reference: Variable income playbook.
+- Exceptions: Seasonal occupation codes with documented seasonality factor may downgrade severity (analyst decision).
+- Example: Freelancer CV 34% → SR-01.
+
+SR-02 — Missing ITR and GST (self-employed)
+- Condition: Employment class = self-employed AND no ITR AND no GST where GST registration is expected for stated turnover.
+- Action: MANUAL REVIEW.
+- Reference: Self-employed income verification SOP.
+- Exceptions: Profession codes exempt from GST by statute (documented).
+- Example: Consultant, no ITR, no GST → SR-02.
+
+SR-03 — Fraud probability band
+- Condition: Model fraud probability between 25% and 50%.
+- Action: MANUAL REVIEW.
+- Reference: Fraud analytics policy.
+- Exceptions: None auto above 50% (escalate to SR-03 high band / HR as applicable).
+- Example: Fraud score 32% → SR-03.
+
+SR-04 — Salary gap
+- Condition: Gap between salary credits >2 months in lookback window.
+- Action: MANUAL REVIEW.
+- Reference: Payroll continuity checks.
+- Exceptions: Documented leave / maternity with employer letter.
+- Example: No salary credit for 3 months → SR-04.
+
+SR-05 — New-to-credit
+- Condition: Bureau age <12 months.
+- Action: MANUAL REVIEW.
+- Reference: Thin-file programme rules.
+- Exceptions: Secured gold / LAP with strong collateral may use alternate scorecard (manual).
+- Example: First bureau trade 8 months old → SR-05.
