@@ -3,9 +3,11 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.v1.auth.auth_routes import router as auth_router
 from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
@@ -27,6 +29,18 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
     logger.warning("AI agent routes disabled due to missing dependency: %s", exc)
 
 app = FastAPI(title=settings.app_name)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 if agent_router is not None:
     app.include_router(agent_router, prefix="/api/v1/agent")
 
@@ -65,5 +79,6 @@ def database_health_check() -> dict[str, str]:
 
 
 app.include_router(setu_router, prefix="/api/v1/setu")
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")

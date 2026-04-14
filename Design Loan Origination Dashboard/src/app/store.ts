@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { defaultApplicationArn } from './data/loanApplications';
+import { clearAuthToken } from './lib/workflowApi';
 
 export type UserRole =
   | 'loan_officer'
@@ -36,5 +37,8 @@ export const useStore = create<AppState>((set) => ({
   selectedApplicationArn: defaultApplicationArn,
   setUser: (user) => set({ user }),
   setSelectedApplicationArn: (selectedApplicationArn) => set({ selectedApplicationArn }),
-  logout: () => set({ user: null }),
+  logout: () => {
+    clearAuthToken();
+    set({ user: null });
+  },
 }));

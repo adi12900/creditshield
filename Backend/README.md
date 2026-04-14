@@ -40,3 +40,23 @@ Backend/
 - No tables are created at startup.
 - Use `GET /health/db` to verify PostgreSQL connection.
 - For production migrations, add Alembic.
+
+## Authentication Update (JWT)
+
+- `POST /api/v1/auth/login` issues JWT tokens.
+- Predefined system admin credentials come from env-backed settings:
+  - `SYSTEM_ADMIN_USERNAME` (default: `system_admin`)
+  - `SYSTEM_ADMIN_PASSWORD` (default: `Admin@123`)
+- All `/api/v1/users` endpoints are now restricted to `system_admin` JWT tokens.
+- Workflow endpoints validate role from JWT claims instead of `x-user-role` header.
+
+### Required DB Change
+
+If `users.password_hash` does not exist yet, run:
+
+```sql
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+```
+
+Then ensure each user has a valid hashed password by recreating users via API or updating records.
