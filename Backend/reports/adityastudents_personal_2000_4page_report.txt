@@ -1,0 +1,439 @@
+
+╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                         PROFESSIONAL LOAN APPRAISAL REPORT                                        ║
+║                          (4-PAGE FORMAL UNDERWRITING DOCUMENT)                                    ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+Report Generated: 15-Apr-2026
+Analysis Period: 2024-12-31 to 2025-12-31
+Source File: adityastudents.csv
+Confidentiality: INTERNAL - FOR AUTHORIZED PERSONNEL ONLY
+
+====================================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PAGE 1: EXECUTIVE SUMMARY & CREDIT DECISION                                                     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1. APPLICANT PROFILE & FINANCIAL HEALTH
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Classification:           Salaried with irregularities
+   Overall Financial Health: Weak
+   
+   Summary of Financial Behavior:
+   The loan application for INR 2000 is rejected due to high risk indicated by multiple red flags including negative savings ratio, hidden EMI obligations, and liquidity stress.
+
+
+2. LOAN REQUEST OVERVIEW
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Loan Type:                personal
+   Requested Loan Amount:    ₹2,000.00
+   Assumed Tenure:           24 months
+   Estimated Monthly EMI:    ₹83.33
+   
+   Loan Purpose:             Not specified
+
+
+3. KEY FINANCIAL SNAPSHOT
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Estimated Monthly Income:     ₹66,116.11
+   Estimated Monthly Expenses:   ₹49,703.69
+   Monthly Surplus/(Deficit):    ₹16,412.42
+   
+   Net Savings Ratio:            -0.24%
+   Total Inflow (12 months):     ₹595,045.02
+   Total Outflow (12 months):    ₹596,444.31
+   
+   Liquidity Stress Assessment:  240 low-balance days out of 365 active days
+                                 (65.8% stress days)
+   Minimum Balance Observed:     ₹0.00
+   Peak Balance Observed:        ₹200,036.50
+
+
+4. TOP RISK DRIVERS (PRIMARY FACTORS AFFECTING DECISION)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   1. R10009 impact=-0.1200 reason=spending above inflows indicates recurring cash deficit
+   2. R10013 impact=-0.1200 reason=hidden or auto-debit loan obligations are a major risk
+   3. R10020 impact=-0.1000 reason=repeated low-balance days indicate repayment fragility
+   4. DERIVED_LOW_SAVINGS impact=-0.1000 reason=Net savings ratio below 5% indicates weak repayment buffer
+   5. R10010 impact=-0.0800 reason=repeated month-end stress indicates fragile liquidity management
+
+
+5. FINAL CREDIT DECISION
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Risk Level:            Moderate Risk
+   Recommendation:        Approve with caution
+   Confidence Level:      HIGH
+   
+   Final Score:           19.06 / 100
+
+
+6. DECISION JUSTIFICATION
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+['Negative savings ratio indicating cash deficit', 'Hidden EMI obligations detected', 'Liquidity stress indicated by low balance days and month-end stress']
+
+   Key Drivers:
+   • Income Pattern: Irregular income pattern observed, Salary months detected: 2
+   • Savings Capacity: Weak (ratio: -0.24%)
+   • Liquidity Position: Constrained
+   • EMI Affordability: AFFORDABLE
+   • Behavior Consistency: Low
+
+
+====================================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PAGE 2: INCOME & CASHFLOW ANALYSIS                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1. INCOME ANALYSIS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Income Source(s):         511020437118, UNKNOWN
+   Income Stability:         Irregular
+   
+   Monthly Income Estimate:  ₹66,116.11
+   Annual Inflow (12m):      ₹595,045.02
+   
+   Income Trend:             Stable
+   Income Risks:             Irregular income pattern observed, Salary months detected: 2
+   
+   Income Classification:    Salaried with irregularities
+   
+   Detailed Observation:
+   {'summary': "The applicant's income is irregular with a mean monthly income of INR 66116.11 and a variability ratio of 1.0161, indicating some instability.", 'monthly_income_estimate': 66116.11, 'stability_observations': ['Irregular income pattern observed', 'Salary months detected: 2'], 'classification': 'Salaried with irregularities'}
+
+
+2. CASHFLOW ANALYSIS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Total Inflow (12 months):      ₹595,045.02
+   Total Outflow (12 months):     ₹596,444.31
+   Net Savings (12 months):       ₹-1,399.29
+   
+   Net Savings Ratio:             -0.24%
+   Monthly Average Inflow:        ₹49,587.08
+   Monthly Average Outflow:       ₹49,703.69
+   Monthly Average Savings:       ₹-116.61
+   
+   Savings Interpretation:        Weak
+   Cashflow Health Rating:        Poor
+   
+   Detailed Analysis:
+   {'summary': 'The cashflow analysis reveals a negative savings ratio of -0.0024, indicating a persistent cash deficit.', 'inflow_outflow_observations': ['Total inflow: INR 595045.02', 'Total outflow: INR 596444.31', 'Net savings ratio: -0.0024'], 'liquidity_observations': ['Low balance days: 261', 'Month-end stress count: 57']}
+
+
+3. LIQUIDITY ANALYSIS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Minimum Balance Observed:      ₹0.00
+   Peak Balance Observed:         ₹200,036.50
+   Average Balance:               ₹100,018.25
+   
+   Low Balance Days:              240 days
+   Stress Days (balance < ₹5000): 240 days
+   
+   Month-End Stress Indicator:    48 days
+   Quarter-End Stress Indicator:  Elevated
+   
+   Liquidity Risk Assessment:     High
+   
+   Observation:
+   ['Negative savings ratio', 'Hidden EMI obligations', 'Liquidity stress and low balance days']
+
+
+4. FINANCIAL DISCIPLINE & CONSISTENCY
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Spending vs Earning Behavior:  Aggressive
+   Financial Pattern Consistency: Low
+   Expense Volatility:            Moderate
+   
+   Stress Indicators:             ['Low balance days: 261', 'Month-end stress count: 57']
+   
+   Overall Discipline Rating:     Poor
+
+
+====================================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PAGE 3: EXPENSE, LIABILITY & BEHAVIORAL ANALYSIS                                                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1. EXPENSE BEHAVIOR & SPENDING PATTERNS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Essential Spending:
+   • Rent/Housing:      ₹0.00/month (0.0% of income)
+   • Food/Groceries:    ₹0.00/month (0.0% of income)
+   • Travel/Transport:  ₹0.00/month (0.0% of income)
+   • Bills/Utilities:   ₹0.00/month (0.0% of income)
+   
+   Discretionary Spending:
+   • Entertainment:     ₹0.00/month (0.0% of income)
+   
+   Spending Pattern: No categorical split available
+   
+   High-Value Transactions Identified: 7 transactions
+   
+   Lifestyle Insight:
+   The loan application for INR 2000 is rejected due to high risk indicated by multiple red flags including negative savings ratio, hidden EMI obligations, and liquidity stress.
+
+
+2. LIABILITY ANALYSIS & DEBT POSITION
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Existing EMIs Detected:        Estimated monthly liability ₹9,858.25
+   BNPL / Credit Usage:           Minimal
+   Hidden Liabilities (Pattern):  Hidden EMI count: 72
+   
+   Debt-to-Income Ratio:          14.91%
+   Estimated Annual Debt Payment: ₹118,299.00
+   
+   Liability Risk Level:          Low
+   
+   Assessment:
+   {'summary': 'The liability analysis indicates a high debt burden with estimated monthly liability of INR 9858.25 and hidden EMI signals.', 'liability_observations': ['EMI pattern count: 72', 'Estimated monthly liability: INR 9858.25', 'Debt-to-income ratio: 0.1491']}
+
+
+3. LOAN AFFORDABILITY ANALYSIS (REQUESTED: ₹2,000.00)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Expected Monthly EMI (24 months):     ₹83.33
+   Estimated Monthly Income:             ₹66,116.11
+   EMI-to-Income Ratio:                  0.13%
+   
+   Current Monthly Surplus:              ₹16,412.42
+   Expected Surplus After EMI:           ₹16,329.08
+   
+   Affordability Classification:         AFFORDABLE
+   Affordability Confidence:             HIGH
+   
+   RATIONALE FOR AFFORDABILITY CLASSIFICATION:
+   
+   The requested loan amount is INR 2000, which is considered affordable given the applicant's income, but other risk factors override this assessment.
+   
+   ├─ EMI Ratio Analysis: PASS
+   │  (Industry standard: < 50% healthy, 50-60% manageable, > 60% risky)
+   │
+   ├─ Surplus Analysis: PASS
+   │  (Applicant must maintain positive post-EMI surplus)
+   │
+   └─ Historical Savings: FAIL
+      (Higher savings history indicates affordability capacity)
+
+
+4. BEHAVIORAL RISK ANALYSIS & FINANCIAL STRESS INDICATORS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   Frequent Low-Balance Events:      Frequent
+   Large Debit Transactions:         3 detected
+   Spending Spike Patterns:          Detected
+   
+   Financial Stress Level:           High
+   Stress Indicators Detected:       ['Low balance days: 261', 'Month-end stress count: 57']
+   
+   Repayment Behavior Prediction:    High default risk
+   
+   Behavioral Assessment:
+   {'decision': 'APPROVE_WITH_CAUTION', 'justification': 'Micro-loan affordability is acceptable, but liquidity stress and weak savings warrant caution.', 'confidence': 'MEDIUM'}
+
+
+====================================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PAGE 4: TRANSACTION INSIGHTS & RECOMMENDATIONS                                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1. NOTABLE TRANSACTIONS (TOP 5 RISK INDICATORS)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   1. 2025-07-06 | LARGE_DEBIT
+      Amount: ₹70,000.00
+      Description: WDL TFRUPI/DR/518747632222/ADITYAK/IPOS/7972873499/UPI0097690162095 AT 00473SATARA
+      Risk Reason: High-value outflow transaction
+
+   2. 2025-07-02 | LARGE_DEBIT
+      Amount: ₹62,700.00
+      Description: WDL TFR   EDU LOAN MARGINMNY TRF   0039995406001 OFSYSTEM SUSPENSE BR PAR AT00473 SATARA
+      Risk Reason: High-value outflow transaction
+
+   3. 2025-07-02 | LARGE_DEBIT
+      Amount: ₹30,000.00
+      Description: WDL TFRUPI/DR/554967389017/SIDDHIS/BARB/siddhikord/UPI0097693162093 AT 00473SATARA
+      Risk Reason: High-value outflow transaction
+
+   4. 2025-05-13 | LOW_BALANCE_EVENT
+      Amount: ₹0.00
+      Description: WDL TFRUPI/DR/513384773660/VIVEKJA/IBKL/9322400425/UPI0097692162094 AT 00473SATARA
+      Risk Reason: Very low running balance indicates liquidity stress
+
+   5. 2025-05-14 | LOW_BALANCE_EVENT
+      Amount: ₹0.00
+      Description: WDL TFRUPI/DR/513433939560/79728734/IPOS/7972873499/UPI0097693162093 AT 00473SATARA
+      Risk Reason: Very low running balance indicates liquidity stress
+
+
+2. RULE-BASED INSIGHTS (TOP RULES TRIGGERED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   1. Rule: R10004
+      Impact Score: -0.02
+      Severity: Low
+      Explanation: volatile pay-cycle timing increases underwriting risk
+
+   2. Rule: R10005
+      Impact Score: 0.01
+      Severity: Low
+      Explanation: stable or improving salary trend supports affordability
+
+   3. Rule: R10009
+      Impact Score: -0.12
+      Severity: High
+      Explanation: spending above inflows indicates recurring cash deficit
+
+   4. Rule: R10010
+      Impact Score: -0.08
+      Severity: Moderate
+      Explanation: repeated month-end stress indicates fragile liquidity management
+
+   5. Rule: R10012
+      Impact Score: -0.08
+      Severity: Moderate
+      Explanation: frequent EMI deductions indicate existing repayment obligations
+
+
+3. CONSOLIDATED RISK SUMMARY (ALL MAJOR FACTORS)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   1. R10009 impact=-0.1200 reason=spending above inflows indicates recurring cash deficit
+   2. R10013 impact=-0.1200 reason=hidden or auto-debit loan obligations are a major risk
+   3. R10020 impact=-0.1000 reason=repeated low-balance days indicate repayment fragility
+   4. DERIVED_LOW_SAVINGS impact=-0.1000 reason=Net savings ratio below 5% indicates weak repayment buffer
+   5. R10010 impact=-0.0800 reason=repeated month-end stress indicates fragile liquidity management
+
+
+4. MITIGATIONS & IMPROVEMENT SUGGESTIONS FOR FUTURE ELIGIBILITY
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   To strengthen financial profile and improve loan eligibility, applicant should focus on:
+
+   ✓ Income Stability:
+     • Establish consistent monthly income source
+     • Build salary documentation trail for next 3-6 months
+   
+   ✓ Spending Discipline:
+     • Reduce discretionary expenses where possible
+     • Implement monthly budget tracking
+   
+   ✓ Liquidity Buffer:
+     • Maintain minimum ₹10,000 balance at month-end
+     • Build emergency fund (3-months expenses)
+   
+   ✓ Debt Management:
+     • Clear any existing BNPL/credit card balances
+     • Reduce existing EMI commitments if possible
+   
+   ✓ Savings Rate:
+     • Current savings ratio: -0.24%
+     • Target savings ratio: Minimum 10% (₹6,611.61/month)
+     • This will significantly improve future creditworthiness
+   
+   ✓ Credit History:
+     • Maintain payment discipline on existing obligations
+     • Avoid late payments or defaults
+     • Build positive repayment track record
+
+
+5. FINAL UNDERWRITING STATEMENT
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   DECISION: Approve with caution
+   RISK LEVEL: Moderate Risk
+   CONFIDENCE: HIGH
+
+   
+   REPAYMENT CAPACITY ASSESSMENT:
+   
+   Based on the 12-month transaction analysis, the applicant demonstrates a monthly income of
+   ₹66,116.11 with controllable expenses of
+   ₹49,703.69. The requested EMI of
+   ₹83.33 represents 0.1% of monthly income.
+   
+   The EMI is structurally affordable given the applicant income profile.
+
+
+   RISK EXPOSURE ASSESSMENT:
+   
+   Primary Risk Factors:
+   • Liquidity stress on 240 out of 365 days
+     (65.8% of period)
+   • Net savings ratio of only -0.24% limits financial buffer
+   • Income dependency factors
+
+   Mitigating Factors:
+   • No significant existing liabilities detected
+   • Consistent monthly cashflow pattern
+   • Acceptable debt-to-income ratio
+
+
+   CONFIDENCE & AUDIT TRAIL:
+   
+   This assessment is based on 1512 transaction records spanning a
+   12-month period. The underwriting decision reflects:
+   
+   ✓ Quantitative scoring: 60% weight on rule-based financial metrics
+   ✓ Machine-learning model: 40% weight on pattern recognition (trained on 10000+ historical cases)
+   ✓ Professional judgment: Manual review of income classification, behavioral patterns, and stress indicators
+   ✓ Regulatory compliance: Assessment conducted in compliance with RBI lending guidelines
+   
+   Confidence Level: HIGH
+   
+   {'decision': 'APPROVE_WITH_CAUTION', 'justification': 'Micro-loan affordability is acceptable, but liquidity stress and weak savings warrant caution.', 'confidence': 'MEDIUM'}
+
+
+   SIGNATURE & AUTHORIZATION
+   ────────────────────────────────────────────────────────────────────────────────────────────────
+   
+   Report Generated By:     AI Loan Appraisal Engine v2.0
+   Date:                   15-April-2026
+   Report Version:         PROFESSIONAL DETAILED (4-PAGE FORMAT)
+   
+   This report is confidential and intended for authorized credit personnel only.
+   The decision is subject to verification and may be overridden by senior management.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+====================================================================================================
+
+╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                                  END OF REPORT                                                    ║
+║                        (4-PAGE PROFESSIONAL LOAN APPRAISAL DOCUMENT)                              ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+IMPORTANT DISCLAIMERS:
+
+1. CONFIDENTIALITY: This report contains confidential financial information and is intended
+   exclusively for authorized personnel involved in credit decision-making.
+
+2. DATA ACCURACY: This assessment is based on transaction data provided by the applicant.
+   Any inaccuracies or omissions in the source data may affect analysis validity.
+
+3. REGULATORY COMPLIANCE: Assessment conducted in accordance with RBI guidelines for retail lending.
+   Final approval remains subject to management review and policy compliance.
+
+4. DECISION FINALITY: This recommendation is advisory. Final credit decision rests with
+   authorized credit committee members.
+
+5. REVISION CLAUSE: This assessment is valid for 30 days from generation date. Subsequent
+   applicant transactions may warrant reassessment.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+

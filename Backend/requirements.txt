@@ -7,6 +7,8 @@ pydantic-settings==2.10.1
 email-validator==2.2.0
 python-dotenv==1.1.1
 httpx==0.28.1
+python-multipart==0.0.9
+pdfplumber==0.11.4
 
 # ai_agent (orchestrator + RAG + Bedrock client)
 boto3>=1.34.0

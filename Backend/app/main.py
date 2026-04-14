@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.v1.risk.loan_appraisal_routes import router as loan_appraisal_router
 from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
@@ -65,5 +66,6 @@ def database_health_check() -> dict[str, str]:
 
 
 app.include_router(setu_router, prefix="/api/v1/setu")
+app.include_router(loan_appraisal_router, prefix="/api/v1/loan-appraisal")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")
