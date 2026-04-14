@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.v1.risk.loan_appraisal_routes import router as loan_appraisal_router
 from app.api.v1.auth.auth_routes import router as auth_router
 from app.api.v1.borrower.borrower_auth_routes import router as borrower_auth_router
 from app.api.v1.borrower.borrower_journey_routes import router as borrower_journey_router
@@ -82,6 +83,7 @@ def database_health_check() -> dict[str, str]:
 
 
 app.include_router(setu_router, prefix="/api/v1/setu")
+app.include_router(loan_appraisal_router, prefix="/api/v1/loan-appraisal")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(borrower_auth_router, prefix="/api/v1")
 app.include_router(borrower_journey_router, prefix="/api/v1")
