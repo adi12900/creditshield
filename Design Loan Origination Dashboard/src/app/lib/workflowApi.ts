@@ -1,4 +1,5 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+const AUTH_TOKEN_KEY = 'creditshield_access_token';
 
 export type WorkflowRole =
   | 'loan_officer'
@@ -9,8 +10,9 @@ export type WorkflowRole =
 async function request<T>(path: string, options: RequestInit = {}, role?: string): Promise<T> {
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
-  if (role) {
-    headers.set('x-user-role', role);
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -34,6 +36,26 @@ async function request<T>(path: string, options: RequestInit = {}, role?: string
   }
 
   return response.json() as Promise<T>;
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  role: string;
+  full_name: string;
+  expires_in_seconds: number;
 }
 
 export interface WorkflowApplication {
@@ -84,7 +106,39 @@ export interface WorkflowKycAml {
   can_clear_hold: boolean;
 }
 
+export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
+
+export interface AdminCreateUserRequest {
+  full_name: string;
+  email: string;
+  role: AdminUserRole;
+  password: string;
+  is_active: boolean;
+}
+
+export interface AdminUserResponse {
+  id: number;
+  full_name: string;
+  email: string;
+  role: AdminUserRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const workflowApi = {
+  login: (username: string, password: string) =>
+    request<LoginResponse>('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  createUser: (payload: AdminCreateUserRequest) =>
+    request<AdminUserResponse>('/api/v1/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   listApplications: () => request<WorkflowApplication[]>('/api/v1/workflow/applications'),
   getApplication: (arn: string) => request<WorkflowApplication>(`/api/v1/workflow/applications/${arn}`),
 

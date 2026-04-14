@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     setu_sessions_get_path_template: str = "/v2/sessions/{session_id}"
     setu_request_timeout_seconds: float = 30.0
 
+    jwt_secret_key: str = "change-this-in-env"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+
+    system_admin_username: str = "system_admin"
+    system_admin_password: str = "Admin@123"
+    system_admin_full_name: str = "System Administrator"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,7 +1,8 @@
 from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.security import require_auth_roles
 from app.schemas.workflow import (
     AuditLogItem,
     CommunicationMessageRequest,
@@ -28,25 +29,23 @@ def _to_http_exception(exc: WorkflowServiceError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
-def require_roles(allowed_roles: set[str]) -> Callable[[str | None], str | None]:
-    def dependency(x_user_role: str | None = Header(default=None, alias="x-user-role")) -> str | None:
-        if x_user_role and x_user_role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role '{x_user_role}' is not allowed for this endpoint",
-            )
-        return x_user_role
-
-    return dependency
+def require_roles(allowed_roles: set[str]) -> Callable:
+    return require_auth_roles(allowed_roles)
 
 
 @router.get("/applications", response_model=list[LoanApplicationOut])
-def list_applications(stage: str | None = Query(default=None)) -> list[LoanApplicationOut]:
+def list_applications(
+    stage: str | None = Query(default=None),
+    _user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
+) -> list[LoanApplicationOut]:
     return [LoanApplicationOut(**item) for item in workflow_service.list_applications(stage=stage)]
 
 
 @router.get("/applications/{arn}", response_model=LoanApplicationOut)
-def get_application(arn: str) -> LoanApplicationOut:
+def get_application(
+    arn: str,
+    _user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
+) -> LoanApplicationOut:
     try:
         return LoanApplicationOut(**workflow_service.get_application(arn))
     except WorkflowServiceError as exc:
