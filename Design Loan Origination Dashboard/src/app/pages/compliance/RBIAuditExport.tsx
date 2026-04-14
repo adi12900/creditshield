@@ -1,9 +1,11 @@
 import { Download, FileSpreadsheet } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
 import { getLoanPolicy } from '../../lib/rbiPolicy';
+import { workflowApi } from '../../lib/workflowApi';
 
 function csvEscape(value: string) {
   const normalized = value.replace(/\r?\n/g, ' ');
@@ -16,9 +18,30 @@ function csvEscape(value: string) {
 export function RBIAuditExportPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const selectedPolicy = getLoanPolicy(selectedApplication.loanType);
   const profile = buildRBIComplianceProfile(selectedApplication);
+  const [rows, setRows] = useState<any[]>(profile.items);
+
+  useEffect(() => {
+    if (!user || user.role !== 'compliance_officer') return;
+    workflowApi
+      .getRbiAuditExport(selectedApplication.arn, user.role)
+      .then((res: any) => {
+        const mapped = (res.rows || []).map((item: any) => ({
+          id: item.id,
+          chapter: 'RBI - Digital Lending',
+          clause: item.clause,
+          field: item.id,
+          status: item.status,
+          isCritical: true,
+          value: item.value,
+        }));
+        setRows(mapped.length > 0 ? mapped : profile.items);
+      })
+      .catch(() => undefined);
+  }, [selectedApplication.arn, user]);
 
   const downloadCsv = () => {
     const header = [
@@ -35,21 +58,21 @@ export function RBIAuditExportPage() {
       'ExportedAt',
     ];
 
-    const rows = profile.items.map((item) => [
+    const csvRows = rows.map((item) => [
       selectedApplication.arn,
       selectedApplication.borrowerName,
-      item.chapter,
+      item.chapter || 'RBI - Digital Lending',
       item.clause,
-      item.requirement,
+      item.requirement || item.field,
       item.field,
       item.value,
       item.status,
       item.isCritical ? 'Yes' : 'No',
-      item.action,
+      item.action || 'N/A',
       new Date().toISOString(),
     ]);
 
-    const csv = [header, ...rows]
+    const csv = [header, ...csvRows]
       .map((row) => row.map((cell) => csvEscape(String(cell))).join(','))
       .join('\n');
 
@@ -130,7 +153,7 @@ export function RBIAuditExportPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {profile.items.map((item) => (
+              {rows.map((item: any) => (
                 <tr key={item.id} className="hover:bg-slate-50 align-top">
                   <td className="px-3 py-2 text-sm text-slate-900">
                     <p className="font-medium">{item.chapter}</p>

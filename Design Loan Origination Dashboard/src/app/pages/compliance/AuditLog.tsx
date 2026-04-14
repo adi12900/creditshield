@@ -1,7 +1,9 @@
 import { Search, Download, Filter } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
 const auditLogs = [
   {
@@ -49,7 +51,27 @@ const auditLogs = [
 export function AuditLogPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [rows, setRows] = useState(auditLogs);
+
+  useEffect(() => {
+    if (!user || user.role !== 'compliance_officer') return;
+    workflowApi
+      .getAuditLogs(user.role)
+      .then((items: any[]) => {
+        const mapped = items.map((item) => ({
+          timestamp: new Date(item.timestamp).toLocaleString(),
+          user: item.user,
+          action: item.action,
+          resource: item.resource,
+          details: item.details,
+          risk: item.risk,
+        }));
+        setRows(mapped.length > 0 ? mapped : auditLogs);
+      })
+      .catch(() => undefined);
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -157,7 +179,7 @@ export function AuditLogPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {auditLogs.map((log, idx) => (
+              {rows.map((log, idx) => (
                 <tr key={idx} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-slate-600 font-mono text-xs">{log.timestamp}</td>
                   <td className="px-4 py-3 text-slate-900">{log.user}</td>

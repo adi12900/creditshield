@@ -1,15 +1,38 @@
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { ScoreGauge } from '../../components/ui/ScoreGauge';
 import { AIExplanationPanel } from '../../components/ui/AIExplanationPanel';
+import { useEffect, useMemo, useState } from 'react';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { buildAIRiskProfile } from '../../lib/aiRiskModel';
 import { useStore } from '../../store';
+import { workflowApi, type WorkflowAiScore } from '../../lib/workflowApi';
 
 export function AIScorePage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const aiRiskProfile = buildAIRiskProfile(selectedApplication);
+  const localProfile = buildAIRiskProfile(selectedApplication);
+  const [apiScore, setApiScore] = useState<WorkflowAiScore | null>(null);
+
+  useEffect(() => {
+    if (!user || user.role !== 'credit_analyst') return;
+    workflowApi
+      .getAiScore(selectedApplicationArn, user.role)
+      .then((score) => setApiScore(score))
+      .catch(() => setApiScore(null));
+  }, [selectedApplicationArn, user]);
+
+  const aiRiskProfile = useMemo(() => {
+    if (!apiScore) return localProfile;
+    return {
+      ...localProfile,
+      compositeScore: apiScore.composite_score,
+      confidencePercent: apiScore.confidence_percent,
+      decision: apiScore.decision,
+      reasonCodes: apiScore.reason_codes,
+    };
+  }, [apiScore, localProfile]);
 
   return (
     <div className="space-y-6">

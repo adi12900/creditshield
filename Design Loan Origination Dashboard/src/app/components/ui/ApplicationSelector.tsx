@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { loanApplications } from '../../data/loanApplications';
+import { getLoanApplications } from '../../data/loanApplications';
 import { RiskBadge } from './RiskBadge';
 
 interface ApplicationSelectorProps {
@@ -13,16 +13,17 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState('All stages');
   const [riskFilter, setRiskFilter] = useState('All grades');
+  const applications = getLoanApplications();
 
   const stageOptions = useMemo(() => {
-    const stages = Array.from(new Set(loanApplications.map((application) => application.stage)));
+    const stages = Array.from(new Set(applications.map((application) => application.stage)));
     return ['All stages', ...stages];
-  }, []);
+  }, [applications]);
 
   const filteredApplications = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return loanApplications.filter((application) => {
+    return applications.filter((application) => {
       const matchesQuery =
         query.length === 0 ||
         application.borrowerName.toLowerCase().includes(query) ||
@@ -34,7 +35,7 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
 
       return matchesQuery && matchesStage && matchesRisk;
     });
-  }, [searchQuery, stageFilter, riskFilter]);
+  }, [applications, searchQuery, stageFilter, riskFilter]);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -50,7 +51,7 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
           <p className="text-sm text-slate-600">{subtitle}</p>
         </div>
         <span className="text-xs font-medium text-slate-500">
-          Showing {filteredApplications.length} of {loanApplications.length}
+          Showing {filteredApplications.length} of {applications.length}
         </span>
       </div>
 

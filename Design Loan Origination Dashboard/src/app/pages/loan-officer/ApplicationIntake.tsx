@@ -3,10 +3,12 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile, getRBIFlowGate } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function ApplicationIntakePage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
 
   const complianceProfile = buildRBIComplianceProfile(selectedApplication);
@@ -18,6 +20,18 @@ export function ApplicationIntakePage() {
       status: item.status,
       value: item.value,
     }));
+
+  const handleSubmitIntake = async () => {
+    if (!user || user.role !== 'loan_officer') return;
+    try {
+      await workflowApi.submitIntake(selectedApplication.arn, user.role);
+      window.alert('Application moved to Documents Pending.');
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit intake';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -78,6 +92,7 @@ export function ApplicationIntakePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
           disabled={!documentGate.canProceed}
+          onClick={handleSubmitIntake}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           Submit To Document Collection

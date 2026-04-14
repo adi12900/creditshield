@@ -1,39 +1,75 @@
 import { Shield, AlertTriangle, FileSearch, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { StatCard } from '../../components/ui/StatCard';
-import { DataTable } from '../../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
-const mockKYCQueue = [
-  // Completed Reviews (10)
-  { arn: 'ARN202600001', borrowerName: 'Rajesh Kumar', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 12, status: 'Completed' },
-  { arn: 'ARN202600002', borrowerName: 'Priya Sharma', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 8, status: 'Completed' },
-  { arn: 'ARN202600003', borrowerName: 'Amit Patel', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 10, status: 'Completed' },
-  { arn: 'ARN202600004', borrowerName: 'Vikram Singh', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 15, status: 'Completed' },
-  { arn: 'ARN202600005', borrowerName: 'Neha Gupta', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 20, status: 'Completed' },
-  { arn: 'ARN202600006', borrowerName: 'Arjun Reddy', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 5, status: 'Completed' },
-  { arn: 'ARN202600007', borrowerName: 'Sanjay Mehta', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 18, status: 'Completed' },
-  { arn: 'ARN202600008', borrowerName: 'Kavita Iyer', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 7, status: 'Completed' },
-  { arn: 'ARN202600009', borrowerName: 'Rahul Verma', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 11, status: 'Completed' },
-  { arn: 'ARN202600010', borrowerName: 'Meera Krishnan', kycStatus: 'Clear', amlStatus: 'Clear', fraudScore: 9, status: 'Completed' },
-
-  // In Progress (5)
-  { arn: 'ARN202600011', borrowerName: 'Suresh Rao', kycStatus: 'Pending Review', amlStatus: 'Clear', fraudScore: 22, status: 'In Progress' },
-  { arn: 'ARN202600012', borrowerName: 'Lakshmi Nair', kycStatus: 'Clear', amlStatus: 'PEP Match', fraudScore: 45, status: 'In Progress' },
-  { arn: 'ARN202600013', borrowerName: 'Karthik Menon', kycStatus: 'Pending Review', amlStatus: 'Clear', fraudScore: 28, status: 'In Progress' },
-  { arn: 'ARN202600014', borrowerName: 'Pooja Desai', kycStatus: 'Clear', amlStatus: 'Pending', fraudScore: 35, status: 'In Progress' },
-  { arn: 'ARN202600015', borrowerName: 'Anil Kumar', kycStatus: 'Pending Review', amlStatus: 'Clear', fraudScore: 19, status: 'In Progress' },
-];
+type ComplianceQueueItem = {
+  arn: string;
+  borrowerName: string;
+  kycStatus: string;
+  amlStatus: string;
+  fraudScore: number;
+  status: 'Completed' | 'In Progress';
+};
 
 export function ComplianceDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const rbiProfile = buildRBIComplianceProfile(selectedApplication);
+  const [inProgress, setInProgress] = useState(0);
+  const [complianceQueue, setComplianceQueue] = useState<ComplianceQueueItem[]>([]);
+
+  const completedCount = complianceQueue.filter((item) => item.status === 'Completed').length;
+  const clearCount = complianceQueue.filter((item) => item.kycStatus === 'Verified' || item.kycStatus === 'Clear').length;
+  const pendingCount = complianceQueue.filter((item) => item.status === 'In Progress').length;
+  const avgFraudScore = complianceQueue.length
+    ? Math.round(complianceQueue.reduce((sum, item) => sum + item.fraudScore, 0) / complianceQueue.length)
+    : 0;
+
+  useEffect(() => {
+    if (!user || user.role !== 'compliance_officer') return;
+    Promise.all([workflowApi.listApplications(), workflowApi.getRegulatoryReports(user.role)])
+      .then(async ([applications, reports]) => {
+        const queue = await Promise.all(
+          applications.map(async (app) => {
+            try {
+              const kyc = await workflowApi.getKycAml(app.arn, user.role);
+              const isInProgress = kyc.kyc_status !== 'Verified' || kyc.aml_status !== 'Clear';
+              return {
+                arn: app.arn,
+                borrowerName: app.borrower_name,
+                kycStatus: kyc.kyc_status,
+                amlStatus: kyc.aml_status,
+                fraudScore: kyc.fraud_score,
+                status: isInProgress ? 'In Progress' : 'Completed',
+              } as ComplianceQueueItem;
+            } catch {
+              return {
+                arn: app.arn,
+                borrowerName: app.borrower_name,
+                kycStatus: app.kyc_status,
+                amlStatus: 'Pending',
+                fraudScore: 0,
+                status: 'In Progress',
+              } as ComplianceQueueItem;
+            }
+          })
+        );
+
+        const reportInProgress = reports.filter((r: any) => r.status !== 'Submitted').length;
+        setComplianceQueue(queue);
+        setInProgress(reportInProgress || queue.filter((item) => item.status === 'In Progress').length);
+      })
+      .catch(() => undefined);
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -45,18 +81,18 @@ export function ComplianceDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Reviews"
-          value={15}
+          value={complianceQueue.length}
           icon={Shield}
         />
         <StatCard
           title="Completed"
-          value={10}
+          value={completedCount}
           icon={Activity}
           trend={{ value: '6 more than yesterday', isPositive: true }}
         />
         <StatCard
           title="In Progress"
-          value={5}
+          value={inProgress}
           icon={FileSearch}
           subtitle="pending clearance"
         />
@@ -147,7 +183,7 @@ export function ComplianceDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {mockKYCQueue.map((app) => (
+              {complianceQueue.map((app) => (
                 <tr
                   key={app.arn}
                   className="hover:bg-slate-50 cursor-pointer"
@@ -225,15 +261,15 @@ export function ComplianceDashboard() {
           <div className="grid grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-slate-600 mb-1">KYC Clear</p>
-              <p className="text-2xl font-bold text-green-600">13</p>
+              <p className="text-2xl font-bold text-green-600">{clearCount}</p>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Pending Review</p>
-              <p className="text-2xl font-bold text-orange-500">2</p>
+              <p className="text-2xl font-bold text-orange-500">{pendingCount}</p>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Avg Fraud Score</p>
-              <p className="text-2xl font-bold text-green-600">16</p>
+              <p className="text-2xl font-bold text-green-600">{avgFraudScore}</p>
             </div>
           </div>
         </div>

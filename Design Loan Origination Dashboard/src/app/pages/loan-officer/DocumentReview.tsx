@@ -5,6 +5,7 @@ import { createDocumentReviewItems, getLoanApplicationByArn } from '../../data/l
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
 import { getLoanPolicy, getRequiredDocumentsForLoanType } from '../../lib/rbiPolicy';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function DocumentReviewPage() {
   const navigate = useNavigate();
@@ -15,10 +16,23 @@ export function DocumentReviewPage() {
   const selectedPolicy = getLoanPolicy(selectedApplication.loanType);
   const requiredDocuments = getRequiredDocumentsForLoanType(selectedApplication.loanType);
   const [selectedDoc, setSelectedDoc] = useState(mockDocuments[0]);
+  const user = useStore((state) => state.user);
 
   useEffect(() => {
     setSelectedDoc(mockDocuments[0]);
   }, [selectedApplication.arn]);
+
+  const handleReview = async (decision: 'approve' | 'reject') => {
+    if (!user || user.role !== 'loan_officer') return;
+
+    try {
+      await workflowApi.reviewDocument(selectedApplication.arn, selectedDoc.id, decision, user.role);
+      window.alert(`Document ${decision === 'approve' ? 'approved' : 'rejected'} successfully.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to review document';
+      window.alert(message);
+    }
+  };
 
   const verifiedDocs = mockDocuments.filter(doc => doc.status === 'Verified').length;
   const totalDocs = mockDocuments.length;
@@ -203,11 +217,11 @@ export function DocumentReviewPage() {
             </div>
 
             <div className="flex gap-3">
-              <button className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
+              <button onClick={() => handleReview('approve')} className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
                 <Check className="w-4 h-4" />
                 Approve Document
               </button>
-              <button className="flex-1 px-4 py-2.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium flex items-center justify-center gap-2">
+              <button onClick={() => handleReview('reject')} className="flex-1 px-4 py-2.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium flex items-center justify-center gap-2">
                 <X className="w-4 h-4" />
                 Reject Document
               </button>

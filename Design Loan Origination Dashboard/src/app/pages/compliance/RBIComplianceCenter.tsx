@@ -1,9 +1,11 @@
 import { CheckCircle2, FileWarning, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
 import { getLoanPolicy } from '../../lib/rbiPolicy';
+import { workflowApi } from '../../lib/workflowApi';
 
 const statusClasses = {
   Compliant: 'bg-green-100 text-green-700',
@@ -14,9 +16,34 @@ const statusClasses = {
 export function RBIComplianceCenterPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const selectedPolicy = getLoanPolicy(selectedApplication.loanType);
   const profile = buildRBIComplianceProfile(selectedApplication);
+  const [apiProfile, setApiProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user || user.role !== 'compliance_officer') return;
+    workflowApi
+      .getRbiCompliance(selectedApplication.arn, user.role)
+      .then((res: any) => setApiProfile(res))
+      .catch(() => undefined);
+  }, [selectedApplication.arn, user]);
+
+  const displayedScore = apiProfile?.score ?? profile.score;
+  const displayedBlocking = apiProfile?.blocking_issues ?? profile.blockingIssues;
+  const displayedItems = apiProfile?.items
+    ? apiProfile.items.map((item: any) => ({
+        id: item.id,
+        chapter: 'RBI - Digital Lending',
+        clause: item.clause,
+        requirement: item.requirement,
+        field: item.id,
+        value: item.value,
+        status: item.status,
+        action: item.status === 'Compliant' ? 'No action required' : 'Review and update mandatory field',
+      }))
+    : profile.items;
 
   return (
     <div className="space-y-6">
@@ -52,11 +79,11 @@ export function RBIComplianceCenterPage() {
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <p className="text-xs text-slate-500">Compliance Score</p>
-          <p className="font-semibold text-slate-900">{profile.score}%</p>
+          <p className="font-semibold text-slate-900">{displayedScore}%</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <p className="text-xs text-slate-500">Blocking Issues</p>
-          <p className="font-semibold text-red-700">{profile.blockingIssues}</p>
+          <p className="font-semibold text-red-700">{displayedBlocking}</p>
         </div>
       </div>
 
@@ -67,7 +94,7 @@ export function RBIComplianceCenterPage() {
             <h3 className="font-semibold text-slate-900">Compliant Controls</h3>
           </div>
           <p className="text-2xl font-bold text-green-700">
-            {profile.items.filter((item) => item.status === 'Compliant').length}
+            {displayedItems.filter((item: any) => item.status === 'Compliant').length}
           </p>
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-5">
@@ -76,7 +103,7 @@ export function RBIComplianceCenterPage() {
             <h3 className="font-semibold text-slate-900">Needs Attention</h3>
           </div>
           <p className="text-2xl font-bold text-amber-700">
-            {profile.items.filter((item) => item.status === 'Attention').length}
+            {displayedItems.filter((item: any) => item.status === 'Attention').length}
           </p>
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-5">
@@ -85,7 +112,7 @@ export function RBIComplianceCenterPage() {
             <h3 className="font-semibold text-slate-900">Missing Mandatory</h3>
           </div>
           <p className="text-2xl font-bold text-red-700">
-            {profile.items.filter((item) => item.status === 'Missing').length}
+            {displayedItems.filter((item: any) => item.status === 'Missing').length}
           </p>
         </div>
       </div>
@@ -104,7 +131,7 @@ export function RBIComplianceCenterPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {profile.items.map((item) => (
+              {displayedItems.map((item: any) => (
                 <tr key={item.id} className="hover:bg-slate-50 align-top">
                   <td className="px-4 py-3 text-sm text-slate-900">
                     <p className="font-medium">{item.chapter}</p>
@@ -128,16 +155,16 @@ export function RBIComplianceCenterPage() {
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Corrective Actions</h2>
         <div className="space-y-3">
-          {profile.items
+          {displayedItems
             .filter((item) => item.status !== 'Compliant')
-            .map((item) => (
+            .map((item: any) => (
               <div key={`${item.id}-action`} className="rounded-lg border border-slate-200 px-4 py-3">
                 <p className="text-sm font-medium text-slate-900">{item.field}</p>
                 <p className="text-xs text-slate-500 mb-1">{item.chapter} - Clause {item.clause}</p>
                 <p className="text-sm text-slate-700">{item.action}</p>
               </div>
             ))}
-          {profile.items.every((item) => item.status === 'Compliant') && (
+          {displayedItems.every((item: any) => item.status === 'Compliant') && (
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 inline-flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
               No corrective action pending for selected borrower.

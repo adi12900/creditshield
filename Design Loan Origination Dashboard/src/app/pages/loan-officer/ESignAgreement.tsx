@@ -3,10 +3,12 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { getRBIFlowGate } from '../../lib/rbiCompliance';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function ESignAgreementPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const esignGate = getRBIFlowGate(selectedApplication, 'esign');
 
@@ -17,6 +19,17 @@ export function ESignAgreementPage() {
     { item: 'Digital signature captured', done: selectedApplication.stage !== 'Lead' },
     { item: 'Executed copy delivered', done: selectedApplication.stage === 'Disbursed' || selectedApplication.stage === 'Offer Sent' },
   ];
+
+  const handleSendEsign = async () => {
+    if (!user || user.role !== 'loan_officer') return;
+    try {
+      await workflowApi.sendEsignLink(selectedApplication.arn, user.role);
+      window.alert('E-sign link sent successfully.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send e-sign link';
+      window.alert(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -72,6 +85,7 @@ export function ESignAgreementPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
           disabled={!esignGate.canProceed}
+          onClick={handleSendEsign}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           Send E-Sign Link

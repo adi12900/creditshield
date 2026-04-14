@@ -20,12 +20,13 @@ import {
 } from 'recharts';
 import { KanbanBoard } from '../../components/ui/KanbanBoard';
 import { StatCard } from '../../components/ui/StatCard';
-import { loanApplications } from '../../data/loanApplications';
+import { getLoanApplications } from '../../data/loanApplications';
 import { useStore } from '../../store';
 
 export function LoanOfficerDashboard() {
   const navigate = useNavigate();
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const loanApplications = getLoanApplications();
 
   const stages = ['Lead', 'Submitted', 'Documents Pending', 'KYC', 'Underwriting', 'Offer Sent', 'Disbursed', 'Rejected'];
   const stageData = stages.map((stage) => ({
@@ -40,8 +41,11 @@ export function LoanOfficerDashboard() {
 
   const activeApplications = loanApplications.filter((app) => app.stage !== 'Disbursed' && app.stage !== 'Rejected');
   const slaBreaches = loanApplications.filter((app) => app.slaBreached).length;
+  const overdueApplications = activeApplications.filter((app) => app.daysInStage > 3).length;
+  const readyForDisbursement = loanApplications.filter((app) => app.stage === 'Offer Sent').length;
   const conversionRate = Math.round((loanApplications.filter((app) => app.stage === 'Disbursed').length / loanApplications.length) * 100);
   const averageTat = (loanApplications.reduce((sum, app) => sum + app.daysInStage, 0) / loanApplications.length).toFixed(1);
+  const selectedNotificationApp = loanApplications[0];
 
   return (
     <div className="space-y-6">
@@ -52,7 +56,7 @@ export function LoanOfficerDashboard() {
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
           <Bell className="w-4 h-4" />
-          <span className="text-sm font-medium">2 new assignments and 1 SLA breach detected in the last hour</span>
+          <span className="text-sm font-medium">{activeApplications.length} active assignments and {slaBreaches} SLA breach alerts in the current pipeline</span>
         </div>
       </div>
 
@@ -88,7 +92,7 @@ export function LoanOfficerDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Pipeline Throughput</h2>
-              <p className="text-sm text-slate-600">Stage distribution across the current 15 applications</p>
+              <p className="text-sm text-slate-600">Stage distribution across the current {loanApplications.length} applications</p>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Filter className="w-4 h-4" />
@@ -117,9 +121,23 @@ export function LoanOfficerDashboard() {
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Live Notifications</h2>
           <div className="space-y-4">
             {[
-              { title: 'New application assigned', detail: 'Vikram Singh received ARN202600004 in Submitted stage.', tone: 'bg-green-50 text-green-700 border-green-200' },
-              { title: 'SLA breach warning', detail: 'Neha Gupta has been in Documents Pending for 4 days.', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
-              { title: 'KYC cleared', detail: 'Kavita Iyer is ready for underwriting handoff.', tone: 'bg-slate-50 text-slate-700 border-slate-200' },
+              {
+                title: 'Newest assignment',
+                detail: selectedNotificationApp
+                  ? `${selectedNotificationApp.borrowerName} (${selectedNotificationApp.arn}) is currently in ${selectedNotificationApp.stage}.`
+                  : 'No applications available in the current pipeline.',
+                tone: 'bg-green-50 text-green-700 border-green-200',
+              },
+              {
+                title: 'SLA breach warning',
+                detail: `${slaBreaches} application(s) require escalation for breached stage SLA.`,
+                tone: 'bg-amber-50 text-amber-700 border-amber-200',
+              },
+              {
+                title: 'Ready for underwriting handoff',
+                detail: `${readyForDisbursement} application(s) are in Offer Sent stage pending final disbursement actions.`,
+                tone: 'bg-slate-50 text-slate-700 border-slate-200',
+              },
             ].map((item) => (
               <div key={item.title} className={`rounded-lg border p-4 ${item.tone}`}>
                 <p className="font-semibold text-sm">{item.title}</p>
@@ -167,15 +185,15 @@ export function LoanOfficerDashboard() {
           <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-slate-700 border border-slate-200">
               <Activity className="w-4 h-4 text-green-600" />
-              15 applications visible
+              {loanApplications.length} applications visible
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-slate-700 border border-slate-200">
               <Clock className="w-4 h-4 text-amber-600" />
-              2 overdue
+              {overdueApplications} overdue
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-slate-700 border border-slate-200">
               <TrendingUp className="w-4 h-4 text-blue-600" />
-              2 ready for disbursement
+              {readyForDisbursement} ready for disbursement
             </span>
           </div>
         </div>

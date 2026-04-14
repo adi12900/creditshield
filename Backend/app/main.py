@@ -7,19 +7,28 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.risk.setu_routes import router as setu_router
+from app.api.v1.users.user_routes import router as users_router
+from app.api.v1.workflow.role_routes import router as workflow_router
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models import user as _user_models  # noqa: F401
 from app.services.risk.setu_aa_service import setu_aa_service
+
+logger = logging.getLogger("uvicorn.error")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from ai_agent.fastapi_router import agent_router  # noqa: E402
+try:
+    from ai_agent.fastapi_router import agent_router  # noqa: E402
+except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
+    agent_router = None
+    logger.warning("AI agent routes disabled due to missing dependency: %s", exc)
 
 app = FastAPI(title=settings.app_name)
-app.include_router(agent_router, prefix="/api/v1/agent")
-logger = logging.getLogger("uvicorn.error")
+if agent_router is not None:
+    app.include_router(agent_router, prefix="/api/v1/agent")
 
 
 @app.on_event("startup")
@@ -56,3 +65,5 @@ def database_health_check() -> dict[str, str]:
 
 
 app.include_router(setu_router, prefix="/api/v1/setu")
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(workflow_router, prefix="/api/v1")

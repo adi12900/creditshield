@@ -1,39 +1,60 @@
 import { TrendingUp, FileText, Calculator, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { StatCard } from '../../components/ui/StatCard';
-import { DataTable } from '../../components/ui/DataTable';
 import { RiskBadge } from '../../components/ui/RiskBadge';
-import { ScoreGauge } from '../../components/ui/ScoreGauge';
 import { useNavigate } from 'react-router-dom';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { workflowApi } from '../../lib/workflowApi';
 
-const mockAnalysisQueue = [
-  // Completed (10)
-  { arn: 'ARN202600001', borrowerName: 'Rajesh Kumar', loanAmount: 500000, creditScore: 730, riskGrade: 'A+', status: 'Completed' },
-  { arn: 'ARN202600002', borrowerName: 'Priya Sharma', loanAmount: 750000, creditScore: 710, riskGrade: 'A', status: 'Completed' },
-  { arn: 'ARN202600003', borrowerName: 'Amit Patel', loanAmount: 1200000, creditScore: 745, riskGrade: 'A', status: 'Completed' },
-  { arn: 'ARN202600004', borrowerName: 'Vikram Singh', loanAmount: 850000, creditScore: 720, riskGrade: 'A+', status: 'Completed' },
-  { arn: 'ARN202600005', borrowerName: 'Neha Gupta', loanAmount: 650000, creditScore: 680, riskGrade: 'B', status: 'Completed' },
-  { arn: 'ARN202600006', borrowerName: 'Arjun Reddy', loanAmount: 2000000, creditScore: 780, riskGrade: 'A+', status: 'Completed' },
-  { arn: 'ARN202600007', borrowerName: 'Sanjay Mehta', loanAmount: 950000, creditScore: 695, riskGrade: 'B', status: 'Completed' },
-  { arn: 'ARN202600008', borrowerName: 'Kavita Iyer', loanAmount: 1100000, creditScore: 750, riskGrade: 'A', status: 'Completed' },
-  { arn: 'ARN202600009', borrowerName: 'Rahul Verma', loanAmount: 800000, creditScore: 735, riskGrade: 'A+', status: 'Completed' },
-  { arn: 'ARN202600010', borrowerName: 'Meera Krishnan', loanAmount: 1350000, creditScore: 725, riskGrade: 'A', status: 'Completed' },
-
-  // In Progress (5)
-  { arn: 'ARN202600011', borrowerName: 'Suresh Rao', loanAmount: 1200000, creditScore: 715, riskGrade: 'A', status: 'In Progress' },
-  { arn: 'ARN202600012', borrowerName: 'Lakshmi Nair', loanAmount: 900000, creditScore: 665, riskGrade: 'B', status: 'In Progress' },
-  { arn: 'ARN202600013', borrowerName: 'Karthik Menon', loanAmount: 1500000, creditScore: 760, riskGrade: 'A+', status: 'In Progress' },
-  { arn: 'ARN202600014', borrowerName: 'Pooja Desai', loanAmount: 700000, creditScore: 690, riskGrade: 'B', status: 'In Progress' },
-  { arn: 'ARN202600015', borrowerName: 'Anil Kumar', loanAmount: 1100000, creditScore: 740, riskGrade: 'A', status: 'In Progress' },
-];
+type AnalysisQueueItem = {
+  arn: string;
+  borrowerName: string;
+  loanAmount: number;
+  creditScore: number;
+  riskGrade: string;
+  status: 'Completed' | 'In Progress';
+};
 
 export function CreditAnalystDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
+  const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [analysisQueue, setAnalysisQueue] = useState<AnalysisQueueItem[]>([]);
+  const [inProgressCount, setInProgressCount] = useState(0);
+  const [totalAnalyzed, setTotalAnalyzed] = useState(0);
+
+  const completedCount = analysisQueue.filter((item) => item.status === 'Completed').length;
+  const averageCreditScore = analysisQueue.length
+    ? Math.round(analysisQueue.reduce((sum, item) => sum + item.creditScore, 0) / analysisQueue.length)
+    : 0;
+  const approvalRate = analysisQueue.length
+    ? Math.round((analysisQueue.filter((item) => item.riskGrade === 'A+' || item.riskGrade === 'A').length / analysisQueue.length) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (!user || user.role !== 'credit_analyst') return;
+    Promise.all([workflowApi.creditAnalystDashboard(user.role), workflowApi.listApplications()])
+      .then(([dashboard, applications]) => {
+        const queue = applications.map((app) => ({
+          arn: app.arn,
+          borrowerName: app.borrower_name,
+          loanAmount: app.loan_amount,
+          creditScore: app.credit_score,
+          riskGrade: app.risk_grade,
+          status: app.current_stage === 'Credit Review' || app.current_stage === 'Documents Pending' ? 'In Progress' : 'Completed',
+        }));
+
+        const inProgressStat = dashboard?.stats?.find((item) => item.key === 'in_progress');
+        setAnalysisQueue(queue);
+        setTotalAnalyzed(queue.length);
+        setInProgressCount(inProgressStat?.value !== undefined ? Number(inProgressStat.value) : queue.filter((item) => item.status === 'In Progress').length);
+      })
+      .catch(() => undefined);
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -45,18 +66,18 @@ export function CreditAnalystDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Analyzed"
-          value={15}
+          value={totalAnalyzed}
           icon={FileText}
         />
         <StatCard
           title="Completed"
-          value={10}
+          value={completedCount}
           icon={TrendingUp}
           trend={{ value: '15% increase', isPositive: true }}
         />
         <StatCard
           title="In Progress"
-          value={5}
+          value={inProgressCount}
           icon={Calculator}
           subtitle="active now"
         />
@@ -111,7 +132,7 @@ export function CreditAnalystDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {mockAnalysisQueue.map((app) => (
+              {analysisQueue.map((app) => (
                 <tr
                   key={app.arn}
                   className="hover:bg-slate-50 cursor-pointer"
@@ -165,7 +186,7 @@ export function CreditAnalystDashboard() {
           <div className="grid grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-slate-600 mb-1">Avg Credit Score</p>
-              <p className="text-2xl font-bold text-slate-900">722</p>
+              <p className="text-2xl font-bold text-slate-900">{averageCreditScore || '-'}</p>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Avg DTI</p>
@@ -173,7 +194,7 @@ export function CreditAnalystDashboard() {
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-1">Approval Rate</p>
-              <p className="text-2xl font-bold text-green-600">72%</p>
+              <p className="text-2xl font-bold text-green-600">{approvalRate}%</p>
             </div>
           </div>
         </div>
