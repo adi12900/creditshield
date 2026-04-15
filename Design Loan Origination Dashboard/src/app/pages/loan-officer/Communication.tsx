@@ -1,10 +1,10 @@
 import { Send, Mail, MessageSquare, Phone, Clock, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createCommunicationHistory, getLoanApplicationByArn } from '../../data/loanApplications';
+import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowCommunicationItem } from '../../lib/workflowApi';
 
 const mockTemplates = [
   { id: '1', name: 'Document Request', category: 'Request' },
@@ -18,33 +18,32 @@ export function CommunicationPage() {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [message, setMessage] = useState('');
   const [subject, setSubject] = useState('');
-  const [history, setHistory] = useState<Array<{ id: string; channel?: string; type?: 'email' | 'sms' | 'call'; subject: string; message?: string; preview?: string; sent_at?: string; date?: string; status?: string; duration?: string }>>([]);
+  const [history, setHistory] = useState<Array<{ id: string; type: 'email' | 'sms' | 'call'; subject: string; preview: string; date: string; status: string; duration?: string }>>([]);
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const mockHistory = createCommunicationHistory(selectedApplication);
+
+  const mapCommunicationHistory = (rows: WorkflowCommunicationItem[]) =>
+    rows.map((row) => ({
+      id: row.id,
+      type: row.channel,
+      subject: row.subject,
+      preview: row.message,
+      date: new Date(row.sent_at).toLocaleString(),
+      status: 'Delivered',
+    }));
 
   useEffect(() => {
     if (!user || user.role !== 'loan_officer') {
-      setHistory(mockHistory);
+      setHistory([]);
       return;
     }
 
     workflowApi
       .getCommunications(selectedApplication.arn, user.role)
-      .then((rows) => {
-        const mapped = rows.map((row: any) => ({
-          id: row.id,
-          type: row.channel,
-          subject: row.subject,
-          preview: row.message,
-          date: new Date(row.sent_at).toLocaleString(),
-          status: 'Delivered',
-        }));
-        setHistory(mapped.length > 0 ? mapped : mockHistory);
-      })
-      .catch(() => setHistory(mockHistory));
+      .then((rows) => setHistory(mapCommunicationHistory(rows)))
+      .catch(() => setHistory([]));
   }, [selectedApplication.arn, user]);
 
   const handleSendMessage = async () => {
@@ -57,16 +56,7 @@ export function CommunicationPage() {
     try {
       await workflowApi.sendCommunication(selectedApplication.arn, user.role, 'email', subject, message);
       const rows = await workflowApi.getCommunications(selectedApplication.arn, user.role);
-      setHistory(
-        rows.map((row: any) => ({
-          id: row.id,
-          type: row.channel,
-          subject: row.subject,
-          preview: row.message,
-          date: new Date(row.sent_at).toLocaleString(),
-          status: 'Delivered',
-        }))
-      );
+      setHistory(mapCommunicationHistory(rows));
       setMessage('');
       setSubject('');
     } catch (error) {
@@ -115,7 +105,7 @@ export function CommunicationPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">Total Messages</p>
-              <p className="text-xl font-bold text-slate-900">{mockHistory.length}</p>
+              <p className="text-xl font-bold text-slate-900">{history.length}</p>
             </div>
           </div>
         </div>
@@ -299,11 +289,11 @@ export function CommunicationPage() {
             <div className="space-y-3 text-sm">
               <div>
                 <p className="text-xs text-slate-600 mb-1">Email</p>
-                <p className="font-medium text-slate-900">vikram.singh@email.com</p>
+                <p className="font-medium text-slate-900">{selectedApplication.email}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-600 mb-1">Mobile</p>
-                <p className="font-medium text-slate-900">+91 98765 43210</p>
+                <p className="font-medium text-slate-900">{selectedApplication.phone}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-600 mb-1">Preferred Channel</p>

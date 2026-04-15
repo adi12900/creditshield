@@ -7,6 +7,7 @@ import {
   Filter,
   TrendingUp,
 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -27,25 +28,58 @@ export function LoanOfficerDashboard() {
   const navigate = useNavigate();
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const loanApplications = getLoanApplications();
+  const [loanTypeFilter, setLoanTypeFilter] = useState('all');
+  const [riskGradeFilter, setRiskGradeFilter] = useState('all');
+  const [stageFilter, setStageFilter] = useState('all');
+
+  const formatLabel = (value: string) =>
+    value
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+
+  const loanTypeOptions = useMemo(() => Array.from(new Set(loanApplications.map((app) => app.loanType))), [loanApplications]);
+  const riskGradeOptions = useMemo(() => Array.from(new Set(loanApplications.map((app) => app.riskGrade))), [loanApplications]);
 
   const stages = ['Lead', 'Submitted', 'Documents Pending', 'KYC', 'Underwriting', 'Offer Sent', 'Disbursed', 'Rejected'];
+  const filteredApplications = useMemo(
+    () =>
+      loanApplications.filter((app) => {
+        const matchesLoanType = loanTypeFilter === 'all' || app.loanType === loanTypeFilter;
+        const matchesRisk = riskGradeFilter === 'all' || app.riskGrade === riskGradeFilter;
+        const matchesStage = stageFilter === 'all' || app.stage === stageFilter;
+        return matchesLoanType && matchesRisk && matchesStage;
+      }),
+    [loanApplications, loanTypeFilter, riskGradeFilter, stageFilter]
+  );
+
   const stageData = stages.map((stage) => ({
     stage,
-    count: loanApplications.filter((app) => app.stage === stage).length,
+    count: filteredApplications.filter((app) => app.stage === stage).length,
   }));
 
   const kanbanStages = stages.map((stage) => ({
     title: stage,
-    applications: loanApplications.filter((app) => app.stage === stage),
+    applications: filteredApplications.filter((app) => app.stage === stage),
   }));
 
-  const activeApplications = loanApplications.filter((app) => app.stage !== 'Disbursed' && app.stage !== 'Rejected');
-  const slaBreaches = loanApplications.filter((app) => app.slaBreached).length;
+  const activeApplications = filteredApplications.filter((app) => app.stage !== 'Disbursed' && app.stage !== 'Rejected');
+  const slaBreaches = filteredApplications.filter((app) => app.slaBreached).length;
   const overdueApplications = activeApplications.filter((app) => app.daysInStage > 3).length;
-  const readyForDisbursement = loanApplications.filter((app) => app.stage === 'Offer Sent').length;
-  const conversionRate = Math.round((loanApplications.filter((app) => app.stage === 'Disbursed').length / loanApplications.length) * 100);
-  const averageTat = (loanApplications.reduce((sum, app) => sum + app.daysInStage, 0) / loanApplications.length).toFixed(1);
-  const selectedNotificationApp = loanApplications[0];
+  const readyForDisbursement = filteredApplications.filter((app) => app.stage === 'Offer Sent').length;
+  const disbursedCount = filteredApplications.filter((app) => app.stage === 'Disbursed').length;
+  const conversionRate = filteredApplications.length > 0 ? Math.round((disbursedCount / filteredApplications.length) * 100) : 0;
+  const averageTat = filteredApplications.length > 0
+    ? (filteredApplications.reduce((sum, app) => sum + app.daysInStage, 0) / filteredApplications.length).toFixed(1)
+    : '0.0';
+  const selectedNotificationApp = filteredApplications[0];
+
+  const appliedFilters = [
+    loanTypeFilter === 'all' ? null : formatLabel(loanTypeFilter),
+    riskGradeFilter === 'all' ? null : `Risk ${riskGradeFilter}`,
+    stageFilter === 'all' ? null : stageFilter,
+  ].filter(Boolean).join(', ');
 
   return (
     <div className="space-y-6">
@@ -65,25 +99,25 @@ export function LoanOfficerDashboard() {
           title="Active Applications"
           value={activeApplications.length}
           icon={FileText}
-          trend={{ value: '8% vs last week', isPositive: true }}
+          subtitle={`${filteredApplications.length} applications in filtered view`}
         />
         <StatCard
           title="Average TAT"
           value={`${averageTat} days`}
           icon={Clock}
-          subtitle="all pipeline stages"
+          subtitle="calculated from days in current stage"
         />
         <StatCard
           title="SLA Breaches"
           value={slaBreaches}
           icon={AlertCircle}
-          subtitle="needs escalation"
+          subtitle={slaBreaches > 0 ? 'requires escalation' : 'no escalation required'}
         />
         <StatCard
           title="Conversion Rate"
           value={`${conversionRate}%`}
           icon={TrendingUp}
-          trend={{ value: '3% improvement', isPositive: true }}
+          subtitle={`${disbursedCount} disbursed out of ${filteredApplications.length}`}
         />
       </div>
 
@@ -92,11 +126,11 @@ export function LoanOfficerDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Pipeline Throughput</h2>
-              <p className="text-sm text-slate-600">Stage distribution across the current {loanApplications.length} applications</p>
+              <p className="text-sm text-slate-600">Stage distribution across {filteredApplications.length} filtered applications</p>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Filter className="w-4 h-4" />
-              Applied filters: Personal Loan, A/B risk, Today
+              Applied filters: {appliedFilters || 'None'}
             </div>
           </div>
 
@@ -134,7 +168,7 @@ export function LoanOfficerDashboard() {
                 tone: 'bg-amber-50 text-amber-700 border-amber-200',
               },
               {
-                title: 'Ready for underwriting handoff',
+                title: 'Ready for disbursement',
                 detail: `${readyForDisbursement} application(s) are in Offer Sent stage pending final disbursement actions.`,
                 tone: 'bg-slate-50 text-slate-700 border-slate-200',
               },
@@ -152,31 +186,38 @@ export function LoanOfficerDashboard() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Application Filters</h2>
-            <p className="text-sm text-slate-600">Loan type, risk grade, date range, and source channel</p>
+            <p className="text-sm text-slate-600">Filter by loan type, risk grade, and workflow stage</p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto">
-            <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-              <option>All loan types</option>
-              <option>Personal Loan</option>
-              <option>Business Loan</option>
-              <option>Home Loan</option>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
+            <select
+              value={loanTypeFilter}
+              onChange={(event) => setLoanTypeFilter(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="all">All loan types</option>
+              {loanTypeOptions.map((loanType) => (
+                <option key={loanType} value={loanType}>{formatLabel(loanType)}</option>
+              ))}
             </select>
-            <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-              <option>All risk grades</option>
-              <option>A+</option>
-              <option>A</option>
-              <option>B</option>
-              <option>C</option>
+            <select
+              value={riskGradeFilter}
+              onChange={(event) => setRiskGradeFilter(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="all">All risk grades</option>
+              {riskGradeOptions.map((riskGrade) => (
+                <option key={riskGrade} value={riskGrade}>{riskGrade}</option>
+              ))}
             </select>
-            <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-              <option>Today</option>
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
-            </select>
-            <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-              <option>Digital channel</option>
-              <option>Branch</option>
-              <option>Partner</option>
+            <select
+              value={stageFilter}
+              onChange={(event) => setStageFilter(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="all">All stages</option>
+              {stages.map((stage) => (
+                <option key={stage} value={stage}>{stage}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -185,7 +226,7 @@ export function LoanOfficerDashboard() {
           <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-slate-700 border border-slate-200">
               <Activity className="w-4 h-4 text-green-600" />
-              {loanApplications.length} applications visible
+              {filteredApplications.length} applications visible
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-medium text-slate-700 border border-slate-200">
               <Clock className="w-4 h-4 text-amber-600" />
