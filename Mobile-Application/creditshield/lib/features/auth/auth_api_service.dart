@@ -176,6 +176,7 @@ class BorrowerDocumentUploadDto {
   final String status;
   final int? confidence;
   final String? storageUrl;
+  final String? accessUrl;
   final String applicationStage;
 
   const BorrowerDocumentUploadDto({
@@ -185,6 +186,7 @@ class BorrowerDocumentUploadDto {
     required this.status,
     required this.confidence,
     required this.storageUrl,
+    required this.accessUrl,
     required this.applicationStage,
   });
 
@@ -196,6 +198,7 @@ class BorrowerDocumentUploadDto {
       status: (json['status'] as String?) ?? 'Pending OCR',
       confidence: (json['confidence'] as num?)?.toInt(),
       storageUrl: json['storage_url'] as String?,
+      accessUrl: json['access_url'] as String?,
       applicationStage:
           (json['application_stage'] as String?) ?? 'Documents Pending',
     );
@@ -232,7 +235,11 @@ class AuthApiService {
     : baseUrl = (baseUrl == null || baseUrl.trim().isEmpty)
           ? _defaultApiBaseUrl
           : baseUrl,
-      _client = client ?? http.Client();
+      _client = client ?? http.Client() {
+    if (kDebugMode) {
+      debugPrint('AuthApiService baseUrl resolved to: ${this.baseUrl}');
+    }
+  }
 
   Uri _uri(String path) =>
       Uri.parse('${baseUrl.replaceAll(RegExp(r"/$"), '')}$path');
@@ -264,7 +271,7 @@ class AuthApiService {
 
     if (error is http.ClientException) {
       throw Exception(
-        'Could not reach backend at $baseUrl. Check the API host, network, and server status.',
+        'Could not reach backend at $baseUrl. Verify server health at $baseUrl/health, ensure same Wi-Fi network, and if needed run app with --dart-define=API_BASE_URL=http://192.168.1.8:8000.',
       );
     }
 
@@ -458,30 +465,45 @@ class AuthApiService {
     required String accessToken,
     required String applicationId,
     required String docType,
+    required String fileName,
+    required Uint8List fileBytes,
     String status = 'Pending OCR',
     int? confidence,
-    String? storageUrl,
   }) async {
     final requestUri = _uri(
-      '/api/v1/borrower/applications/$applicationId/documents',
+      '/api/v1/borrower/applications/$applicationId/documents/upload',
     );
-    final response = await _request(
-      () => _client.post(
-        requestUri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: jsonEncode({
-          'doc_type': docType,
-          'status': status,
-          if (confidence != null) 'confidence': confidence,
-          if (storageUrl != null && storageUrl.trim().isNotEmpty)
-            'storage_url': storageUrl,
-        }),
+    final request = http.MultipartRequest('POST', requestUri)
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..fields['doc_type'] = docType
+      ..fields['status_value'] = status;
+
+    if (confidence != null) {
+      request.fields['confidence'] = confidence.toString();
+    }
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
       ),
-      requestUri,
     );
+
+    http.Response response;
+    try {
+      final streamed = await request.send().timeout(
+        _requestTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Request timed out after ${_requestTimeout.inSeconds} seconds',
+          );
+        },
+      );
+      response = await http.Response.fromStream(streamed);
+    } catch (error) {
+      _throwNetworkError(requestUri, error);
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return BorrowerDocumentUploadDto.fromJson(

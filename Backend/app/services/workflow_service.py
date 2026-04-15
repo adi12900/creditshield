@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.database import SessionLocal
 from app.models.loan_application import LoanApplication
+from app.models.user import User
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 
 
@@ -165,13 +166,18 @@ class WorkflowService:
         return {
             "arn": row.arn,
             "borrower_name": row.borrower_name,
+            "borrower_email": row.borrower_email,
+            "borrower_phone": row.borrower_phone,
             "loan_amount": loan_amount,
+            "loan_type": row.loan_type or "digital_personal_loan",
             "stage": stage,
             "risk_grade": risk_grade,
             "credit_score": int(row.credit_score or 700),
             "kyc_status": kyc_status,
             "employment_type": employment_type,
             "purpose": row.purpose or "General Purpose",
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
         }
 
     def _update_application_fields(self, arn: str, **fields: Any) -> bool:
@@ -317,6 +323,36 @@ class WorkflowService:
             risk="Low",
         )
         return self._get_application(arn)
+
+    def submit_to_credit_analyst(self, arn: str, *, file_complete: bool, actor: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        if app["stage"] != "Submitted":
+            raise WorkflowServiceError("Application can be submitted to credit analyst only from Submitted stage", 400)
+
+        if not file_complete:
+            raise WorkflowServiceError("Please confirm that applicant file is complete before submitting", 400)
+
+        docs = self.get_documents(arn)
+        if not docs:
+            raise WorkflowServiceError("No documents found. Upload and verify documents before submission", 400)
+
+        not_verified = [doc for doc in docs if doc.get("status") != "Verified"]
+        if not_verified:
+            raise WorkflowServiceError("All documents must be verified before submission to credit analyst", 400)
+
+        rbi_status = self.get_rbi_compliance(arn)
+        if int(rbi_status.get("blocking_issues", 0)) > 0:
+            raise WorkflowServiceError("RBI mandatory checks are incomplete. Resolve all blocking issues first", 400)
+
+        updated = self.move_stage(arn, "Documents Pending", "Submitted to Credit Analyst", actor)
+        self.add_audit_log(
+            user=actor,
+            action="Applicant File Marked Complete",
+            resource=arn,
+            details="Loan officer confirmed file complete and routed to credit analyst queue",
+            risk="Low",
+        )
+        return updated
 
     def recalculate_ratios(
         self,
@@ -517,6 +553,321 @@ class WorkflowService:
             "arn": arn,
             "exported_at": datetime.now(tz=timezone.utc).isoformat(),
             "rows": data["items"],
+        }
+
+    def get_lead_prequalification_checklist(self, arn: str) -> list[dict[str, Any]]:
+        app = self._get_application(arn)
+        return [
+            {"id": "lead-001", "item": "Income band captured", "done": bool(app.get("purpose"))},
+            {"id": "lead-002", "item": "Employment type captured", "done": bool(app.get("employment_type"))},
+            {"id": "lead-003", "item": "Location eligibility validated", "done": True},
+            {"id": "lead-004", "item": "Product fit validated", "done": app.get("risk_grade") in {"A+", "A", "B"}},
+        ]
+
+    def get_esign_checklist(self, arn: str) -> list[dict[str, Any]]:
+        app = self._get_application(arn)
+        stage = app.get("stage")
+        return [
+            {"id": "esign-001", "item": "Offer generated and accepted", "done": stage in {"Offer Sent", "Disbursed"}},
+            {"id": "esign-002", "item": "Agreement template populated", "done": stage in {"Offer Sent", "Disbursed"}},
+            {"id": "esign-003", "item": "Borrower OTP authentication", "done": stage != "Lead"},
+            {"id": "esign-004", "item": "Digital signature captured", "done": stage == "Disbursed"},
+            {"id": "esign-005", "item": "Executed copy delivered", "done": stage == "Disbursed"},
+        ]
+
+    def get_communication_templates(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "tmpl-001",
+                "name": "Document Request",
+                "category": "Request",
+                "channel": "email",
+                "subject": "Additional documents required for your loan application",
+                "body": "Dear {borrower_name}, please upload pending documents for ARN {arn} to continue processing.",
+            },
+            {
+                "id": "tmpl-002",
+                "name": "Status Update",
+                "category": "Update",
+                "channel": "email",
+                "subject": "Status update for ARN {arn}",
+                "body": "Dear {borrower_name}, your application is currently in {stage} stage.",
+            },
+            {
+                "id": "tmpl-003",
+                "name": "Offer Notification",
+                "category": "Offer",
+                "channel": "email",
+                "subject": "Loan offer ready for your review",
+                "body": "Dear {borrower_name}, your offer has been generated for ARN {arn}. Please review and accept.",
+            },
+            {
+                "id": "tmpl-004",
+                "name": "Reminder SMS",
+                "category": "Reminder",
+                "channel": "sms",
+                "subject": "Loan application reminder",
+                "body": "Reminder: action required on your application ARN {arn}.",
+            },
+        ]
+
+    def get_loan_officer_application_summary(self, arn: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        docs = self.get_documents(arn)
+        comms = self.get_communications(arn)
+
+        email_count = len([item for item in comms if item.get("channel") == "email"])
+        sms_count = len([item for item in comms if item.get("channel") == "sms"])
+        call_count = len([item for item in comms if item.get("channel") == "call"])
+
+        stage = str(app.get("stage", "Submitted"))
+        timeline = [
+            {"status": "Submitted", "date": datetime.now(tz=timezone.utc).date().isoformat(), "active": True},
+            {"status": "Documents Verified", "date": datetime.now(tz=timezone.utc).date().isoformat(), "active": len(docs) > 0},
+            {"status": "KYC Cleared", "date": datetime.now(tz=timezone.utc).date().isoformat(), "active": app.get("kyc_status") == "Verified"},
+            {"status": "Credit Analysis", "date": datetime.now(tz=timezone.utc).date().isoformat(), "active": stage in {"Underwriting", "Offer Sent", "Disbursed"}},
+            {"status": "Underwriting", "date": datetime.now(tz=timezone.utc).date().isoformat(), "active": stage in {"Underwriting", "Offer Sent", "Disbursed"}},
+        ]
+
+        processing_time_days = 0.0
+        updated_at = app.get("updated_at")
+        if isinstance(updated_at, datetime):
+            processing_time_days = round(max((datetime.now(tz=timezone.utc) - updated_at).total_seconds(), 0) / 86400, 1)
+
+        risk_score = int(app.get("credit_score", 700))
+        risk_confidence = 92 if app.get("risk_grade") in {"A+", "A"} else 84
+
+        return {
+            "arn": arn,
+            "application_status": "Completed" if stage == "Disbursed" else "Rejected" if stage == "Rejected" else "In Progress",
+            "active_stage": stage,
+            "processing_time_days": processing_time_days,
+            "documents_verified": len([doc for doc in docs if doc.get("status") == "Verified"]),
+            "documents_total": len(docs),
+            "communications_total": len(comms),
+            "email_count": email_count,
+            "sms_count": sms_count,
+            "call_count": call_count,
+            "risk_score": risk_score,
+            "risk_confidence_percent": risk_confidence,
+            "timeline": timeline,
+        }
+
+    def _list_users(self) -> list[User]:
+        try:
+            with SessionLocal() as db:
+                return db.query(User).order_by(User.id.desc()).all()
+        except Exception:
+            return []
+
+    def system_admin_dashboard(self) -> dict[str, Any]:
+        users = self._list_users()
+        apps = self.list_applications()
+        active_users = len([u for u in users if u.is_active])
+        integrations = [
+            {"name": "CIBIL Bureau", "status": "Healthy", "latency_ms": 120},
+            {"name": "Experian Bureau", "status": "Healthy", "latency_ms": 150},
+            {"name": "eSign Provider", "status": "Healthy", "latency_ms": 200},
+            {"name": "Payment Rails (NEFT/RTGS)", "status": "Healthy", "latency_ms": 180},
+            {"name": "KYC Provider", "status": "Degraded", "latency_ms": 450},
+            {"name": "Core Banking API", "status": "Healthy", "latency_ms": 90},
+        ]
+
+        role_counts: dict[str, tuple[int, int]] = {
+            "Loan Officers": (0, 0),
+            "Credit Analysts": (0, 0),
+            "Underwriters": (0, 0),
+            "Compliance Officers": (0, 0),
+        }
+
+        role_mapping = {
+            "loan_officer": "Loan Officers",
+            "credit_analyst": "Credit Analysts",
+            "underwriter": "Underwriters",
+            "compliance_officer": "Compliance Officers",
+        }
+
+        for user in users:
+            role_label = role_mapping.get(str(user.role))
+            if not role_label:
+                continue
+            current_active, current_total = role_counts[role_label]
+            role_counts[role_label] = (
+                current_active + (1 if user.is_active else 0),
+                current_total + 1,
+            )
+
+        role_activity = [
+            {"role": role, "active_users": active, "total_users": total}
+            for role, (active, total) in role_counts.items()
+        ]
+
+        recent_events = [
+            {
+                "timestamp": item.timestamp,
+                "event": f"{item.action}: {item.details}",
+                "user": item.user,
+            }
+            for item in self._audit_logs[:5]
+        ]
+
+        return {
+            "metrics": [
+                {"key": "total_users", "label": "Total Users", "value": len(users)},
+                {"key": "active_sessions", "label": "Active Sessions", "value": active_users},
+                {"key": "workflows", "label": "Workflows", "value": 1},
+                {
+                    "key": "integrations",
+                    "label": "Integrations",
+                    "value": len(integrations),
+                    "subtitle": "All healthy" if all(i["status"] == "Healthy" for i in integrations) else "Action required",
+                },
+            ],
+            "integrations": integrations,
+            "role_activity": role_activity,
+            "recent_events": recent_events,
+            "active_applications": len([a for a in apps if a["stage"] not in {"Disbursed", "Rejected"}]),
+        }
+
+    def workflow_designer_data(self) -> dict[str, Any]:
+        stages = [
+            {
+                "id": 1,
+                "name": "Application Submission",
+                "assigned_role": "Loan Officer",
+                "avg_duration_minutes": 5,
+                "status": "Active",
+            },
+            {
+                "id": 2,
+                "name": "Document Upload & OCR",
+                "assigned_role": "System",
+                "avg_duration_minutes": 2,
+                "status": "Active",
+            },
+            {
+                "id": 3,
+                "name": "Bureau Check",
+                "assigned_role": "System",
+                "avg_duration_minutes": 1,
+                "status": "Active",
+            },
+            {
+                "id": 4,
+                "name": "Credit Analysis",
+                "assigned_role": "Credit Analyst",
+                "avg_duration_minutes": 60,
+                "status": "Active",
+            },
+            {
+                "id": 5,
+                "name": "Underwriting",
+                "assigned_role": "Underwriter",
+                "avg_duration_minutes": 120,
+                "status": "Active",
+            },
+            {
+                "id": 6,
+                "name": "Compliance Review",
+                "assigned_role": "Compliance Officer",
+                "avg_duration_minutes": 30,
+                "status": "Active",
+            },
+        ]
+
+        total_minutes = sum(stage["avg_duration_minutes"] for stage in stages if stage["status"] == "Active")
+        avg_completion_hours = round(total_minutes / 60, 1)
+
+        return {
+            "metrics": [
+                {"key": "active_stages", "label": "Active Stages", "value": len([s for s in stages if s["status"] == "Active"])},
+                {"key": "avg_completion_time", "label": "Avg. Completion Time", "value": f"{avg_completion_hours}h"},
+                {"key": "sla_compliance", "label": "SLA Compliance", "value": "94.5%"},
+                {"key": "active_workflows", "label": "Active Workflows", "value": 1},
+            ],
+            "workflow_name": "Standard Loan Workflow",
+            "stages": stages,
+            "conditions": [
+                {
+                    "id": "cond-001",
+                    "condition": "If Credit Score < 650",
+                    "outcome": "Route to Senior Underwriter for manual review",
+                },
+                {
+                    "id": "cond-002",
+                    "condition": "If DTI > 45%",
+                    "outcome": "Require policy override approval",
+                },
+                {
+                    "id": "cond-003",
+                    "condition": "If Loan Amount > INR 20L",
+                    "outcome": "Add additional compliance checks",
+                },
+            ],
+        }
+
+    def rule_engine_data(self) -> dict[str, Any]:
+        rules = [
+            {
+                "id": 1,
+                "name": "DTI Threshold Check",
+                "category": "Financial",
+                "condition": "DTI_RATIO > 45",
+                "action": "Reject",
+                "severity": "High",
+                "status": "Active",
+                "last_modified": "2026-04-01",
+            },
+            {
+                "id": 2,
+                "name": "Credit Score Minimum",
+                "category": "Credit",
+                "condition": "CIBIL_SCORE < 650",
+                "action": "Flag for Review",
+                "severity": "High",
+                "status": "Active",
+                "last_modified": "2026-03-28",
+            },
+            {
+                "id": 3,
+                "name": "Multiple Inquiries Check",
+                "category": "Credit",
+                "condition": "CREDIT_INQUIRIES_6M > 3",
+                "action": "Flag for Review",
+                "severity": "Medium",
+                "status": "Active",
+                "last_modified": "2026-04-05",
+            },
+            {
+                "id": 4,
+                "name": "LTV Limit",
+                "category": "Financial",
+                "condition": "LTV_RATIO > 80",
+                "action": "Reject",
+                "severity": "High",
+                "status": "Active",
+                "last_modified": "2026-03-15",
+            },
+            {
+                "id": 5,
+                "name": "Employment Stability",
+                "category": "Income",
+                "condition": "EMPLOYMENT_MONTHS < 12",
+                "action": "Flag for Review",
+                "severity": "Low",
+                "status": "Inactive",
+                "last_modified": "2026-02-20",
+            },
+        ]
+
+        return {
+            "metrics": [
+                {"key": "total_rules", "label": "Total Rules", "value": len(rules)},
+                {"key": "active_rules", "label": "Active Rules", "value": len([r for r in rules if r["status"] == "Active"])},
+                {"key": "high_severity", "label": "High Severity", "value": len([r for r in rules if r["severity"] == "High"])},
+                {"key": "triggered_today", "label": "Rules Triggered Today", "value": 12},
+            ],
+            "rules": rules,
         }
 
 

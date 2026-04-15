@@ -1,28 +1,26 @@
 import { Send, Mail, MessageSquare, Phone, Clock, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
-import { workflowApi, type WorkflowCommunicationItem } from '../../lib/workflowApi';
-
-const mockTemplates = [
-  { id: '1', name: 'Document Request', category: 'Request' },
-  { id: '2', name: 'Status Update', category: 'Update' },
-  { id: '3', name: 'Offer Notification', category: 'Offer' },
-  { id: '4', name: 'Rejection Notice', category: 'Rejection' },
-];
+import { workflowApi, type CommunicationTemplateItem, type WorkflowCommunicationItem } from '../../lib/workflowApi';
+import { useLoanOfficerApplications } from '../../hooks/useLoanOfficerApplications';
 
 export function CommunicationPage() {
   const navigate = useNavigate();
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [message, setMessage] = useState('');
   const [subject, setSubject] = useState('');
+  const [templates, setTemplates] = useState<CommunicationTemplateItem[]>([]);
   const [history, setHistory] = useState<Array<{ id: string; type: 'email' | 'sms' | 'call'; subject: string; preview: string; date: string; status: string; duration?: string }>>([]);
-  const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
-  const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const {
+    selectedApplication,
+    applications,
+    setSelectedApplicationArn,
+    isLoading,
+    errorMessage,
+  } = useLoanOfficerApplications();
 
   const mapCommunicationHistory = (rows: WorkflowCommunicationItem[]) =>
     rows.map((row) => ({
@@ -35,7 +33,7 @@ export function CommunicationPage() {
     }));
 
   useEffect(() => {
-    if (!user || user.role !== 'loan_officer') {
+    if (!selectedApplication || !user || user.role !== 'loan_officer') {
       setHistory([]);
       return;
     }
@@ -44,7 +42,42 @@ export function CommunicationPage() {
       .getCommunications(selectedApplication.arn, user.role)
       .then((rows) => setHistory(mapCommunicationHistory(rows)))
       .catch(() => setHistory([]));
-  }, [selectedApplication.arn, user]);
+  }, [selectedApplication, user]);
+
+  useEffect(() => {
+    if (!selectedApplication || !user || user.role !== 'loan_officer') {
+      setTemplates([]);
+      return;
+    }
+
+    workflowApi
+      .getCommunicationTemplates(user.role)
+      .then((rows) => setTemplates(rows))
+      .catch(() => setTemplates([]));
+  }, [selectedApplication, user]);
+
+  useEffect(() => {
+    const template = templates.find((item) => item.id === selectedTemplate);
+    if (!template || !selectedApplication) {
+      return;
+    }
+
+    setSubject(template.subject.replace('{arn}', selectedApplication.arn));
+    setMessage(
+      template.body
+        .replace('{borrower_name}', selectedApplication.borrowerName)
+        .replace('{arn}', selectedApplication.arn)
+        .replace('{stage}', selectedApplication.stage)
+    );
+  }, [selectedTemplate, templates, selectedApplication]);
+
+  if (!selectedApplication) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        No applications available for communication.
+      </div>
+    );
+  }
 
   const handleSendMessage = async () => {
     if (!user || user.role !== 'loan_officer') return;
@@ -94,7 +127,20 @@ export function CommunicationPage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter borrowers to open the right communication timeline."
+        applications={applications}
       />
+
+      {isLoading ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading communication data...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
 
       {/* Communication Stats */}
       <div className="grid grid-cols-4 gap-4">
@@ -181,7 +227,7 @@ export function CommunicationPage() {
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
                 >
                   <option value="">Select a template...</option>
-                  {mockTemplates.map((template) => (
+                  {templates.map((template) => (
                     <option key={template.id} value={template.id}>
                       {template.name} ({template.category})
                     </option>

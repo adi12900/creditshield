@@ -3,17 +3,27 @@ import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { getLoanApplications } from '../../data/loanApplications';
 import { RiskBadge } from './RiskBadge';
 
+type SelectorApplication = {
+  arn: string;
+  borrowerName: string;
+  email: string;
+  stage: string;
+  riskGrade: 'A+' | 'A' | 'B' | 'C';
+  loanAmount: number;
+};
+
 interface ApplicationSelectorProps {
   selectedArn: string;
   onSelect: (arn: string) => void;
   subtitle: string;
+  applications?: SelectorApplication[];
 }
 
-export function ApplicationSelector({ selectedArn, onSelect, subtitle }: ApplicationSelectorProps) {
+export function ApplicationSelector({ selectedArn, onSelect, subtitle, applications: providedApplications }: ApplicationSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState('All stages');
   const [riskFilter, setRiskFilter] = useState('All grades');
-  const applications = getLoanApplications();
+  const applications = providedApplications ?? getLoanApplications();
 
   const stageOptions = useMemo(() => {
     const stages = Array.from(new Set(applications.map((application) => application.stage)));
@@ -57,8 +67,11 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div className="md:col-span-2 relative">
+          <label htmlFor="application-search" className="sr-only">Search applications</label>
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
+            id="application-search"
+            name="application-search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search by borrower, ARN, or email"
@@ -66,7 +79,10 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
           />
         </div>
 
+        <label htmlFor="stage-filter" className="sr-only">Filter by stage</label>
         <select
+          id="stage-filter"
+          name="stage-filter"
           value={stageFilter}
           onChange={(event) => setStageFilter(event.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-600"
@@ -79,7 +95,10 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle }: Applica
         </select>
 
         <div className="flex items-center gap-2">
+          <label htmlFor="risk-filter" className="sr-only">Filter by risk grade</label>
           <select
+            id="risk-filter"
+            name="risk-filter"
             value={riskFilter}
             onChange={(event) => setRiskFilter(event.target.value)}
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-600"

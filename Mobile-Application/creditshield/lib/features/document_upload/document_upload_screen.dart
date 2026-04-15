@@ -267,6 +267,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   itemBuilder: (context, i) {
                     final doc = _docs[i];
                     final key = doc['key'] as String;
+                    final label = (doc['label'] as String).toLowerCase();
+                    final allowCsv =
+                        key == 'bank_statement_12m' ||
+                        label.contains('bank statement');
                     final uploaded = _uploaded[key] == true;
                     return _DocCard(
                       label: doc['label'] as String,
@@ -276,6 +280,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       selectedDoc: _selectedDocs[key],
                       secondary: secondary,
                       isDark: isDark,
+                      allowCsv: allowCsv,
                       onUpload: (source) => _pickAndUploadDoc(key, source),
                       onReupload: () => setState(() {
                         _uploaded[key] = false;
@@ -378,7 +383,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
     _SelectedDocument? selected;
     try {
-      selected = await _pickDocument(source);
+      selected = await _pickDocument(source, docKey: key);
     } on MissingPluginException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -422,8 +427,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         accessToken: accessToken,
         applicationId: widget.applicationId!.trim(),
         docType: key,
+        fileName: selected.fileName,
+        fileBytes: selected.fileBytes,
         status: 'Pending OCR',
-        storageUrl: selected.storageUrl,
       );
       if (!mounted) return;
       setState(() {
@@ -451,7 +457,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
   }
 
-  Future<_SelectedDocument?> _pickDocument(String source) async {
+  Future<_SelectedDocument?> _pickDocument(
+    String source, {
+    required String docKey,
+  }) async {
     if (source == 'camera') {
       final file = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -462,7 +471,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         fileName: _fileNameFromPath(file.path),
         sizeBytes: await file.length(),
         source: source,
-        storageUrl: 'picked://$source/${_fileNameFromPath(file.path)}',
+        fileBytes: await file.readAsBytes(),
       );
     }
 
@@ -476,24 +485,33 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         fileName: _fileNameFromPath(file.path),
         sizeBytes: await file.length(),
         source: source,
-        storageUrl: 'picked://$source/${_fileNameFromPath(file.path)}',
+        fileBytes: await file.readAsBytes(),
       );
     }
 
+    final isCsvAllowedDoc = docKey == 'bank_statement_12m';
+    final allowedExtensions = isCsvAllowedDoc
+      ? const ['csv', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png']
+        : const ['pdf', 'jpg', 'jpeg', 'png'];
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-      withData: false,
+      allowedExtensions: allowedExtensions,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return null;
 
     final picked = result.files.first;
     final fileName = picked.name.trim().isEmpty ? 'document' : picked.name;
+    final bytes = picked.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      throw Exception('Unable to read selected file bytes. Please pick another file.');
+    }
     return _SelectedDocument(
       fileName: fileName,
       sizeBytes: picked.size,
       source: source,
-      storageUrl: 'picked://$source/$fileName',
+      fileBytes: bytes,
     );
   }
 
@@ -513,6 +531,7 @@ class _DocCard extends StatelessWidget {
   final _SelectedDocument? selectedDoc;
   final Color secondary;
   final bool isDark;
+  final bool allowCsv;
   final void Function(String) onUpload;
   final VoidCallback onReupload;
 
@@ -524,6 +543,7 @@ class _DocCard extends StatelessWidget {
     required this.selectedDoc,
     required this.secondary,
     required this.isDark,
+    required this.allowCsv,
     required this.onUpload,
     required this.onReupload,
   });
@@ -659,7 +679,9 @@ class _DocCard extends StatelessWidget {
                   )
                 else
                   Text(
-                    'JPEG, PNG, PDF • Max 5MB',
+                    allowCsv
+                        ? 'CSV, JPEG, PNG, PDF • Max 5MB'
+                        : 'JPEG, PNG, PDF • Max 5MB',
                     style: AppTypography.caption.copyWith(
                       color: isDark
                           ? AppColors.textSecondaryDark
@@ -705,13 +727,13 @@ class _SelectedDocument {
   final String fileName;
   final int sizeBytes;
   final String source;
-  final String storageUrl;
+  final Uint8List fileBytes;
 
   const _SelectedDocument({
     required this.fileName,
     required this.sizeBytes,
     required this.source,
-    required this.storageUrl,
+    required this.fileBytes,
   });
 
   String get displayLabel {
