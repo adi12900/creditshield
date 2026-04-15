@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../app/app_state.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/design_system/components/cs_components.dart';
@@ -28,6 +31,7 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
+    final borrowerName = context.watch<AppState>().borrowerName ?? 'Borrower';
 
     if (_signed) return _buildSignedSuccess(context, isDark, secondary);
     if (_signingMode) return _buildOtpScreen(context, isDark, secondary);
@@ -47,11 +51,13 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
               color: AppColors.warning.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text('Expires in 5 days',
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.w600,
-                )),
+            child: Text(
+              'Expires in 5 days',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.warning,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -67,33 +73,77 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                     // Key terms summary
                     Text('Key Terms Summary', style: AppTypography.subheading),
                     const SizedBox(height: 8),
-                    Text('Review the important terms of your loan agreement before signing.',
-                        style: AppTypography.body.copyWith(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        )),
+                    Text(
+                      'Review the important terms of your loan agreement before signing.',
+                      style: AppTypography.body.copyWith(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.sm),
                     CsCard(
                       child: Column(
                         children: [
-                          _TermRow('Sanctioned Amount', '₹50,000', secondary, isDark),
+                          _TermRow(
+                            'Sanctioned Amount',
+                            '₹50,000',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('APR (all-inclusive)', '11.2% APR', secondary, isDark),
+                          _TermRow(
+                            'APR (all-inclusive)',
+                            '11.2% APR',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('Interest Rate', '10.5% per annum', secondary, isDark),
+                          _TermRow(
+                            'Interest Rate',
+                            '10.5% per annum',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
                           _TermRow('Monthly EMI', '₹4,428', secondary, isDark),
                           const Divider(height: 20),
                           _TermRow('Tenure', '12 months', secondary, isDark),
                           const Divider(height: 20),
-                          _TermRow('Processing Fee', '₹500 (1%)', secondary, isDark),
+                          _TermRow(
+                            'Processing Fee',
+                            '₹500 (1%)',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('Prepayment', 'No charges after 6 months', secondary, isDark),
+                          _TermRow(
+                            'Prepayment',
+                            'No charges after 6 months',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('Cooling-off period', '1 day from execution', secondary, isDark),
+                          _TermRow(
+                            'Cooling-off period',
+                            '1 day from execution',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('Default Consequence', 'Late fee of 2% per month on overdue amount', secondary, isDark),
+                          _TermRow(
+                            'Default Consequence',
+                            'Late fee of 2% per month on overdue amount',
+                            secondary,
+                            isDark,
+                          ),
                           const Divider(height: 20),
-                          _TermRow('Grievance contact', 'care@creditshield.in / 1800-123-111', secondary, isDark),
+                          _TermRow(
+                            'Grievance contact',
+                            'care@creditshield.in / 1800-123-111',
+                            secondary,
+                            isDark,
+                          ),
                         ],
                       ),
                     ),
@@ -103,7 +153,9 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                       decoration: BoxDecoration(
                         color: secondary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: secondary.withValues(alpha: 0.2)),
+                        border: Border.all(
+                          color: secondary.withValues(alpha: 0.2),
+                        ),
                       ),
                       child: Text(
                         'RBI note: You can exit within cooling-off period by paying principal + proportionate APR. For unresolved complaints, use RBI CMS portal after lender response timelines.',
@@ -113,17 +165,23 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                     const SizedBox(height: AppSpacing.sm),
                     // Full agreement toggle
                     GestureDetector(
-                      onTap: () => setState(() => _showFullAgreement = !_showFullAgreement),
+                      onTap: () => setState(
+                        () => _showFullAgreement = !_showFullAgreement,
+                      ),
                       child: Row(
                         children: [
-                          Text('Full Agreement Document',
-                              style: AppTypography.body.copyWith(
-                                color: secondary,
-                                fontWeight: FontWeight.w600,
-                              )),
+                          Text(
+                            'Full Agreement Document',
+                            style: AppTypography.body.copyWith(
+                              color: secondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           Icon(
-                            _showFullAgreement ? Icons.expand_less : Icons.expand_more,
+                            _showFullAgreement
+                                ? Icons.expand_less
+                                : Icons.expand_more,
                             color: secondary,
                           ),
                         ],
@@ -134,12 +192,18 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                          color: isDark
+                              ? AppColors.surfaceDark
+                              : AppColors.surfaceLight,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.borderDark
+                                : AppColors.borderLight,
+                          ),
                         ),
                         child: Text(
-                          'LOAN AGREEMENT\n\nThis Loan Agreement ("Agreement") is entered into as of 12 January 2025, between HDFC Bank Limited ("Lender") and Priya Sharma ("Borrower").\n\n1. LOAN AMOUNT\nThe Lender agrees to provide a personal loan of ₹50,000 (Rupees Fifty Thousand only) to the Borrower.\n\n2. INTEREST RATE\nThe loan shall carry an interest rate of 10.5% per annum (reducing balance method).\n\n3. REPAYMENT\nThe Borrower shall repay the loan in 12 equal monthly instalments of ₹4,428 each, commencing from 12 February 2025.\n\n4. PREPAYMENT\nThe Borrower may prepay the outstanding loan amount after 6 months without any prepayment charges.\n\n5. DEFAULT\nIn case of default, a late payment fee of 2% per month shall be levied on the overdue amount.\n\n6. GOVERNING LAW\nThis Agreement shall be governed by the laws of India and subject to the jurisdiction of courts in Mumbai.\n\n[Agreement continues...]',
+                          'LOAN AGREEMENT\n\nThis Loan Agreement ("Agreement") is entered into as of 12 January 2025, between HDFC Bank Limited ("Lender") and $borrowerName ("Borrower").\n\n1. LOAN AMOUNT\nThe Lender agrees to provide a personal loan of ₹50,000 (Rupees Fifty Thousand only) to the Borrower.\n\n2. INTEREST RATE\nThe loan shall carry an interest rate of 10.5% per annum (reducing balance method).\n\n3. REPAYMENT\nThe Borrower shall repay the loan in 12 equal monthly instalments of ₹4,428 each, commencing from 12 February 2025.\n\n4. PREPAYMENT\nThe Borrower may prepay the outstanding loan amount after 6 months without any prepayment charges.\n\n5. DEFAULT\nIn case of default, a late payment fee of 2% per month shall be levied on the overdue amount.\n\n6. GOVERNING LAW\nThis Agreement shall be governed by the laws of India and subject to the jurisdiction of courts in Mumbai.\n\n[Agreement continues...]',
                           style: AppTypography.caption.copyWith(height: 1.7),
                         ),
                       ),
@@ -162,7 +226,9 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                     variant: CsButtonVariant.secondary,
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Agreement saved to Downloads')),
+                        const SnackBar(
+                          content: Text('Agreement saved to Downloads'),
+                        ),
                       );
                     },
                   ),
@@ -221,8 +287,10 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () {},
-                child: Text('Resend OTP',
-                    style: AppTypography.body.copyWith(color: secondary)),
+                child: Text(
+                  'Resend OTP',
+                  style: AppTypography.body.copyWith(color: secondary),
+                ),
               ),
               const Spacer(),
               CsButton(
@@ -231,7 +299,12 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                 onPressed: () async {
                   setState(() => _loading = true);
                   await Future.delayed(const Duration(seconds: 1));
-                  if (mounted) setState(() { _loading = false; _signingMode = false; _signed = true; });
+                  if (mounted)
+                    setState(() {
+                      _loading = false;
+                      _signingMode = false;
+                      _signed = true;
+                    });
                 },
               ),
             ],
@@ -241,7 +314,11 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
     );
   }
 
-  Widget _buildSignedSuccess(BuildContext context, bool isDark, Color secondary) {
+  Widget _buildSignedSuccess(
+    BuildContext context,
+    bool isDark,
+    Color secondary,
+  ) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -256,16 +333,25 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                   color: AppColors.success.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.verified, color: AppColors.success, size: 56),
+                child: const Icon(
+                  Icons.verified,
+                  color: AppColors.success,
+                  size: 56,
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Text('Agreement Signed!',
-                  style: AppTypography.heading, textAlign: TextAlign.center),
+              Text(
+                'Agreement Signed!',
+                style: AppTypography.heading,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 8),
               Text(
                 'Your loan agreement has been signed successfully. Disbursement will be processed within 24 hours.',
                 style: AppTypography.body.copyWith(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -274,7 +360,9 @@ class _LoanAgreementScreenState extends State<LoanAgreementScreen> {
                 label: 'Download Signed Agreement',
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Signed agreement saved to Downloads')),
+                    const SnackBar(
+                      content: Text('Signed agreement saved to Downloads'),
+                    ),
                   );
                 },
               ),
@@ -306,15 +394,21 @@ class _TermRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
-          child: Text(label,
-              style: AppTypography.body.copyWith(
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              )),
+          child: Text(
+            label,
+            style: AppTypography.body.copyWith(
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
         ),
         Expanded(
-          child: Text(value,
-              style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.right),
+          child: Text(
+            value,
+            style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+            textAlign: TextAlign.right,
+          ),
         ),
       ],
     );

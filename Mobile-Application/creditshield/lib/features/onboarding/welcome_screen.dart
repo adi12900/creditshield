@@ -24,9 +24,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     },
     {
       'icon': Icons.compare_arrows_outlined,
-      'title': 'Compare Offers from Multiple Lenders',
+      'title': 'Track Your Application Status',
       'desc':
-          'Apply once and receive personalised loan offers from multiple lenders. Choose what works best for you.',
+          'Apply once and follow every update from submission to final tracker status.',
     },
     {
       'icon': Icons.lock_outline,

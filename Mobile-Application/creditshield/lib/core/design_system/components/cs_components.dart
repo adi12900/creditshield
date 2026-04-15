@@ -32,12 +32,18 @@ class CsButton extends StatelessWidget {
         ? const SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 6)],
+              if (icon != null) ...[
+                Icon(icon, size: 18),
+                const SizedBox(width: 6),
+              ],
               Text(label, style: AppTypography.buttonLabel),
             ],
           );
@@ -56,7 +62,9 @@ class CsButton extends StatelessWidget {
               foregroundColor: Colors.white,
               elevation: 0,
               shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
             child: child,
           ),
@@ -74,7 +82,9 @@ class CsButton extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: sec,
             side: BorderSide(color: sec, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
           ),
           child: child,
         ),
@@ -90,7 +100,13 @@ class CsCard extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? color;
 
-  const CsCard({super.key, required this.child, this.padding, this.onTap, this.color});
+  const CsCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.onTap,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -189,19 +205,23 @@ class CsInputField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Text(label,
-                style: AppTypography.caption.copyWith(
-                  color: muted,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                )),
+            child: Text(
+              label,
+              style: AppTypography.caption.copyWith(
+                color: muted,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
           ),
         Semantics(
           textField: true,
@@ -214,7 +234,9 @@ class CsInputField extends StatelessWidget {
             maxLines: maxLines,
             onChanged: onChanged,
             style: AppTypography.body.copyWith(
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
             decoration: InputDecoration(
               hintText: hint,
@@ -224,7 +246,9 @@ class CsInputField extends StatelessWidget {
               filled: true,
               fillColor: enabled
                   ? (isDark ? AppColors.surfaceDark : AppColors.backgroundLight)
-                  : (isDark ? AppColors.disabledBgDark : const Color(0xFFF8F9FA)),
+                  : (isDark
+                        ? AppColors.disabledBgDark
+                        : const Color(0xFFF8F9FA)),
             ),
           ),
         ),
@@ -250,7 +274,9 @@ class CsStepIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
 
     return Semantics(
       label: 'Step $currentStep of $totalSteps',
@@ -260,16 +286,21 @@ class CsStepIndicator extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: secondary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text('Step $currentStep of $totalSteps',
-                    style: AppTypography.caption.copyWith(
-                      color: secondary,
-                      fontWeight: FontWeight.w700,
-                    )),
+                child: Text(
+                  'Step $currentStep of $totalSteps',
+                  style: AppTypography.caption.copyWith(
+                    color: secondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               const Spacer(),
               if (estimatedTime != null)
@@ -277,8 +308,10 @@ class CsStepIndicator extends StatelessWidget {
                   children: [
                     Icon(Icons.access_time_outlined, size: 12, color: muted),
                     const SizedBox(width: 4),
-                    Text(estimatedTime!,
-                        style: AppTypography.caption.copyWith(color: muted)),
+                    Text(
+                      estimatedTime!,
+                      style: AppTypography.caption.copyWith(color: muted),
+                    ),
                   ],
                 ),
             ],
@@ -297,8 +330,8 @@ class CsStepIndicator extends StatelessWidget {
                     color: done
                         ? secondary
                         : active
-                            ? secondary.withValues(alpha: 0.7)
-                            : muted.withValues(alpha: 0.2),
+                        ? secondary.withValues(alpha: 0.7)
+                        : muted.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -336,10 +369,14 @@ class _CsShimmerLoaderState extends State<CsShimmerLoader>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat();
-    _anim = Tween<double>(begin: -1, end: 2)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+    _anim = Tween<double>(
+      begin: -1,
+      end: 2,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -351,7 +388,9 @@ class _CsShimmerLoaderState extends State<CsShimmerLoader>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base = isDark ? AppColors.shimmerBaseDark : AppColors.shimmerBaseLight;
+    final base = isDark
+        ? AppColors.shimmerBaseDark
+        : AppColors.shimmerBaseLight;
     final hi = isDark ? AppColors.shimmerHighDark : AppColors.shimmerHighLight;
 
     return AnimatedBuilder(
@@ -395,7 +434,9 @@ class CsEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
 
     return Center(
@@ -411,14 +452,24 @@ class CsEmptyState extends StatelessWidget {
                 color: secondary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 48, color: secondary.withValues(alpha: 0.6)),
+              child: Icon(
+                icon,
+                size: 48,
+                color: secondary.withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text(heading, style: AppTypography.subheading, textAlign: TextAlign.center),
+            Text(
+              heading,
+              style: AppTypography.subheading,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: AppSpacing.xs),
-            Text(message,
-                style: AppTypography.body.copyWith(color: muted),
-                textAlign: TextAlign.center),
+            Text(
+              message,
+              style: AppTypography.body.copyWith(color: muted),
+              textAlign: TextAlign.center,
+            ),
             if (ctaLabel != null) ...[
               const SizedBox(height: AppSpacing.md),
               CsButton(label: ctaLabel!, onPressed: onCta, width: 200),
@@ -470,11 +521,13 @@ class CsOfflineBanner extends StatelessWidget {
             const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
             const SizedBox(width: 8),
             Flexible(
-              child: Text('No Internet — Offline Mode',
-                  style: AppTypography.caption.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  )),
+              child: Text(
+                'No Internet — Offline Mode',
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -488,7 +541,11 @@ class CsNetworkError extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const CsNetworkError({super.key, required this.message, required this.onRetry});
+  const CsNetworkError({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -504,14 +561,21 @@ class CsNetworkError extends StatelessWidget {
           const Icon(Icons.error_outline, color: AppColors.error, size: 18),
           const SizedBox(width: 8),
           Expanded(
-              child: Text(message,
-                  style: AppTypography.caption.copyWith(color: AppColors.error))),
+            child: Text(
+              message,
+              style: AppTypography.caption.copyWith(color: AppColors.error),
+            ),
+          ),
           Semantics(
             button: true,
             label: 'Retry',
             child: IconButton(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, color: AppColors.error, size: 20),
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: AppColors.error,
+                size: 20,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
@@ -522,7 +586,7 @@ class CsNetworkError extends StatelessWidget {
   }
 }
 
-// ─── No Offers State ──────────────────────────────────────────────────────────
+// ─── No Updates State ─────────────────────────────────────────────────────────
 class CsNoOffersState extends StatelessWidget {
   final VoidCallback? onReapply;
   const CsNoOffersState({super.key, this.onReapply});
@@ -531,7 +595,9 @@ class CsNoOffersState extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
 
     return Center(
       child: Padding(
@@ -549,17 +615,28 @@ class CsNoOffersState extends StatelessWidget {
               child: Icon(Icons.inbox_outlined, size: 52, color: muted),
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text('No Offers Available',
-                style: AppTypography.subheading, textAlign: TextAlign.center),
+            Text(
+              'No Updates Available',
+              style: AppTypography.subheading,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
             Text(
-              'No lenders matched your profile right now. Here\'s what you can do:',
+              'No new application updates are available right now. Here\'s what you can do:',
               style: AppTypography.body.copyWith(color: muted),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.sm),
-            _Tip(Icons.trending_up, 'Improve income documentation to increase eligibility.', secondary),
-            _Tip(Icons.account_balance_wallet_outlined, 'Reduce existing debt before reapplying.', secondary),
+            _Tip(
+              Icons.trending_up,
+              'Improve income documentation to increase eligibility.',
+              secondary,
+            ),
+            _Tip(
+              Icons.account_balance_wallet_outlined,
+              'Reduce existing debt before reapplying.',
+              secondary,
+            ),
             const SizedBox(height: AppSpacing.md),
             CsButton(label: 'Reapply after 30 days', onPressed: onReapply),
           ],
@@ -595,12 +672,18 @@ class _Tip extends StatelessWidget {
 class CsExpiredApplication extends StatelessWidget {
   final String reason;
   final VoidCallback? onStartNew;
-  const CsExpiredApplication({super.key, required this.reason, this.onStartNew});
+  const CsExpiredApplication({
+    super.key,
+    required this.reason,
+    this.onStartNew,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
 
     return Center(
       child: Padding(
@@ -615,15 +698,24 @@ class CsExpiredApplication extends StatelessWidget {
                 color: AppColors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.timer_off_outlined, size: 52, color: AppColors.error),
+              child: const Icon(
+                Icons.timer_off_outlined,
+                size: 52,
+                color: AppColors.error,
+              ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text('Application Expired',
-                style: AppTypography.subheading, textAlign: TextAlign.center),
+            Text(
+              'Application Expired',
+              style: AppTypography.subheading,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
-            Text(reason,
-                style: AppTypography.body.copyWith(color: muted),
-                textAlign: TextAlign.center),
+            Text(
+              reason,
+              style: AppTypography.body.copyWith(color: muted),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: AppSpacing.md),
             CsButton(label: 'Start New Application', onPressed: onStartNew),
           ],

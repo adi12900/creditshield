@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app/app_state.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../auth/auth_api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+  final AuthApiService _authApi = AuthApiService();
+  BorrowerTrackerDto? _activeApplication;
+  bool _loadingActiveApplication = true;
 
   Future<bool> _ensureKycCompleted(AppState appState) async {
     if (appState.kycCompleted) {
@@ -49,6 +53,49 @@ class _HomeScreenState extends State<HomeScreen> {
     return false;
   }
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadActiveApplication();
+    });
+  }
+
+  Future<void> _loadActiveApplication() async {
+    final token = context.read<AppState>().authToken;
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _activeApplication = null;
+        _loadingActiveApplication = false;
+      });
+      return;
+    }
+
+    try {
+      final tracker = await _authApi.getTracker(token);
+      if (!mounted) return;
+      setState(() {
+        _activeApplication = tracker.applicationId == null ? null : tracker;
+        _loadingActiveApplication = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final errorText = e.toString();
+      if (errorText.contains('401') ||
+          errorText.contains('Unauthorized') ||
+          errorText.contains('Missing or invalid Authorization header') ||
+          errorText.contains('Invalid or expired token')) {
+        context.go('/session-reauth');
+        return;
+      }
+      setState(() {
+        _activeApplication = null;
+        _loadingActiveApplication = false;
+      });
+    }
+  }
+
   // Req 20.4 — guard: if active application exists, prompt resume or abandon
   Future<void> _onApplyTap(AppState appState) async {
     final canApply = await _ensureKycCompleted(appState);
@@ -59,21 +106,22 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    if (appState.resumeLoanType != null) {
+    final activeApplication = _activeApplication;
+    if (activeApplication != null) {
+      final loanType = activeApplication.loanType ?? 'personal';
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Active Application'),
           content: Text(
-            'You have an in-progress ${appState.resumeLoanType} loan application at step ${appState.resumeStep}. Resume it or start a new one?',
+            'You have an in-progress ${loanType[0].toUpperCase()}${loanType.substring(1)} loan application. Resume it or start a new one?',
             style: AppTypography.body,
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                context.push(
-                    '/loan-application/${appState.resumeLoanType}?step=${appState.resumeStep}');
+                context.push('/loan-tracker');
               },
               child: const Text('Resume'),
             ),
@@ -82,8 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 _confirmAbandon(context, appState);
               },
-              child: Text('Start New',
-                  style: TextStyle(color: AppColors.error)),
+              child: Text(
+                'Start New',
+                style: TextStyle(color: AppColors.error),
+              ),
             ),
           ],
         ),
@@ -103,8 +153,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () async {
               await appState.clearResume();
@@ -113,8 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context.push('/loan-type');
               }
             },
-            child:
-                Text('Abandon', style: TextStyle(color: AppColors.error)),
+            child: Text('Abandon', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -128,13 +178,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final tabs = [
       _HomeTab(
         appState: appState,
+        activeApplication: _activeApplication,
+        loadingActiveApplication: _loadingActiveApplication,
         onApply: () async {
           await _onApplyTap(appState);
         },
       ),
-      _ApplyTab(onStartApply: () async {
-        await _onApplyTap(appState);
-      }),
+      _ApplyTab(
+        onStartApply: () async {
+          await _onApplyTap(appState);
+        },
+      ),
       const _TrackTab(),
       const _DashboardTab(),
       _ProfileTab(appState: appState),
@@ -147,25 +201,30 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (i) => setState(() => _tab = i),
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Home'),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.add_circle_outline),
-              activeIcon: Icon(Icons.add_circle),
-              label: 'Apply'),
+            icon: Icon(Icons.add_circle_outline),
+            activeIcon: Icon(Icons.add_circle),
+            label: 'Apply',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.track_changes_outlined),
-              activeIcon: Icon(Icons.track_changes),
-              label: 'Track'),
+            icon: Icon(Icons.track_changes_outlined),
+            activeIcon: Icon(Icons.track_changes),
+            label: 'Track',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
-              label: 'Dashboard'),
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profile'),
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
@@ -174,9 +233,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _HomeTab extends StatelessWidget {
   final AppState appState;
+  final BorrowerTrackerDto? activeApplication;
+  final bool loadingActiveApplication;
   final Future<void> Function() onApply;
 
-  const _HomeTab({required this.appState, required this.onApply});
+  const _HomeTab({
+    required this.appState,
+    required this.activeApplication,
+    required this.loadingActiveApplication,
+    required this.onApply,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -199,14 +265,18 @@ class _HomeTab extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Good morning,',
-                                  style: AppTypography.body.copyWith(
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : AppColors.textSecondaryLight,
-                                  )),
-                              Text('Priya Sharma 👋',
-                                  style: AppTypography.subheading),
+                              Text(
+                                'Good morning,',
+                                style: AppTypography.body.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                              ),
+                              Text(
+                                '${appState.borrowerName ?? 'Welcome'} 👋',
+                                style: AppTypography.subheading,
+                              ),
                             ],
                           ),
                         ),
@@ -217,8 +287,10 @@ class _HomeTab extends StatelessWidget {
                             onPressed: () => context.push('/notifications'),
                             icon: Stack(
                               children: [
-                                const Icon(Icons.notifications_outlined,
-                                    size: 28),
+                                const Icon(
+                                  Icons.notifications_outlined,
+                                  size: 28,
+                                ),
                                 Positioned(
                                   right: 0,
                                   top: 0,
@@ -229,10 +301,11 @@ class _HomeTab extends StatelessWidget {
                                       color: AppColors.error,
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                          color: isDark
-                                              ? AppColors.backgroundDark
-                                              : Colors.white,
-                                          width: 1.5),
+                                        color: isDark
+                                            ? AppColors.backgroundDark
+                                            : Colors.white,
+                                        width: 1.5,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -244,10 +317,13 @@ class _HomeTab extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     // Req 17.6 — Resume Application prompt
-                    if (appState.resumeLoanType != null)
+                    if (!loadingActiveApplication && activeApplication != null)
                       _ResumeBanner(
-                        loanType: appState.resumeLoanType!,
-                        step: appState.resumeStep,
+                        borrowerName:
+                            activeApplication?.borrowerName ??
+                            appState.borrowerName,
+                        loanType: activeApplication?.loanType ?? 'personal',
+                        stage: activeApplication?.stage ?? 'Submitted',
                         secondary: secondary,
                       ),
                     const SizedBox(height: AppSpacing.sm),
@@ -266,14 +342,19 @@ class _HomeTab extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Check your eligibility',
-                              style: AppTypography.subheading
-                                  .copyWith(color: Colors.white)),
+                          Text(
+                            'Check your eligibility',
+                            style: AppTypography.subheading.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           Text(
-                              'Get an instant estimate in seconds — no paperwork needed.',
-                              style: AppTypography.body.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.8))),
+                            'Get an instant estimate in seconds — no paperwork needed.',
+                            style: AppTypography.body.copyWith(
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
                           const SizedBox(height: AppSpacing.sm),
                           ElevatedButton(
                             onPressed: () => context.push('/eligibility'),
@@ -281,9 +362,12 @@ class _HomeTab extends StatelessWidget {
                               backgroundColor: AppColors.secondary,
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 10),
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
                             ),
                             child: const Text('Check Now'),
                           ),
@@ -298,18 +382,17 @@ class _HomeTab extends StatelessWidget {
               ),
             ),
             SliverPadding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
               sliver: SliverGrid(
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   childAspectRatio: 1.4,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                 ),
                 delegate: SliverChildListDelegate(
-                    _loanCards(context, secondary, isDark)),
+                  _loanCards(context, secondary, isDark),
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -358,38 +441,37 @@ class _HomeTab extends StatelessWidget {
     );
   }
 
-  List<Widget> _loanCards(
-      BuildContext context, Color secondary, bool isDark) {
+  List<Widget> _loanCards(BuildContext context, Color secondary, bool isDark) {
     const loans = [
       {
         'icon': Icons.person_outline,
         'title': 'Personal Loan',
         'desc': 'For any personal need',
-        'type': 'personal'
+        'type': 'personal',
       },
       {
         'icon': Icons.diamond_outlined,
         'title': 'Gold Loan',
         'desc': 'Against gold jewellery',
-        'type': 'gold'
+        'type': 'gold',
       },
       {
         'icon': Icons.home_outlined,
         'title': 'Home Loan',
         'desc': 'Buy your dream home',
-        'type': 'home'
+        'type': 'home',
       },
       {
         'icon': Icons.directions_car_outlined,
         'title': 'Car Loan',
         'desc': 'New or used vehicle',
-        'type': 'car'
+        'type': 'car',
       },
       {
         'icon': Icons.school_outlined,
         'title': 'Education Loan',
         'desc': 'Fund your studies',
-        'type': 'education'
+        'type': 'education',
       },
     ];
     return loans.map((loan) {
@@ -406,9 +488,8 @@ class _HomeTab extends StatelessWidget {
               color: isDark ? AppColors.cardDark : AppColors.cardLight,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                  color: isDark
-                      ? AppColors.borderDark
-                      : AppColors.borderLight),
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,20 +501,28 @@ class _HomeTab extends StatelessWidget {
                     color: secondary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(loan['icon'] as IconData,
-                      color: secondary, size: 22),
+                  child: Icon(
+                    loan['icon'] as IconData,
+                    color: secondary,
+                    size: 22,
+                  ),
                 ),
                 const Spacer(),
-                Text(loan['title'] as String,
-                    style: AppTypography.body
-                        .copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  loan['title'] as String,
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(loan['desc'] as String,
-                    style: AppTypography.caption.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    )),
+                Text(
+                  loan['desc'] as String,
+                  style: AppTypography.caption.copyWith(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
               ],
             ),
           ),
@@ -444,14 +533,17 @@ class _HomeTab extends StatelessWidget {
 }
 
 class _ResumeBanner extends StatelessWidget {
+  final String? borrowerName;
   final String loanType;
-  final int step;
+  final String stage;
   final Color secondary;
 
-  const _ResumeBanner(
-      {required this.loanType,
-      required this.step,
-      required this.secondary});
+  const _ResumeBanner({
+    required this.borrowerName,
+    required this.loanType,
+    required this.stage,
+    required this.secondary,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -470,21 +562,29 @@ class _ResumeBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Resume Application',
-                    style: AppTypography.body.copyWith(
-                        fontWeight: FontWeight.w600, color: secondary)),
                 Text(
-                    '${loanType[0].toUpperCase()}${loanType.substring(1)} Loan — Step $step',
-                    style: AppTypography.caption),
+                  'Resume Application',
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: secondary,
+                  ),
+                ),
+                Text(
+                  '${borrowerName ?? 'Your'} ${loanType[0].toUpperCase()}${loanType.substring(1)} Loan — $stage',
+                  style: AppTypography.caption,
+                ),
               ],
             ),
           ),
           TextButton(
-            onPressed: () =>
-                context.push('/loan-application/$loanType?step=$step'),
-            child: Text('Resume',
-                style: AppTypography.caption
-                    .copyWith(color: secondary, fontWeight: FontWeight.w600)),
+            onPressed: () => context.push('/loan-tracker'),
+            child: Text(
+              'Resume',
+              style: AppTypography.caption.copyWith(
+                color: secondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -498,11 +598,12 @@ class _QuickAction extends StatelessWidget {
   final Color secondary;
   final VoidCallback onTap;
 
-  const _QuickAction(
-      {required this.icon,
-      required this.label,
-      required this.secondary,
-      required this.onTap});
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.secondary,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -519,18 +620,20 @@ class _QuickAction extends StatelessWidget {
               color: isDark ? AppColors.cardDark : AppColors.cardLight,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: isDark
-                      ? AppColors.borderDark
-                      : AppColors.borderLight),
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
             ),
             child: Column(
               children: [
                 Icon(icon, color: secondary, size: 24),
                 const SizedBox(height: 6),
-                Text(label,
-                    style: AppTypography.caption
-                        .copyWith(fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.center),
+                Text(
+                  label,
+                  style: AppTypography.caption.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),
@@ -562,7 +665,9 @@ class _ApplyTab extends StatelessWidget {
               Text(
                 'Select a loan type and begin your application. Your progress will be auto-saved.',
                 style: AppTypography.body.copyWith(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -577,7 +682,12 @@ class _ApplyTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Quick Start', style: AppTypography.subheading.copyWith(color: secondary)),
+                    Text(
+                      'Quick Start',
+                      style: AppTypography.subheading.copyWith(
+                        color: secondary,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Personal, Gold, Home, Car, and Education loans are available.',
@@ -601,7 +711,8 @@ class _ApplyTab extends StatelessWidget {
   }
 
   @override
-  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) => '_ApplyTab';
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) =>
+      '_ApplyTab';
 }
 
 class _TrackTab extends StatelessWidget {
@@ -624,7 +735,9 @@ class _TrackTab extends StatelessWidget {
               Text(
                 'Follow your application journey from submission to disbursal.',
                 style: AppTypography.body.copyWith(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -632,7 +745,11 @@ class _TrackTab extends StatelessWidget {
                 tileColor: isDark ? AppColors.cardDark : AppColors.cardLight,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
+                  ),
                 ),
                 leading: Icon(Icons.track_changes, color: secondary),
                 title: const Text('Open Detailed Tracker'),
@@ -668,7 +785,9 @@ class _DashboardTab extends StatelessWidget {
               Text(
                 'View outstanding amount, upcoming EMIs, and repayment summary.',
                 style: AppTypography.body.copyWith(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -676,7 +795,11 @@ class _DashboardTab extends StatelessWidget {
                 tileColor: isDark ? AppColors.cardDark : AppColors.cardLight,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
+                  ),
                 ),
                 leading: Icon(Icons.dashboard, color: secondary),
                 title: const Text('Open Detailed Dashboard'),
@@ -714,7 +837,9 @@ class _ProfileTab extends StatelessWidget {
               Text(
                 'Manage language, privacy, notifications, and account settings.',
                 style: AppTypography.body.copyWith(
-                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -722,7 +847,11 @@ class _ProfileTab extends StatelessWidget {
                 tileColor: isDark ? AppColors.cardDark : AppColors.cardLight,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
+                  ),
                 ),
                 leading: Icon(Icons.person_outline, color: secondary),
                 title: const Text('Open Full Profile Settings'),

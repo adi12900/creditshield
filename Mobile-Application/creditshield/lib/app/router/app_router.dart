@@ -17,9 +17,6 @@ import 'package:creditshield/features/document_upload/document_upload_screen.dar
 import 'package:creditshield/features/consent/consent_screen.dart';
 import 'package:creditshield/features/consent/consent_dashboard_screen.dart';
 import 'package:creditshield/features/compliance/rbi_compliance_screen.dart';
-import 'package:creditshield/features/risk_score/risk_score_screen.dart';
-import 'package:creditshield/features/lender_offers/lender_offers_screen.dart';
-import 'package:creditshield/features/offer_selection/offer_selection_screen.dart';
 import 'package:creditshield/features/loan_tracker/loan_tracker_screen.dart';
 import 'package:creditshield/features/loan_agreement/loan_agreement_screen.dart';
 import 'package:creditshield/features/loan_dashboard/loan_dashboard_screen.dart';
@@ -77,7 +74,13 @@ GoRouter createRouter(AppState appState) {
         path: '/documents/:loanType',
         builder: (context, state) {
           final loanType = state.pathParameters['loanType']!;
-          return DocumentUploadScreen(loanType: loanType);
+          final applicationId = state.uri.queryParameters['applicationId'];
+          final employmentType = state.uri.queryParameters['employmentType'];
+          return DocumentUploadScreen(
+            loanType: loanType,
+            applicationId: applicationId,
+            employmentType: employmentType,
+          );
         },
       ),
       GoRoute(path: '/consent', builder: (_, __) => const ConsentScreen()),
@@ -88,18 +91,6 @@ GoRouter createRouter(AppState appState) {
       GoRoute(
         path: '/rbi-compliance',
         builder: (_, __) => const RbiComplianceScreen(),
-      ),
-      GoRoute(path: '/risk-score', builder: (_, __) => const RiskScoreScreen()),
-      GoRoute(
-        path: '/lender-offers',
-        builder: (_, __) => const LenderOffersScreen(),
-      ),
-      GoRoute(
-        path: '/offer-selection/:offerId',
-        builder: (context, state) {
-          final offerId = state.pathParameters['offerId']!;
-          return OfferSelectionScreen(offerId: offerId);
-        },
       ),
       GoRoute(
         path: '/loan-tracker',
