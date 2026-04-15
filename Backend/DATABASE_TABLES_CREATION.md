@@ -178,7 +178,16 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     risk_grade VARCHAR(2) NOT NULL CHECK (risk_grade IN ('A+', 'A', 'B', 'C')),
     credit_score INT NOT NULL CHECK (credit_score BETWEEN 300 AND 900),
     kyc_status VARCHAR(20) NOT NULL CHECK (kyc_status IN ('Verified', 'Pending')),
-    employment_type VARCHAR(20) NOT NULL CHECK (employment_type IN ('Salaried', 'Self Employed')),
+    employment_type VARCHAR(20) NOT NULL CHECK (
+        employment_type IN (
+            'Salaried',
+            'Self Employed',
+            'Business Owner',
+            'Freelancer',
+            'Student',
+            'Unemployed'
+        )
+    ),
     purpose VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

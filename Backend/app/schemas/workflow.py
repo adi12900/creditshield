@@ -31,7 +31,14 @@ class LoanApplicationOut(BaseModel):
     risk_grade: Literal["A+", "A", "B", "C"]
     credit_score: int
     kyc_status: Literal["Verified", "Pending"]
-    employment_type: Literal["Salaried", "Self Employed"]
+    employment_type: Literal[
+        "Salaried",
+        "Self Employed",
+        "Business Owner",
+        "Freelancer",
+        "Student",
+        "Unemployed",
+    ]
     purpose: str
 
 

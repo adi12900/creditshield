@@ -16,6 +16,9 @@ from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models import education_loan_details as _education_loan_details_models  # noqa: F401
+from app.models import gold_loan_details as _gold_loan_details_models  # noqa: F401
+from app.models import home_loan_details as _home_loan_details_models  # noqa: F401
 from app.models import borrower as _borrower_models  # noqa: F401
 from app.models import user as _user_models  # noqa: F401
 from app.services.risk.setu_aa_service import setu_aa_service

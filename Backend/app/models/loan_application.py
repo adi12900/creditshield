@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -30,4 +30,23 @@ class LoanApplication(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    education_details = relationship(
+        "EducationLoanDetails",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    gold_details = relationship(
+        "GoldLoanDetails",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    home_details = relationship(
+        "HomeLoanDetails",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
