@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
+from app.core.database import SessionLocal
+from app.models.loan_application import LoanApplication
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 
 
@@ -138,13 +141,82 @@ class WorkflowService:
             )
         ]
 
+        self._allowed_stages = {
+            "Lead",
+            "Submitted",
+            "Documents Pending",
+            "KYC",
+            "Underwriting",
+            "Offer Sent",
+            "Disbursed",
+            "Rejected",
+        }
+        self._allowed_risk_grades = {"A+", "A", "B", "C"}
+        self._allowed_kyc_statuses = {"Verified", "Pending"}
+        self._allowed_employment_types = {"Salaried", "Self Employed"}
+
+    def _to_workflow_application(self, row: LoanApplication) -> dict[str, Any]:
+        stage = row.stage if row.stage in self._allowed_stages else "Submitted"
+        risk_grade = row.risk_grade if row.risk_grade in self._allowed_risk_grades else "B"
+        kyc_status = row.kyc_status if row.kyc_status in self._allowed_kyc_statuses else "Pending"
+        employment_type = row.employment_type if row.employment_type in self._allowed_employment_types else "Salaried"
+        loan_amount = float(row.loan_amount if isinstance(row.loan_amount, Decimal) else row.loan_amount or 0)
+
+        return {
+            "arn": row.arn,
+            "borrower_name": row.borrower_name,
+            "loan_amount": loan_amount,
+            "stage": stage,
+            "risk_grade": risk_grade,
+            "credit_score": int(row.credit_score or 700),
+            "kyc_status": kyc_status,
+            "employment_type": employment_type,
+            "purpose": row.purpose or "General Purpose",
+        }
+
+    def _update_application_fields(self, arn: str, **fields: Any) -> bool:
+        try:
+            with SessionLocal() as db:
+                row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if not row:
+                    return False
+                for field, value in fields.items():
+                    if hasattr(row, field):
+                        setattr(row, field, value)
+                db.add(row)
+                db.commit()
+                return True
+        except Exception:
+            return False
+
     def _get_application(self, arn: str) -> dict[str, Any]:
+        try:
+            with SessionLocal() as db:
+                row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if row:
+                    return self._to_workflow_application(row)
+        except Exception:
+            # Fallback to in-memory dataset when DB is unavailable.
+            pass
+
         app = self._applications.get(arn)
         if not app:
             raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
         return app
 
     def list_applications(self, stage: str | None = None) -> list[dict[str, Any]]:
+        try:
+            with SessionLocal() as db:
+                query = db.query(LoanApplication)
+                if stage:
+                    query = query.filter(LoanApplication.stage == stage)
+                rows = query.order_by(LoanApplication.id.asc()).all()
+                if rows:
+                    return [self._to_workflow_application(row) for row in rows]
+        except Exception:
+            # Fallback to in-memory dataset when DB is unavailable.
+            pass
+
         applications = list(self._applications.values())
         if stage:
             applications = [app for app in applications if app["stage"] == stage]
@@ -154,7 +226,7 @@ class WorkflowService:
         return self._get_application(arn)
 
     def role_dashboard(self, role: str) -> dict[str, Any]:
-        apps = list(self._applications.values())
+        apps = self.list_applications()
         if role == "loan_officer":
             return {
                 "role": role,
@@ -234,7 +306,9 @@ class WorkflowService:
     def move_stage(self, arn: str, new_stage: str, action: str, actor: str) -> dict[str, Any]:
         app = self._get_application(arn)
         previous = app["stage"]
-        app["stage"] = new_stage
+        updated_db = self._update_application_fields(arn, stage=new_stage)
+        if not updated_db:
+            app["stage"] = new_stage
         self.add_audit_log(
             user=actor,
             action=action,
@@ -242,7 +316,7 @@ class WorkflowService:
             details=f"Stage moved from {previous} to {new_stage}",
             risk="Low",
         )
-        return app
+        return self._get_application(arn)
 
     def recalculate_ratios(
         self,
@@ -273,12 +347,14 @@ class WorkflowService:
         return payload
 
     def generate_offer(self, arn: str, loan_amount: float, tenure_months: int, interest_rate: float) -> dict[str, Any]:
-        app = self._get_application(arn)
+        self._get_application(arn)
         monthly_rate = interest_rate / 12 / 100
         emi = (loan_amount * monthly_rate * (1 + monthly_rate) ** tenure_months) / (((1 + monthly_rate) ** tenure_months) - 1)
         total_payable = emi * tenure_months
         total_interest = total_payable - loan_amount
-        app["stage"] = "Offer Sent"
+        if not self._update_application_fields(arn, stage="Offer Sent"):
+            app = self._get_application(arn)
+            app["stage"] = "Offer Sent"
         self.add_audit_log(
             user="Underwriter",
             action="Loan Offer Generated",
@@ -322,8 +398,10 @@ class WorkflowService:
         }
 
     def clear_compliance_hold(self, arn: str, reason: str) -> dict[str, Any]:
-        app = self._get_application(arn)
-        app["kyc_status"] = "Verified"
+        self._get_application(arn)
+        if not self._update_application_fields(arn, kyc_status="Verified"):
+            app = self._get_application(arn)
+            app["kyc_status"] = "Verified"
         self.add_audit_log(
             user="Compliance Officer",
             action="Compliance Hold Cleared",
