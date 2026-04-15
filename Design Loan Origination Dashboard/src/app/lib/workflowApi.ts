@@ -157,6 +157,7 @@ export interface LoanOfficerApplicationSummary {
   timeline: Array<{ status: string; date: string; active: boolean }>;
 }
 
+
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
 
 export interface AdminCreateUserRequest {
