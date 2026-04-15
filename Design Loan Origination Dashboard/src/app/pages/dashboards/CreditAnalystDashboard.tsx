@@ -4,28 +4,45 @@ import { StatCard } from '../../components/ui/StatCard';
 import { RiskBadge } from '../../components/ui/RiskBadge';
 import { useNavigate } from 'react-router-dom';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
-import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowApplication } from '../../lib/workflowApi';
 
 type AnalysisQueueItem = {
   arn: string;
   borrowerName: string;
+  borrowerEmail: string;
   loanAmount: number;
   creditScore: number;
   riskGrade: string;
+  stage: string;
   status: 'Completed' | 'In Progress';
 };
+
+function mapToQueueItem(app: WorkflowApplication): AnalysisQueueItem {
+  const inProgressStages = new Set(['Submitted', 'Documents Pending']);
+
+  return {
+    arn: app.arn,
+    borrowerName: app.borrower_name,
+    borrowerEmail: app.borrower_email || '-',
+    loanAmount: app.loan_amount,
+    creditScore: app.credit_score,
+    riskGrade: app.risk_grade,
+    stage: app.stage,
+    status: inProgressStages.has(app.stage) ? 'In Progress' : 'Completed',
+  };
+}
 
 export function CreditAnalystDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
   const [analysisQueue, setAnalysisQueue] = useState<AnalysisQueueItem[]>([]);
   const [inProgressCount, setInProgressCount] = useState(0);
   const [totalAnalyzed, setTotalAnalyzed] = useState(0);
+
+  const selectedApplication = analysisQueue.find((item) => item.arn === selectedApplicationArn) || analysisQueue[0] || null;
 
   const completedCount = analysisQueue.filter((item) => item.status === 'Completed').length;
   const averageCreditScore = analysisQueue.length
@@ -36,25 +53,54 @@ export function CreditAnalystDashboard() {
     : 0;
 
   useEffect(() => {
-    if (!user || user.role !== 'credit_analyst') return;
-    Promise.all([workflowApi.creditAnalystDashboard(user.role), workflowApi.listApplications()])
-      .then(([dashboard, applications]) => {
-        const queue = applications.map((app) => ({
-          arn: app.arn,
-          borrowerName: app.borrower_name,
-          loanAmount: app.loan_amount,
-          creditScore: app.credit_score,
-          riskGrade: app.risk_grade,
-          status: app.current_stage === 'Credit Review' || app.current_stage === 'Documents Pending' ? 'In Progress' : 'Completed',
-        }));
+    if (!user || user.role !== 'credit_analyst') {
+      setAnalysisQueue([]);
+      setTotalAnalyzed(0);
+      setInProgressCount(0);
+      return;
+    }
 
-        const inProgressStat = dashboard?.stats?.find((item) => item.key === 'in_progress');
-        setAnalysisQueue(queue);
-        setTotalAnalyzed(queue.length);
-        setInProgressCount(inProgressStat?.value !== undefined ? Number(inProgressStat.value) : queue.filter((item) => item.status === 'In Progress').length);
-      })
-      .catch(() => undefined);
-  }, [user]);
+    let mounted = true;
+
+    const loadDashboard = () => {
+      Promise.all([workflowApi.creditAnalystDashboard(user.role), workflowApi.listApplications()])
+        .then(([dashboard, applications]) => {
+          if (!mounted) return;
+
+          const queue = applications
+            .map(mapToQueueItem)
+            .sort((a, b) => {
+              if (a.status !== b.status) {
+                return a.status === 'In Progress' ? -1 : 1;
+              }
+              return a.arn.localeCompare(b.arn);
+            });
+
+          const inProgressStat = dashboard?.stats?.find((item) => item.key === 'in_progress');
+          setAnalysisQueue(queue);
+          setTotalAnalyzed(queue.length);
+          setInProgressCount(inProgressStat?.value !== undefined ? Number(inProgressStat.value) : queue.filter((item) => item.status === 'In Progress').length);
+
+          if (!selectedApplicationArn || !queue.some((item) => item.arn === selectedApplicationArn)) {
+            setSelectedApplicationArn(queue[0]?.arn || '');
+          }
+        })
+        .catch(() => {
+          if (!mounted) return;
+          setAnalysisQueue([]);
+          setTotalAnalyzed(0);
+          setInProgressCount(0);
+        });
+    };
+
+    loadDashboard();
+    const refreshTimer = window.setInterval(loadDashboard, 15000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, [user, selectedApplicationArn, setSelectedApplicationArn]);
 
   return (
     <div className="space-y-6">
@@ -89,13 +135,24 @@ export function CreditAnalystDashboard() {
       </div>
 
       <ApplicationSelector
-        selectedArn={selectedApplication.arn}
+        selectedArn={selectedApplication?.arn || ''}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter borrowers to analyze the correct profile in Credit Analyst workbench."
+        applications={analysisQueue.map((item) => ({
+          arn: item.arn,
+          borrowerName: item.borrowerName,
+          email: item.borrowerEmail,
+          stage: item.stage,
+          riskGrade: item.riskGrade as 'A+' | 'A' | 'B' | 'C',
+          loanAmount: item.loanAmount,
+        }))}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Selected Borrower Snapshot</h2>
+        {!selectedApplication ? (
+          <p className="text-sm text-slate-600">No applications are currently available for credit analysis.</p>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-slate-500">Borrower</p>
@@ -114,6 +171,7 @@ export function CreditAnalystDashboard() {
             <p className="font-semibold text-slate-900">₹{selectedApplication.loanAmount.toLocaleString('en-IN')}</p>
           </div>
         </div>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">

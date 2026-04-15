@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import io
+import os
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+import boto3
+import httpx
+import pdfplumber
+from botocore.exceptions import BotoCoreError, ClientError
+from openpyxl import load_workbook
+
 from app.core.database import SessionLocal
+from app.models.document import Document
 from app.models.loan_application import LoanApplication
 from app.models.user import User
+from app.services.s3 import download_bytes_from_s3
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 
 
@@ -111,6 +122,7 @@ class WorkflowService:
 
         self._credit_memos: dict[str, dict[str, Any]] = {}
         self._policy_overrides: dict[str, list[dict[str, Any]]] = {}
+        self._document_ocr_cache: dict[str, dict[str, Any]] = {}
 
         self._reports: list[RegulatoryReport] = [
             RegulatoryReport(
@@ -267,15 +279,299 @@ class WorkflowService:
 
     def get_documents(self, arn: str) -> list[dict[str, Any]]:
         self._get_application(arn)
+
+        try:
+            with SessionLocal() as db:
+                rows = (
+                    db.query(Document)
+                    .join(LoanApplication, LoanApplication.id == Document.application_id)
+                    .filter(LoanApplication.arn == arn)
+                    .order_by(Document.uploaded_at.desc(), Document.id.desc())
+                    .all()
+                )
+
+                return [
+                    {
+                        "id": str(row.id),
+                        "type": row.doc_type,
+                        "status": row.status,
+                        "confidence": int(row.confidence) if row.confidence is not None else None,
+                        "storage_url": row.storage_url,
+                        "uploaded_by_user_id": row.uploaded_by_user_id,
+                        "uploaded_at": row.uploaded_at,
+                    }
+                    for row in rows
+                ]
+        except Exception:
+            # Fallback to in-memory dataset when DB is unavailable.
+            pass
+
         return self._documents.get(arn, [])
 
+    def _normalize_doc_type(self, value: str) -> str:
+        return value.lower().replace(" ", "_").replace("-", "_")
+
+    def _ocr_cache_key(self, arn: str, document_id: str) -> str:
+        return f"{arn}:{document_id}"
+
+    def _download_document_bytes(self, storage_url: str) -> bytes:
+        try:
+            response = httpx.get(storage_url, timeout=20.0, follow_redirects=True)
+            response.raise_for_status()
+            return response.content
+        except Exception:
+            if ".s3." in storage_url:
+                try:
+                    return download_bytes_from_s3(storage_url)
+                except Exception as exc:
+                    raise WorkflowServiceError(f"Unable to download document from storage: {exc}", 502) from exc
+            raise WorkflowServiceError("Unable to download document for OCR extraction", 502)
+
+    def _extract_text_with_textract(self, document_bytes: bytes) -> str:
+        try:
+            client = boto3.client(
+                "textract",
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+                region_name=os.getenv("AWS_REGION") or os.getenv("AWS_REGIONS3") or "ap-south-1",
+            )
+            response = client.detect_document_text(Document={"Bytes": document_bytes})
+            lines = [
+                block.get("Text", "")
+                for block in response.get("Blocks", [])
+                if block.get("BlockType") == "LINE" and block.get("Text")
+            ]
+            return "\n".join(lines).strip()
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code == "SubscriptionRequiredException":
+                # Graceful fallback when Textract is not enabled for this AWS account.
+                return ""
+            raise WorkflowServiceError(f"Textract OCR failed: {exc}", 502) from exc
+        except BotoCoreError as exc:
+            raise WorkflowServiceError(f"Textract OCR failed: {exc}", 502) from exc
+
+    def _build_fallback_ocr_data(self, app: dict[str, Any], doc_type: str) -> dict[str, dict[str, Any]]:
+        borrower_name = str(app.get("borrower_name") or "Not found")
+        return {
+            "Document Type": {"value": doc_type, "confidence": 70},
+            "Borrower": {"value": borrower_name, "confidence": 72},
+            "Extraction Note": {
+                "value": "Primary OCR engine unavailable for this file/account. Parsed basic metadata fallback.",
+                "confidence": 60,
+            },
+        }
+
+    def _extract_text_from_pdf(self, pdf_bytes: bytes) -> str:
+        text_chunks: list[str] = []
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                if text.strip():
+                    text_chunks.append(text)
+
+        return "\n".join(text_chunks).strip()
+
+    def _extract_text_from_xlsx(self, xlsx_bytes: bytes) -> str:
+        workbook = load_workbook(filename=io.BytesIO(xlsx_bytes), data_only=True, read_only=True)
+        values: list[str] = []
+        for sheet in workbook.worksheets:
+            for row in sheet.iter_rows(values_only=True):
+                cells = [str(cell).strip() for cell in row if cell is not None and str(cell).strip()]
+                if cells:
+                    values.append(" ".join(cells))
+        return "\n".join(values).strip()
+
+    def _extract_raw_text(self, storage_url: str) -> str:
+        lower_url = storage_url.lower()
+        file_bytes = self._download_document_bytes(storage_url)
+
+        if lower_url.endswith(".pdf"):
+            pdf_text = self._extract_text_from_pdf(file_bytes)
+            if pdf_text:
+                return pdf_text
+            return self._extract_text_with_textract(file_bytes)
+
+        if lower_url.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff")):
+            return self._extract_text_with_textract(file_bytes)
+
+        if lower_url.endswith(".csv"):
+            return file_bytes.decode("utf-8", errors="ignore")
+
+        if lower_url.endswith(".xlsx"):
+            return self._extract_text_from_xlsx(file_bytes)
+
+        return file_bytes.decode("utf-8", errors="ignore")
+
+    def _extract_by_pattern(self, text: str, pattern: str) -> str | None:
+        match = re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+        if not match:
+            return None
+        value = match.group(1) if match.lastindex else match.group(0)
+        cleaned = re.sub(r"\s+", " ", value).strip()
+        return cleaned or None
+
+    def _field(self, value: str | None, fallback: str, confidence_if_found: int, confidence_if_missing: int = 55) -> dict[str, Any]:
+        if value:
+            return {"value": value, "confidence": confidence_if_found}
+        return {"value": fallback, "confidence": confidence_if_missing}
+
+    def _build_ocr_data_from_text(self, app: dict[str, Any], doc_type: str, raw_text: str) -> dict[str, dict[str, Any]]:
+        normalized = self._normalize_doc_type(doc_type)
+        compact_text = re.sub(r"\s+", " ", raw_text).strip()
+        borrower_name = str(app.get("borrower_name") or "").upper()
+
+        aadhaar = self._extract_by_pattern(compact_text, r"\b(\d{4}\s?\d{4}\s?\d{4})\b")
+        pan = self._extract_by_pattern(compact_text, r"\b([A-Z]{5}\d{4}[A-Z])\b")
+        dob = self._extract_by_pattern(compact_text, r"(?:DOB|Date of Birth)\s*[:\-]?\s*([0-9]{1,2}[\-/][0-9]{1,2}[\-/][0-9]{2,4})")
+        account_no = self._extract_by_pattern(compact_text, r"(?:A\/C|Account)\s*(?:No|Number)?\s*[:\-]?\s*([0-9Xx]{6,20})")
+        ifsc = self._extract_by_pattern(compact_text, r"\b([A-Z]{4}0[A-Z0-9]{6})\b")
+        income = self._extract_by_pattern(compact_text, r"(?:Net\s*Salary|Income|Net\s*Pay)\s*[:\-]?\s*([\u20b9RsINR\.,\s0-9]+)")
+
+        if "aadhaar" in normalized:
+            return {
+                "Aadhaar Number": self._field(aadhaar, "Not found", 96),
+                "Name": self._field(borrower_name or None, "Not found", 90),
+                "DOB": self._field(dob, "Not found", 88),
+            }
+
+        if "pan" in normalized:
+            return {
+                "PAN Number": self._field(pan, "Not found", 97),
+                "Name": self._field(borrower_name or None, "Not found", 90),
+                "DOB": self._field(dob, "Not found", 85),
+            }
+
+        if "bank_statement" in normalized:
+            return {
+                "Account Number": self._field(account_no, "Not found", 90),
+                "IFSC": self._field(ifsc, "Not found", 86),
+                "Borrower": self._field(borrower_name or None, "Not found", 84),
+            }
+
+        if "salary" in normalized or "income_proof" in normalized:
+            return {
+                "Borrower": self._field(borrower_name or None, "Not found", 90),
+                "Net Income": self._field(income, "Not found", 88),
+            }
+
+        snippet = compact_text[:180] + ("..." if len(compact_text) > 180 else "")
+        return {
+            "Document Type": self._field(doc_type, "Not found", 90),
+            "Extracted Text Snippet": self._field(snippet or None, "No OCR text extracted", 80),
+        }
+
+    def extract_document_ocr(self, arn: str, document_id: str) -> dict[str, Any]:
+        app = self._get_application(arn)
+        docs = self.get_documents(arn)
+        target = next((doc for doc in docs if str(doc.get("id")) == str(document_id)), None)
+        if not target:
+            raise WorkflowServiceError(f"Document {document_id} not found", 404)
+
+        storage_url = str(target.get("storage_url") or "").strip()
+        if not storage_url:
+            raise WorkflowServiceError("Document has no storage URL. Upload file before OCR extraction.", 400)
+
+        raw_text = self._extract_raw_text(storage_url)
+        doc_type = str(target.get("type") or "Document")
+        ocr_data = (
+            self._build_ocr_data_from_text(app, doc_type, raw_text)
+            if raw_text.strip()
+            else self._build_fallback_ocr_data(app, doc_type)
+        )
+        extracted_at = datetime.now(tz=timezone.utc)
+
+        confidences = [int(field.get("confidence", 0)) for field in ocr_data.values()]
+        derived_confidence = round(sum(confidences) / len(confidences)) if confidences else None
+
+        try:
+            with SessionLocal() as db:
+                doc_id_int = int(document_id)
+                row = (
+                    db.query(Document)
+                    .join(LoanApplication, LoanApplication.id == Document.application_id)
+                    .filter(LoanApplication.arn == arn, Document.id == doc_id_int)
+                    .first()
+                )
+                if row is not None and derived_confidence is not None:
+                    row.confidence = derived_confidence
+                    db.add(row)
+                    db.commit()
+        except Exception:
+            # Confidence persistence failure should not block OCR response.
+            pass
+
+        response = {
+            "document_id": str(target.get("id")),
+            "arn": arn,
+            "doc_type": doc_type,
+            "ocr_data": ocr_data,
+            "extracted_at": extracted_at,
+        }
+        self._document_ocr_cache[self._ocr_cache_key(arn, str(document_id))] = response
+        return response
+
+    def get_document_ocr(self, arn: str, document_id: str) -> dict[str, Any]:
+        cache_key = self._ocr_cache_key(arn, str(document_id))
+        cached = self._document_ocr_cache.get(cache_key)
+        if cached:
+            return cached
+
+        raise WorkflowServiceError("OCR data not available. Run extraction first.", 404)
+
     def review_document(self, arn: str, document_id: str, decision: str, reason: str | None) -> dict[str, Any]:
+        next_status = "Verified" if decision == "approve" else "Flagged"
+
+        try:
+            with SessionLocal() as db:
+                try:
+                    doc_id_int = int(document_id)
+                except ValueError as exc:
+                    raise WorkflowServiceError(f"Document {document_id} not found", 404) from exc
+
+                target = (
+                    db.query(Document)
+                    .join(LoanApplication, LoanApplication.id == Document.application_id)
+                    .filter(
+                        LoanApplication.arn == arn,
+                        Document.id == doc_id_int,
+                    )
+                    .first()
+                )
+                if target:
+                    target.status = next_status
+                    db.add(target)
+                    db.commit()
+                    db.refresh(target)
+
+                    self.add_audit_log(
+                        user="Loan Officer",
+                        action=f"Document {decision.title()}",
+                        resource=f"{arn}:{document_id}",
+                        details=reason or "No reason provided",
+                        risk="Low" if decision == "approve" else "Medium",
+                    )
+                    return {
+                        "id": str(target.id),
+                        "type": target.doc_type,
+                        "status": target.status,
+                        "confidence": int(target.confidence) if target.confidence is not None else None,
+                        "storage_url": target.storage_url,
+                        "uploaded_by_user_id": target.uploaded_by_user_id,
+                        "uploaded_at": target.uploaded_at,
+                    }
+        except WorkflowServiceError:
+            raise
+        except Exception:
+            # Fallback to in-memory dataset when DB is unavailable.
+            pass
+
         docs = self.get_documents(arn)
         target = next((doc for doc in docs if doc["id"] == document_id), None)
         if not target:
             raise WorkflowServiceError(f"Document {document_id} not found", 404)
 
-        target["status"] = "Verified" if decision == "approve" else "Flagged"
+        target["status"] = next_status
         self.add_audit_log(
             user="Loan Officer",
             action=f"Document {decision.title()}",
@@ -326,7 +622,20 @@ class WorkflowService:
 
     def submit_to_credit_analyst(self, arn: str, *, file_complete: bool, actor: str) -> dict[str, Any]:
         app = self._get_application(arn)
-        if app["stage"] != "Submitted":
+        stage = app["stage"]
+
+        # Idempotent path: if already beyond intake submission, do not fail the action.
+        if stage in {"Documents Pending", "Underwriting", "Offer Sent", "Disbursed"}:
+            self.add_audit_log(
+                user=actor,
+                action="Submit to Credit Analyst (No-op)",
+                resource=arn,
+                details=f"Application already progressed to stage {stage}",
+                risk="Low",
+            )
+            return app
+
+        if stage != "Submitted":
             raise WorkflowServiceError("Application can be submitted to credit analyst only from Submitted stage", 400)
 
         if not file_complete:

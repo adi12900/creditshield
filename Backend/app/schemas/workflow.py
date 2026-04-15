@@ -61,7 +61,23 @@ class DocumentItem(BaseModel):
     id: str
     type: str
     status: Literal["Verified", "Pending OCR", "Flagged"]
+    confidence: int | None = Field(default=None, ge=0, le=100)
+    storage_url: str | None = None
+    uploaded_by_user_id: int | None = None
+    uploaded_at: datetime | None = None
+
+
+class OcrFieldItem(BaseModel):
+    value: str
     confidence: int = Field(ge=0, le=100)
+
+
+class DocumentOcrResponse(BaseModel):
+    document_id: str
+    arn: str
+    doc_type: str
+    ocr_data: dict[str, OcrFieldItem]
+    extracted_at: datetime
 
 
 class DocumentReviewRequest(BaseModel):
