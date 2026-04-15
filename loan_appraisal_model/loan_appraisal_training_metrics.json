@@ -172,5 +172,5 @@
     "vivek_based_user_50.csv"
   ],
   "feature_count": 40,
-  "rules_yaml_path": "../dataset/behavioral_rules_realistic.yaml"
+  "rules_yaml_path": "dataset/behavioral_rules_realistic.yaml"
 }
