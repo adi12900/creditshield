@@ -10,6 +10,7 @@ from app.schemas.workflow import (
     ComplianceActionRequest,
     CreditMemoDraftRequest,
     DashboardResponse,
+    DocumentOcrResponse,
     DocumentItem,
     DocumentReviewRequest,
     GenerateReportRequest,
@@ -116,7 +117,7 @@ def loan_officer_application_summary(arn: str) -> LoanOfficerApplicationSummary:
 @router.get(
     "/loan-officer/documents/{arn}",
     response_model=list[DocumentItem],
-    dependencies=[Depends(require_roles({"loan_officer"}))],
+    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
 )
 def loan_officer_documents(arn: str) -> list[DocumentItem]:
     try:
@@ -127,11 +128,35 @@ def loan_officer_documents(arn: str) -> list[DocumentItem]:
 
 @router.post(
     "/loan-officer/documents/{arn}/review",
-    dependencies=[Depends(require_roles({"loan_officer"}))],
+    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
 )
 def loan_officer_review_document(arn: str, payload: DocumentReviewRequest) -> dict:
     try:
         return workflow_service.review_document(arn, payload.document_id, payload.decision, payload.reason)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.get(
+    "/loan-officer/documents/{arn}/{document_id}/ocr",
+    response_model=DocumentOcrResponse,
+    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
+)
+def loan_officer_document_ocr(arn: str, document_id: str) -> DocumentOcrResponse:
+    try:
+        return DocumentOcrResponse(**workflow_service.get_document_ocr(arn, document_id))
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/loan-officer/documents/{arn}/{document_id}/ocr/extract",
+    response_model=DocumentOcrResponse,
+    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
+)
+def loan_officer_extract_document_ocr(arn: str, document_id: str) -> DocumentOcrResponse:
+    try:
+        return DocumentOcrResponse(**workflow_service.extract_document_ocr(arn, document_id))
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 

@@ -2,6 +2,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:800
 const AUTH_TOKEN_KEY = 'creditshield_access_token';
 
 export type WorkflowRole =
+  | 'system_admin'
   | 'loan_officer'
   | 'credit_analyst'
   | 'underwriter'
@@ -115,7 +116,10 @@ export interface WorkflowDocumentItem {
   id: string;
   type: string;
   status: 'Verified' | 'Pending OCR' | 'Flagged';
-  confidence: number;
+  confidence: number | null;
+  storage_url?: string | null;
+  uploaded_by_user_id?: number | null;
+  uploaded_at?: string | null;
 }
 
 export interface WorkflowCommunicationItem {
@@ -124,6 +128,19 @@ export interface WorkflowCommunicationItem {
   subject: string;
   message: string;
   sent_at: string;
+}
+
+export interface WorkflowOcrField {
+  value: string;
+  confidence: number;
+}
+
+export interface WorkflowDocumentOcrResponse {
+  document_id: string;
+  arn: string;
+  doc_type: string;
+  ocr_data: Record<string, WorkflowOcrField>;
+  extracted_at: string;
 }
 
 export interface LoanOfficerChecklistItem {
@@ -285,6 +302,12 @@ export const workflowApi = {
   getAiScore: (arn: string, role: WorkflowRole) => request<WorkflowAiScore>(`/api/v1/workflow/credit-analyst/ai-score/${arn}`, {}, role),
   getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) => request(`/api/v1/workflow/underwriter/decision-engine/${arn}`, {}, role),
   getDocuments: (arn: string, role: WorkflowRole) => request<WorkflowDocumentItem[]>(`/api/v1/workflow/loan-officer/documents/${arn}`, {}, role),
+  getDocumentOcr: (arn: string, documentId: string, role: WorkflowRole) =>
+    request<WorkflowDocumentOcrResponse>(`/api/v1/workflow/loan-officer/documents/${arn}/${documentId}/ocr`, {}, role),
+  extractDocumentOcr: (arn: string, documentId: string, role: WorkflowRole) =>
+    request<WorkflowDocumentOcrResponse>(`/api/v1/workflow/loan-officer/documents/${arn}/${documentId}/ocr/extract`, {
+      method: 'POST',
+    }, role),
   reviewDocument: (arn: string, documentId: string, decision: 'approve' | 'reject', role: WorkflowRole, reason?: string) =>
     request<WorkflowDocumentItem>(`/api/v1/workflow/loan-officer/documents/${arn}/review`, {
       method: 'POST',

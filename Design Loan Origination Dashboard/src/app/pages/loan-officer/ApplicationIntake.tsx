@@ -47,14 +47,20 @@ export function ApplicationIntakePage() {
   }
 
   const canSubmit = selectedApplication.stage === 'Submitted';
+  const alreadySubmittedToCreditAnalyst = ['Documents Pending', 'Underwriting', 'Offer Sent', 'Disbursed'].includes(selectedApplication.stage);
   const hasValidationData = requiredFields.length > 0;
   const hasPendingComplianceItems = requiredFields.some((field) => field.status !== 'Compliant');
   const isApplicantFileComplete = isFileCompleteChecked && hasValidationData && !hasPendingComplianceItems;
   const canSubmitToCreditAnalyst = canSubmit && isApplicantFileComplete && !isLoading;
 
   const handleSubmitIntake = async () => {
-    if (!user || user.role !== 'loan_officer') return;
+    if (!user || (user.role !== 'loan_officer' && user.role !== 'system_admin')) return;
     try {
+      if (alreadySubmittedToCreditAnalyst) {
+        window.alert('Application is already routed to Credit Analyst workflow.');
+        return;
+      }
+
       if (!isFileCompleteChecked) {
         window.alert('Please confirm applicant file is complete before submission.');
         return;
@@ -162,11 +168,11 @@ export function ApplicationIntakePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
-          disabled={!canSubmitToCreditAnalyst}
+          disabled={alreadySubmittedToCreditAnalyst || !canSubmitToCreditAnalyst}
           onClick={handleSubmitIntake}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          Submit To Credit Analyst
+          {alreadySubmittedToCreditAnalyst ? 'Already Routed To Credit Analyst' : 'Submit To Credit Analyst'}
         </button>
         <button className="rounded-lg border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
           <span className="inline-flex items-center gap-2">
@@ -197,8 +203,11 @@ export function ApplicationIntakePage() {
         <p className="text-sm text-slate-700">
           Intake summary: {selectedApplication.borrowerName}'s application has {requiredFields.filter((field) => field.status !== 'Compliant').length} RBI compliance item(s) requiring action.
         </p>
-        {!canSubmit && (
+        {!canSubmit && !alreadySubmittedToCreditAnalyst && (
           <p className="mt-2 text-xs text-red-700">Application can be submitted only from Submitted stage.</p>
+        )}
+        {alreadySubmittedToCreditAnalyst && (
+          <p className="mt-2 text-xs text-green-700">Application is already routed beyond intake submission stage.</p>
         )}
         {canSubmit && !isFileCompleteChecked && (
           <p className="mt-2 text-xs text-amber-700">Mark applicant file as complete to enable submission.</p>
