@@ -1,32 +1,34 @@
-import { ArrowLeft, Download, Check, X, AlertTriangle, Eye, FileText, CheckCircle, Clock, Shield } from 'lucide-react';
+import { ArrowLeft, Download, Check, X, Eye, FileText, CheckCircle, Clock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
-import { getLoanPolicy, getRequiredDocumentsForLoanType } from '../../lib/rbiPolicy';
 import { workflowApi, type WorkflowDocumentItem } from '../../lib/workflowApi';
+import { useLoanOfficerApplications } from '../../hooks/useLoanOfficerApplications';
 
 export function DocumentReviewPage() {
   const navigate = useNavigate();
-  const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
-  const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const selectedPolicy = getLoanPolicy(selectedApplication.loanType);
-  const requiredDocuments = getRequiredDocumentsForLoanType(selectedApplication.loanType);
+  const {
+    selectedApplication,
+    applications,
+    setSelectedApplicationArn,
+    isLoading,
+    errorMessage,
+  } = useLoanOfficerApplications();
   const [documents, setDocuments] = useState<WorkflowDocumentItem[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<WorkflowDocumentItem | null>(null);
   const user = useStore((state) => state.user);
+  const selectedArn = selectedApplication?.arn ?? null;
 
   useEffect(() => {
-    if (!user || user.role !== 'loan_officer') {
+    if (!selectedArn || !user || user.role !== 'loan_officer') {
       setDocuments([]);
       setSelectedDoc(null);
       return;
     }
 
     workflowApi
-      .getDocuments(selectedApplication.arn, user.role)
+      .getDocuments(selectedArn, user.role)
       .then((rows) => {
         setDocuments(rows);
         setSelectedDoc(rows[0] ?? null);
@@ -35,7 +37,15 @@ export function DocumentReviewPage() {
         setDocuments([]);
         setSelectedDoc(null);
       });
-  }, [selectedApplication.arn, user]);
+  }, [selectedArn, user]);
+
+  if (!selectedApplication) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        No applications available for document review.
+      </div>
+    );
+  }
 
   const handleReview = async (decision: 'approve' | 'reject') => {
     if (!user || user.role !== 'loan_officer') return;
@@ -62,9 +72,7 @@ export function DocumentReviewPage() {
   const avgConfidence = Math.round(
     documents.length > 0 ? documents.reduce((sum, doc) => sum + (doc.confidence || 0), 0) / documents.length : 0
   );
-  const matchedRequired = requiredDocuments.filter((requiredDoc) =>
-    documents.some((doc) => doc.type.toLowerCase().includes(requiredDoc.toLowerCase()))
-  ).length;
+  const matchedRequired = documents.filter((doc) => doc.status === 'Verified').length;
 
   return (
     <div className="space-y-6">
@@ -89,12 +97,25 @@ export function DocumentReviewPage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter borrowers to review their document set."
+        applications={applications}
       />
 
+      {isLoading ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading documents...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <p className="text-xs text-slate-500 mb-1">Loan Product / RBI Chapter</p>
+        <p className="text-xs text-slate-500 mb-1">Loan Product</p>
         <p className="font-semibold text-slate-900">
-          {selectedPolicy?.label} - {selectedPolicy?.rbiChapter}
+          {selectedApplication.loanType.replace(/_/g, ' ')}
         </p>
       </div>
 
@@ -140,7 +161,7 @@ export function DocumentReviewPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">RBI Mandatory Coverage</p>
-              <p className="text-xl font-bold text-slate-900">{matchedRequired}/{requiredDocuments.length}</p>
+              <p className="text-xl font-bold text-slate-900">{matchedRequired}/{totalDocs}</p>
             </div>
           </div>
         </div>
@@ -252,13 +273,11 @@ export function DocumentReviewPage() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-6">
             <h3 className="font-semibold text-slate-900 mb-4">RBI Mandatory Documents</h3>
             <div className="space-y-2">
-              {requiredDocuments.map((requiredDoc) => {
-                const isAvailable = documents.some((doc) =>
-                  doc.type.toLowerCase().includes(requiredDoc.toLowerCase())
-                );
+              {documents.map((doc) => {
+                const isAvailable = doc.status === 'Verified';
                 return (
-                  <div key={requiredDoc} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700">{requiredDoc}</span>
+                  <div key={doc.id} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-700">{doc.type}</span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         isAvailable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

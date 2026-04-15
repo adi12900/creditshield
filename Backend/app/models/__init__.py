@@ -6,6 +6,7 @@ from app.models.education_loan_details import EducationLoanDetails
 from app.models.gold_loan_details import GoldLoanDetails
 from app.models.home_loan_details import HomeLoanDetails
 from app.models.loan_application import LoanApplication
+from app.models.loan_appraisal_record import LoanAppraisalRecord
 
 __all__ = [
 	"User",
@@ -16,5 +17,6 @@ __all__ = [
 	"GoldLoanDetails",
 	"HomeLoanDetails",
 	"LoanApplication",
+	"LoanAppraisalRecord",
 ]
 

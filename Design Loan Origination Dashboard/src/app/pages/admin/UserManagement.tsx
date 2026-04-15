@@ -1,5 +1,5 @@
 import { UserPlus, Shield, Search, Edit, Users, Activity, BadgeCheck } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -12,154 +12,7 @@ import {
 } from 'recharts';
 import { workflowApi, type AdminUserRole } from '../../lib/workflowApi';
 
-const users = [
-  {
-    id: 1,
-    name: 'Vikram Singh',
-    email: 'vikram.singh@lendco.com',
-    role: 'Loan Officer',
-    status: 'Active',
-    lastLogin: '2026-04-10 14:32',
-    loansProcessed: 47,
-  },
-  {
-    id: 2,
-    name: 'Priya Sharma',
-    email: 'priya.sharma@lendco.com',
-    role: 'Credit Analyst',
-    status: 'Active',
-    lastLogin: '2026-04-10 13:15',
-    loansProcessed: 63,
-  },
-  {
-    id: 3,
-    name: 'Rajesh Kumar',
-    email: 'rajesh.kumar@lendco.com',
-    role: 'Underwriter',
-    status: 'Active',
-    lastLogin: '2026-04-10 11:45',
-    loansProcessed: 89,
-  },
-  {
-    id: 4,
-    name: 'Meera Patel',
-    email: 'meera.patel@lendco.com',
-    role: 'Compliance Officer',
-    status: 'Active',
-    lastLogin: '2026-04-09 16:20',
-    loansProcessed: 34,
-  },
-  {
-    id: 5,
-    name: 'Amit Desai',
-    email: 'amit.desai@lendco.com',
-    role: 'Operations Team',
-    status: 'Inactive',
-    lastLogin: '2026-04-01 09:15',
-    loansProcessed: 28,
-  },
-  {
-    id: 6,
-    name: 'Neha Gupta',
-    email: 'neha.gupta@lendco.com',
-    role: 'Loan Officer',
-    status: 'Active',
-    lastLogin: '2026-04-11 09:08',
-    loansProcessed: 52,
-  },
-  {
-    id: 7,
-    name: 'Arjun Reddy',
-    email: 'arjun.reddy@lendco.com',
-    role: 'Credit Analyst',
-    status: 'Active',
-    lastLogin: '2026-04-10 18:42',
-    loansProcessed: 61,
-  },
-  {
-    id: 8,
-    name: 'Sanjay Mehta',
-    email: 'sanjay.mehta@lendco.com',
-    role: 'Underwriter',
-    status: 'Active',
-    lastLogin: '2026-04-11 10:20',
-    loansProcessed: 74,
-  },
-  {
-    id: 9,
-    name: 'Kavita Iyer',
-    email: 'kavita.iyer@lendco.com',
-    role: 'Compliance Officer',
-    status: 'Active',
-    lastLogin: '2026-04-10 15:12',
-    loansProcessed: 29,
-  },
-  {
-    id: 10,
-    name: 'Rahul Verma',
-    email: 'rahul.verma@lendco.com',
-    role: 'Operations Team',
-    status: 'Active',
-    lastLogin: '2026-04-11 08:55',
-    loansProcessed: 46,
-  },
-  {
-    id: 11,
-    name: 'Pooja Desai',
-    email: 'pooja.desai@lendco.com',
-    role: 'System Admin',
-    status: 'Active',
-    lastLogin: '2026-04-11 07:40',
-    loansProcessed: 81,
-  },
-  {
-    id: 12,
-    name: 'Anil Kumar',
-    email: 'anil.kumar@lendco.com',
-    role: 'Loan Officer',
-    status: 'Active',
-    lastLogin: '2026-04-10 13:05',
-    loansProcessed: 38,
-  },
-  {
-    id: 13,
-    name: 'Lakshmi Nair',
-    email: 'lakshmi.nair@lendco.com',
-    role: 'Credit Analyst',
-    status: 'Inactive',
-    lastLogin: '2026-04-02 17:20',
-    loansProcessed: 55,
-  },
-  {
-    id: 14,
-    name: 'Karthik Menon',
-    email: 'karthik.menon@lendco.com',
-    role: 'Underwriter',
-    status: 'Active',
-    lastLogin: '2026-04-11 11:12',
-    loansProcessed: 68,
-  },
-  {
-    id: 15,
-    name: 'Sneha Joshi',
-    email: 'sneha.joshi@lendco.com',
-    role: 'System Admin',
-    status: 'Active',
-    lastLogin: '2026-04-11 10:02',
-    loansProcessed: 93,
-  },
-];
-
-const roleData = [
-  { role: 'Loan Officer', count: users.filter((user) => user.role === 'Loan Officer').length },
-  { role: 'Credit Analyst', count: users.filter((user) => user.role === 'Credit Analyst').length },
-  { role: 'Underwriter', count: users.filter((user) => user.role === 'Underwriter').length },
-  { role: 'Compliance', count: users.filter((user) => user.role === 'Compliance Officer').length },
-  { role: 'Operations', count: users.filter((user) => user.role === 'Operations Team').length },
-  { role: 'Admin', count: users.filter((user) => user.role === 'System Admin').length },
-];
-
-const chartColors = ['#00A86B', '#1A4A7A', '#0F766E', '#FD7E14', '#64748B', '#0A2540'];
+const chartColors = ['#00A86B', '#1A4A7A', '#0F766E', '#FD7E14'];
 
 type UiUser = {
   id: number;
@@ -179,19 +32,61 @@ const apiRoleToLabel: Record<AdminUserRole, string> = {
 };
 
 export function UserManagementPage() {
-  const [managedUsers, setManagedUsers] = useState<UiUser[]>(users);
+  const [managedUsers, setManagedUsers] = useState<UiUser[]>([]);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<AdminUserRole>('loan_officer');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadUsers = async () => {
+      setIsLoading(true);
+      try {
+        const users = await workflowApi.listUsers();
+        if (!mounted) {
+          return;
+        }
+        setManagedUsers(
+          users.map((user) => ({
+            id: user.id,
+            name: user.full_name,
+            email: user.email,
+            role: apiRoleToLabel[user.role],
+            status: user.is_active ? 'Active' : 'Inactive',
+            lastLogin: '-',
+            loansProcessed: 0,
+          }))
+        );
+      } catch (error) {
+        if (mounted) {
+          setErrorMessage(error instanceof Error ? error.message : 'Failed to load users');
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const activeUsers = managedUsers.filter((user) => user.status === 'Active').length;
   const inactiveUsers = managedUsers.length - activeUsers;
-  const averageLoans = Math.round(managedUsers.reduce((sum, user) => sum + user.loansProcessed, 0) / managedUsers.length);
+  const averageLoans = managedUsers.length > 0
+    ? Math.round(managedUsers.reduce((sum, user) => sum + user.loansProcessed, 0) / managedUsers.length)
+    : 0;
 
   const roleData = useMemo(
     () => [
@@ -199,8 +94,6 @@ export function UserManagementPage() {
       { role: 'Credit Analyst', count: managedUsers.filter((user) => user.role === 'Credit Analyst').length },
       { role: 'Underwriter', count: managedUsers.filter((user) => user.role === 'Underwriter').length },
       { role: 'Compliance', count: managedUsers.filter((user) => user.role === 'Compliance Officer').length },
-      { role: 'Operations', count: managedUsers.filter((user) => user.role === 'Operations Team').length },
-      { role: 'Admin', count: managedUsers.filter((user) => user.role === 'System Admin').length },
     ],
     [managedUsers]
   );
@@ -267,7 +160,7 @@ export function UserManagementPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Total Users</p>
-          <p className="text-2xl font-bold text-slate-900">{users.length}</p>
+          <p className="text-2xl font-bold text-slate-900">{managedUsers.length}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Active Users</p>
@@ -282,6 +175,18 @@ export function UserManagementPage() {
           <p className="text-2xl font-bold text-green-600">{averageLoans}</p>
         </div>
       </div>
+
+      {isLoading ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading users...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -327,7 +232,7 @@ export function UserManagementPage() {
           </div>
           <div className="mt-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
             <Users className="inline-block w-4 h-4 mr-2" />
-            {managedUsers.length} users shown in the frontend with complete role coverage.
+            {managedUsers.length} users are loaded from backend API.
           </div>
         </div>
       </div>
@@ -348,8 +253,6 @@ export function UserManagementPage() {
             <option>Credit Analyst</option>
             <option>Underwriter</option>
             <option>Compliance Officer</option>
-            <option>Operations Team</option>
-            <option>System Admin</option>
           </select>
           <select className="px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600">
             <option>All Status</option>

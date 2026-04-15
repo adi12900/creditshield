@@ -1,17 +1,40 @@
 import { BadgeCheck, Filter, PhoneCall, UserPlus2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
-import { getLoanApplicationByArn, getLoanApplications } from '../../data/loanApplications';
 import { useStore } from '../../store';
-import { getRBIFlowGate } from '../../lib/rbiCompliance';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type LoanOfficerChecklistItem } from '../../lib/workflowApi';
+import { useLoanOfficerApplications } from '../../hooks/useLoanOfficerApplications';
 
 export function LeadWorkbenchPage() {
   const user = useStore((state) => state.user);
-  const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
-  const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const intakeGate = getRBIFlowGate(selectedApplication, 'intake');
-  const loanApplications = getLoanApplications();
+  const {
+    selectedApplication,
+    applications: loanApplications,
+    setSelectedApplicationArn,
+    isLoading,
+    errorMessage,
+  } = useLoanOfficerApplications();
+  const [checklist, setChecklist] = useState<LoanOfficerChecklistItem[]>([]);
+
+  useEffect(() => {
+    if (!selectedApplication || !user || (user.role !== 'loan_officer' && user.role !== 'system_admin')) {
+      setChecklist([]);
+      return;
+    }
+
+    workflowApi
+      .getLoanOfficerPrequalificationChecklist(selectedApplication.arn, 'loan_officer')
+      .then((rows) => setChecklist(rows))
+      .catch(() => setChecklist([]));
+  }, [selectedApplication, user]);
+
+  if (!selectedApplication) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        No applications available for Loan Officer view.
+      </div>
+    );
+  }
 
   const leads = loanApplications.filter((application) => application.stage === 'Lead');
   const qualifiedLeads = leads.filter((application) => application.riskGrade === 'A+' || application.riskGrade === 'A').length;
@@ -39,7 +62,20 @@ export function LeadWorkbenchPage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter incoming leads before moving them to formal application intake."
+        applications={loanApplications}
       />
+
+      {isLoading ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading lead workbench...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -56,22 +92,17 @@ export function LeadWorkbenchPage() {
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <p className="text-xs text-slate-500">Lead Source</p>
-          <p className="text-xl font-semibold text-slate-900">Digital</p>
+          <p className="text-xl font-semibold text-slate-900">{selectedApplication.loanType.replace(/_/g, ' ')}</p>
         </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Pre-Qualification Checklist</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            'Income band captured',
-            'Employment type captured',
-            'Location eligibility validated',
-            'Product fit validated',
-          ].map((item) => (
-            <div key={item} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+          {checklist.map((entry) => (
+            <div key={entry.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
               <BadgeCheck className="w-4 h-4 text-green-600" />
-              <p className="text-sm text-slate-700">{item}</p>
+              <p className="text-sm text-slate-700">{entry.item}</p>
             </div>
           ))}
         </div>
@@ -79,7 +110,7 @@ export function LeadWorkbenchPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
-          disabled={!intakeGate.canProceed}
+          disabled={selectedApplication.stage !== 'Lead'}
           onClick={handleMoveToIntake}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
@@ -103,8 +134,8 @@ export function LeadWorkbenchPage() {
         <p className="text-sm text-slate-700">
           Active lead profile: {selectedApplication.borrowerName} is currently in {selectedApplication.stage} stage and can be assigned to the next application intake queue.
         </p>
-        {!intakeGate.canProceed && (
-          <p className="mt-2 text-xs text-red-700">{intakeGate.message}</p>
+        {selectedApplication.stage !== 'Lead' && (
+          <p className="mt-2 text-xs text-red-700">Lead can be moved to intake only from Lead stage.</p>
         )}
         <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
           <UserPlus2 className="w-3.5 h-3.5" />

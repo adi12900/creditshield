@@ -21,13 +21,13 @@ import {
 } from 'recharts';
 import { KanbanBoard } from '../../components/ui/KanbanBoard';
 import { StatCard } from '../../components/ui/StatCard';
-import { getLoanApplications } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { useLoanOfficerApplications } from '../../hooks/useLoanOfficerApplications';
 
 export function LoanOfficerDashboard() {
   const navigate = useNavigate();
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
-  const loanApplications = getLoanApplications();
+  const { applications: loanApplications, isLoading, errorMessage } = useLoanOfficerApplications();
   const [loanTypeFilter, setLoanTypeFilter] = useState('all');
   const [riskGradeFilter, setRiskGradeFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
@@ -120,6 +120,18 @@ export function LoanOfficerDashboard() {
           subtitle={`${disbursedCount} disbursed out of ${filteredApplications.length}`}
         />
       </div>
+
+      {isLoading ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Loading loan officer pipeline...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">

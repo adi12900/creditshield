@@ -61,13 +61,18 @@ export interface LoginResponse {
 export interface WorkflowApplication {
   arn: string;
   borrower_name: string;
+  borrower_email?: string | null;
+  borrower_phone?: string | null;
   loan_amount: number;
+  loan_type?: string;
   stage: string;
   risk_grade: 'A+' | 'A' | 'B' | 'C';
   credit_score: number;
   kyc_status: 'Verified' | 'Pending';
   employment_type: 'Salaried' | 'Self Employed';
   purpose: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface WorkflowDashboardResponse {
@@ -121,6 +126,37 @@ export interface WorkflowCommunicationItem {
   sent_at: string;
 }
 
+export interface LoanOfficerChecklistItem {
+  id: string;
+  item: string;
+  done: boolean;
+}
+
+export interface CommunicationTemplateItem {
+  id: string;
+  name: string;
+  category: string;
+  channel: 'email' | 'sms' | 'call';
+  subject: string;
+  body: string;
+}
+
+export interface LoanOfficerApplicationSummary {
+  arn: string;
+  application_status: string;
+  active_stage: string;
+  processing_time_days: number;
+  documents_verified: number;
+  documents_total: number;
+  communications_total: number;
+  email_count: number;
+  sms_count: number;
+  call_count: number;
+  risk_score: number;
+  risk_confidence_percent: number;
+  timeline: Array<{ status: string; date: string; active: boolean }>;
+}
+
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
 
 export interface AdminCreateUserRequest {
@@ -141,6 +177,75 @@ export interface AdminUserResponse {
   updated_at: string;
 }
 
+export interface SystemAdminMetric {
+  key: string;
+  label: string;
+  value: number | string;
+  subtitle?: string | null;
+}
+
+export interface SystemIntegrationHealth {
+  name: string;
+  status: 'Healthy' | 'Degraded' | 'Down';
+  latency_ms: number;
+}
+
+export interface SystemRoleActivity {
+  role: string;
+  active_users: number;
+  total_users: number;
+}
+
+export interface SystemEventItem {
+  timestamp: string;
+  event: string;
+  user: string;
+}
+
+export interface SystemAdminDashboardResponse {
+  metrics: SystemAdminMetric[];
+  integrations: SystemIntegrationHealth[];
+  role_activity: SystemRoleActivity[];
+  recent_events: SystemEventItem[];
+}
+
+export interface WorkflowDesignerStageItem {
+  id: number;
+  name: string;
+  assigned_role: string;
+  avg_duration_minutes: number;
+  status: 'Active' | 'Inactive';
+}
+
+export interface WorkflowConditionItem {
+  id: string;
+  condition: string;
+  outcome: string;
+}
+
+export interface WorkflowDesignerResponse {
+  metrics: SystemAdminMetric[];
+  workflow_name: string;
+  stages: WorkflowDesignerStageItem[];
+  conditions: WorkflowConditionItem[];
+}
+
+export interface RuleEngineRuleItem {
+  id: number;
+  name: string;
+  category: string;
+  condition: string;
+  action: string;
+  severity: 'High' | 'Medium' | 'Low';
+  status: 'Active' | 'Inactive';
+  last_modified: string;
+}
+
+export interface RuleEngineResponse {
+  metrics: SystemAdminMetric[];
+  rules: RuleEngineRuleItem[];
+}
+
 export const workflowApi = {
   login: (username: string, password: string) =>
     request<LoginResponse>('/api/v1/auth/login', {
@@ -154,10 +259,24 @@ export const workflowApi = {
       body: JSON.stringify(payload),
     }),
 
+  listUsers: () => request<AdminUserResponse[]>('/api/v1/users'),
+
+  systemAdminDashboard: () => request<SystemAdminDashboardResponse>('/api/v1/workflow/system-admin/dashboard'),
+  systemAdminWorkflowDesigner: () => request<WorkflowDesignerResponse>('/api/v1/workflow/system-admin/workflow-designer'),
+  systemAdminRuleEngine: () => request<RuleEngineResponse>('/api/v1/workflow/system-admin/rule-engine'),
+
   listApplications: () => request<WorkflowApplication[]>('/api/v1/workflow/applications'),
   getApplication: (arn: string) => request<WorkflowApplication>(`/api/v1/workflow/applications/${arn}`),
 
   loanOfficerDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/loan-officer/dashboard', {}, role),
+  getLoanOfficerPrequalificationChecklist: (arn: string, role: WorkflowRole) =>
+    request<LoanOfficerChecklistItem[]>(`/api/v1/workflow/loan-officer/pre-qualification/${arn}`, {}, role),
+  getLoanOfficerEsignChecklist: (arn: string, role: WorkflowRole) =>
+    request<LoanOfficerChecklistItem[]>(`/api/v1/workflow/loan-officer/esign-checklist/${arn}`, {}, role),
+  getCommunicationTemplates: (role: WorkflowRole) =>
+    request<CommunicationTemplateItem[]>('/api/v1/workflow/loan-officer/communication-templates', {}, role),
+  getLoanOfficerApplicationSummary: (arn: string, role: WorkflowRole) =>
+    request<LoanOfficerApplicationSummary>(`/api/v1/workflow/loan-officer/application-summary/${arn}`, {}, role),
   creditAnalystDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/credit-analyst/dashboard', {}, role),
   underwriterDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/underwriter/dashboard', {}, role),
   complianceDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/compliance/dashboard', {}, role),
@@ -178,8 +297,11 @@ export const workflowApi = {
     }, role),
   moveLeadToIntake: (arn: string, role: WorkflowRole) =>
     request(`/api/v1/workflow/loan-officer/leads/${arn}/move-to-intake`, { method: 'POST' }, role),
-  submitIntake: (arn: string, role: WorkflowRole) =>
-    request(`/api/v1/workflow/loan-officer/intake/${arn}/submit`, { method: 'POST' }, role),
+  submitIntake: (arn: string, role: WorkflowRole, payload: { file_complete: boolean }) =>
+    request(`/api/v1/workflow/loan-officer/intake/${arn}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, role),
   sendEsignLink: (arn: string, role: WorkflowRole) =>
     request(`/api/v1/workflow/loan-officer/esign/${arn}/send-link`, { method: 'POST' }, role),
 

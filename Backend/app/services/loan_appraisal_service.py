@@ -38,6 +38,20 @@ class LoanAppraisalService:
     def _normalize_col(self, value: str) -> str:
         return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
 
+    def _make_unique_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        seen: dict[str, int] = {}
+        unique_cols: list[str] = []
+        for col in [str(c).strip() for c in df.columns]:
+            base = col or "col"
+            count = seen.get(base, 0)
+            if count == 0:
+                unique_cols.append(base)
+            else:
+                unique_cols.append(f"{base}_{count}")
+            seen[base] = count + 1
+        df.columns = unique_cols
+        return df
+
     def _find_col(self, df: pd.DataFrame, logical_name: str) -> str | None:
         alias_set = {self._normalize_col(a) for a in self._column_aliases.get(logical_name, ())}
         for c in df.columns:
@@ -100,6 +114,8 @@ class LoanAppraisalService:
                         frame = pd.DataFrame(cleaned_rows[1:], columns=header_candidate)
                     else:
                         frame = pd.DataFrame(cleaned_rows)
+                    # Duplicate column names from PDF headers break concat/reindex in pandas.
+                    frame = self._make_unique_columns(frame)
                     frames.append(frame)
 
         if not frames:
@@ -107,11 +123,12 @@ class LoanAppraisalService:
 
         merged = pd.concat(frames, ignore_index=True)
         merged.columns = [str(c).strip() if str(c).strip() else f"col_{idx}" for idx, c in enumerate(merged.columns)]
-        return merged
+        return self._make_unique_columns(merged)
 
     def _normalize_statement_df(self, df: pd.DataFrame) -> pd.DataFrame:
         raw = df.copy()
         raw.columns = [str(c).strip() for c in raw.columns]
+        raw = self._make_unique_columns(raw)
 
         if all(str(c).startswith("Unnamed") for c in raw.columns) and raw.shape[1] >= 7:
             raw.columns = [f"col_{i}" for i in range(raw.shape[1])]
@@ -1258,8 +1275,8 @@ class LoanAppraisalService:
         model_abs = self._resolve_path(model_path, must_exist=False)
 
         suffix = Path(source_file_name).suffix.lower()
-        if suffix not in {".csv", ".pdf"}:
-            raise LoanAppraisalServiceError("Only CSV or PDF statements are supported", 400)
+        if suffix not in {".csv", ".pdf", ".xlsx"}:
+            raise LoanAppraisalServiceError("Only CSV, XLSX, or PDF statements are supported", 400)
 
         with tempfile.TemporaryDirectory(prefix="loan_appraisal_") as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -1269,6 +1286,17 @@ class LoanAppraisalService:
             if suffix == ".pdf":
                 raw_df = self._extract_pdf_to_dataframe(source_path)
                 detected_format = "pdf"
+            elif suffix == ".xlsx":
+                try:
+                    raw_df = pd.read_excel(source_path, dtype=str, engine="openpyxl")
+                except ModuleNotFoundError as exc:
+                    raise LoanAppraisalServiceError(
+                        "XLSX parsing requires openpyxl. Install it in backend environment.",
+                        500,
+                    ) from exc
+                except Exception as exc:
+                    raise LoanAppraisalServiceError(f"Unable to read XLSX statement: {exc}", 400) from exc
+                detected_format = "xlsx"
             else:
                 try:
                     raw_df = pd.read_csv(source_path, dtype=str)
