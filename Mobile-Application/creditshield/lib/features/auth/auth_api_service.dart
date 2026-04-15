@@ -1,11 +1,35 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-const String _defaultApiBaseUrl = String.fromEnvironment(
+const String _configuredApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000',
+  defaultValue: '',
 );
+
+String get _defaultApiBaseUrl {
+  final configured = _configuredApiBaseUrl.trim();
+  if (configured.isNotEmpty) {
+    return configured;
+  }
+
+  if (kIsWeb) {
+    return 'http://127.0.0.1:8000';
+  }
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return 'http://10.0.2.2:8000';
+    case TargetPlatform.iOS:
+    case TargetPlatform.linux:
+    case TargetPlatform.macOS:
+    case TargetPlatform.windows:
+    case TargetPlatform.fuchsia:
+      return 'http://127.0.0.1:8000';
+  }
+}
 
 class BorrowerProfileDto {
   final int id;
@@ -57,7 +81,9 @@ class BorrowerAuthResult {
     return BorrowerAuthResult(
       accessToken: json['access_token'] as String,
       fullName: (json['full_name'] as String?) ?? '',
-      borrower: BorrowerProfileDto.fromJson(json['borrower'] as Map<String, dynamic>),
+      borrower: BorrowerProfileDto.fromJson(
+        json['borrower'] as Map<String, dynamic>,
+      ),
     );
   }
 }
@@ -92,10 +118,7 @@ class BorrowerTrackerDto {
   final String? applicationId;
   final String stage;
 
-  const BorrowerTrackerDto({
-    required this.applicationId,
-    required this.stage,
-  });
+  const BorrowerTrackerDto({required this.applicationId, required this.stage});
 
   factory BorrowerTrackerDto.fromJson(Map<String, dynamic> json) {
     return BorrowerTrackerDto(
@@ -106,15 +129,53 @@ class BorrowerTrackerDto {
 }
 
 class AuthApiService {
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
   final String baseUrl;
   final http.Client _client;
 
-  AuthApiService({
-    this.baseUrl = _defaultApiBaseUrl,
-    http.Client? client,
-  }) : _client = client ?? http.Client();
+  AuthApiService({String? baseUrl, http.Client? client})
+    : baseUrl = (baseUrl == null || baseUrl.trim().isEmpty)
+          ? _defaultApiBaseUrl
+          : baseUrl,
+      _client = client ?? http.Client();
 
-  Uri _uri(String path) => Uri.parse('${baseUrl.replaceAll(RegExp(r"/$"), '')}$path');
+  Uri _uri(String path) =>
+      Uri.parse('${baseUrl.replaceAll(RegExp(r"/$"), '')}$path');
+
+  Future<http.Response> _request(
+    Future<http.Response> Function() action,
+    Uri uri,
+  ) async {
+    try {
+      return await action().timeout(
+        _requestTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Request timed out after ${_requestTimeout.inSeconds} seconds',
+          );
+        },
+      );
+    } catch (error) {
+      _throwNetworkError(uri, error);
+    }
+  }
+
+  Never _throwNetworkError(Uri uri, Object error) {
+    if (error is TimeoutException) {
+      throw Exception(
+        'Backend request to $uri timed out. Check that the API server is running and reachable from the device or simulator.',
+      );
+    }
+
+    if (error is http.ClientException) {
+      throw Exception(
+        'Could not reach backend at $baseUrl. Check the API host, network, and server status.',
+      );
+    }
+
+    throw Exception(error.toString());
+  }
 
   Future<BorrowerAuthResult> signup({
     required String fullName,
@@ -122,15 +183,19 @@ class AuthApiService {
     required String mobileNumber,
     required String password,
   }) async {
-    final response = await _client.post(
-      _uri('/api/v1/borrower/auth/signup'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'full_name': fullName,
-        'email': email,
-        'mobile_number': mobileNumber,
-        'password': password,
-      }),
+    final requestUri = _uri('/api/v1/borrower/auth/signup');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'full_name': fullName,
+          'email': email,
+          'mobile_number': mobileNumber,
+          'password': password,
+        }),
+      ),
+      requestUri,
     );
     return _parseAuthResponse(response);
   }
@@ -139,51 +204,62 @@ class AuthApiService {
     required String identifier,
     required String password,
   }) async {
-    final response = await _client.post(
-      _uri('/api/v1/borrower/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'identifier': identifier,
-        'password': password,
-      }),
+    final requestUri = _uri('/api/v1/borrower/auth/login');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'identifier': identifier, 'password': password}),
+      ),
+      requestUri,
     );
     return _parseAuthResponse(response);
   }
 
   Future<BorrowerProfileDto> me(String accessToken) async {
-    final response = await _client.get(
-      _uri('/api/v1/borrower/auth/me'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
+    final requestUri = _uri('/api/v1/borrower/auth/me');
+    final response = await _request(
+      () => _client.get(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
     );
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return BorrowerProfileDto.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return BorrowerProfileDto.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
     }
     throw Exception(_extractError(response));
   }
 
   Future<BorrowerKycStatusDto> getKycStatus(String accessToken) async {
-    final response = await _client.get(
-      _uri('/api/v1/borrower/kyc/status'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
+    final requestUri = _uri('/api/v1/borrower/kyc/status');
+    final response = await _request(
+      () => _client.get(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
     );
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return BorrowerKycStatusDto.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return BorrowerKycStatusDto.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
     }
     throw Exception(_extractError(response));
   }
 
   Future<void> completeKyc(String accessToken) async {
-    final response = await _client.post(
-      _uri('/api/v1/borrower/kyc/complete'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
+    final requestUri = _uri('/api/v1/borrower/kyc/complete');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -192,28 +268,34 @@ class AuthApiService {
   }
 
   Future<List<BorrowerOfferDto>> getOffers(String accessToken) async {
-    final response = await _client.get(
-      _uri('/api/v1/borrower/offers'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
+    final requestUri = _uri('/api/v1/borrower/offers');
+    final response = await _request(
+      () => _client.get(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
     );
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = jsonDecode(response.body) as List<dynamic>;
       return body
-          .map((item) => BorrowerOfferDto.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => BorrowerOfferDto.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     }
     throw Exception(_extractError(response));
   }
 
   Future<BorrowerTrackerDto> getTracker(String accessToken) async {
-    final response = await _client.get(
-      _uri('/api/v1/borrower/tracker'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
+    final requestUri = _uri('/api/v1/borrower/tracker');
+    final response = await _request(
+      () => _client.get(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
     );
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -226,7 +308,9 @@ class AuthApiService {
 
   BorrowerAuthResult _parseAuthResponse(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return BorrowerAuthResult.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return BorrowerAuthResult.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
     }
     throw Exception(_extractError(response));
   }
