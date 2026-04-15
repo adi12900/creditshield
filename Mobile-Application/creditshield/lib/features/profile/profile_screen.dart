@@ -22,8 +22,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
     final appState = context.watch<AppState>();
+    final displayName = appState.borrowerName ?? 'Borrower';
+    final initials = displayName
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0])
+        .join()
+        .toUpperCase();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile & Settings')),
@@ -40,42 +50,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     CircleAvatar(
                       radius: 32,
                       backgroundColor: secondary.withValues(alpha: 0.15),
-                      child: Text('PS',
-                          style: AppTypography.subheading.copyWith(color: secondary)),
+                      child: Text(
+                        initials.isEmpty ? 'B' : initials,
+                        style: AppTypography.subheading.copyWith(
+                          color: secondary,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Priya Sharma', style: AppTypography.subheading),
-                          Text('+91 98765 43210',
-                              style: AppTypography.body.copyWith(color: muted)),
+                          Text(displayName, style: AppTypography.subheading),
+                          Text(
+                            appState.borrowerMobile ?? '+91 N/A',
+                            style: AppTypography.body.copyWith(color: muted),
+                          ),
                           const SizedBox(height: 6),
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.success.withValues(alpha: 0.1),
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.verified, color: AppColors.success, size: 12),
+                                    const Icon(
+                                      Icons.verified,
+                                      color: AppColors.success,
+                                      size: 12,
+                                    ),
                                     const SizedBox(width: 4),
-                                    Text('KYC Verified',
-                                        style: AppTypography.caption.copyWith(
-                                          color: AppColors.success,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 10,
-                                        )),
+                                    Text(
+                                      'KYC Verified',
+                                      style: AppTypography.caption.copyWith(
+                                        color: AppColors.success,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 10,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text('85% complete',
-                                  style: AppTypography.caption.copyWith(color: muted)),
+                              Text(
+                                '85% complete',
+                                style: AppTypography.caption.copyWith(
+                                  color: muted,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -97,8 +128,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Profile Completion', style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
-                        Text('85%', style: AppTypography.body.copyWith(color: secondary, fontWeight: FontWeight.w700)),
+                        Text(
+                          'Profile Completion',
+                          style: AppTypography.body.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '85%',
+                          style: AppTypography.body.copyWith(
+                            color: secondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -112,8 +154,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text('Add email address to reach 100%',
-                        style: AppTypography.caption.copyWith(color: muted)),
+                    Text(
+                      'Add email address to reach 100%',
+                      style: AppTypography.caption.copyWith(color: muted),
+                    ),
                   ],
                 ),
               ),
@@ -129,14 +173,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('App Language', style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
-                          Text(appState.language, style: AppTypography.caption.copyWith(color: muted)),
+                          Text(
+                            'App Language',
+                            style: AppTypography.body.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            appState.language,
+                            style: AppTypography.caption.copyWith(color: muted),
+                          ),
                         ],
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _showLanguagePicker(context, appState, secondary, isDark),
-                      child: Text('Change', style: AppTypography.caption.copyWith(color: secondary, fontWeight: FontWeight.w600)),
+                      onPressed: () => _showLanguagePicker(
+                        context,
+                        appState,
+                        secondary,
+                        isDark,
+                      ),
+                      child: Text(
+                        'Change',
+                        style: AppTypography.caption.copyWith(
+                          color: secondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -169,11 +232,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
               CsCard(
                 child: Column(
                   children: [
-                    _NotifToggle('EMI Reminders', 'Critical — cannot be disabled', _emiReminders, true, secondary, muted, (v) => setState(() => _emiReminders = v)),
+                    _NotifToggle(
+                      'EMI Reminders',
+                      'Critical — cannot be disabled',
+                      _emiReminders,
+                      true,
+                      secondary,
+                      muted,
+                      (v) => setState(() => _emiReminders = v),
+                    ),
                     const Divider(height: 20),
-                    _NotifToggle('Status Updates', 'Application status changes', _statusUpdates, false, secondary, muted, (v) => setState(() => _statusUpdates = v)),
+                    _NotifToggle(
+                      'Status Updates',
+                      'Application status changes',
+                      _statusUpdates,
+                      false,
+                      secondary,
+                      muted,
+                      (v) => setState(() => _statusUpdates = v),
+                    ),
                     const Divider(height: 20),
-                    _NotifToggle('Promotional', 'New offers and product updates', _promotional, false, secondary, muted, (v) => setState(() => _promotional = v)),
+                    _NotifToggle(
+                      'Promotional',
+                      'Product updates and announcements',
+                      _promotional,
+                      false,
+                      secondary,
+                      muted,
+                      (v) => setState(() => _promotional = v),
+                    ),
                   ],
                 ),
               ),
@@ -208,11 +295,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showLanguagePicker(BuildContext context, AppState appState, Color secondary, bool isDark) {
-    const langs = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Bengali', 'Marathi', 'Gujarati'];
+  void _showLanguagePicker(
+    BuildContext context,
+    AppState appState,
+    Color secondary,
+    bool isDark,
+  ) {
+    const langs = [
+      'English',
+      'Hindi',
+      'Tamil',
+      'Telugu',
+      'Kannada',
+      'Bengali',
+      'Marathi',
+      'Gujarati',
+    ];
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(AppSpacing.sm),
         child: Column(
@@ -221,26 +324,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text('Select Language', style: AppTypography.subheading),
             const SizedBox(height: AppSpacing.sm),
-            ...langs.map((lang) => ListTile(
-                  title: Text(lang),
-                  trailing: appState.language == lang
-                      ? Icon(Icons.check_circle, color: secondary)
-                      : null,
-                  onTap: () async {
-                    await appState.setLanguage(lang);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                )),
+            ...langs.map(
+              (lang) => ListTile(
+                title: Text(lang),
+                trailing: appState.language == lang
+                    ? Icon(Icons.check_circle, color: secondary)
+                    : null,
+                onTap: () async {
+                  await appState.setLanguage(lang);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showPrivacyControls(BuildContext context, bool isDark, Color secondary) {
+  void _showPrivacyControls(
+    BuildContext context,
+    bool isDark,
+    Color secondary,
+  ) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(AppSpacing.sm),
         child: Column(
@@ -257,18 +368,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ListTile(
               leading: Icon(Icons.summarize_outlined, color: secondary),
               title: const Text('Request Data Usage Report'),
-              subtitle: const Text('Available within 48 hours (DPDPA Section 11)'),
+              subtitle: const Text(
+                'Available within 48 hours (DPDPA Section 11)',
+              ),
               onTap: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Report will be available within 48 hours.')),
+                  const SnackBar(
+                    content: Text('Report will be available within 48 hours.'),
+                  ),
                 );
               },
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: AppColors.error),
               title: const Text('Request Data Deletion'),
-              subtitle: const Text('DPDPA Section 12 — processed within 30 days'),
+              subtitle: const Text(
+                'DPDPA Section 12 — processed within 30 days',
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _showDeletionConfirm(context, isDark);
@@ -289,29 +406,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('The following data will be deleted:', style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'The following data will be deleted:',
+              style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
-            Text('• Profile information\n• Application drafts\n• Consent records\n• Transaction history',
-                style: AppTypography.body),
+            Text(
+              '• Profile information\n• Application drafts\n• Consent records\n• Transaction history',
+              style: AppTypography.body,
+            ),
             const SizedBox(height: 12),
-            Text('The following data must be retained for regulatory compliance:', style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'The following data must be retained for regulatory compliance:',
+              style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
-            Text('• Loan agreement records (7 years per RBI guidelines)\n• KYC audit trail',
-                style: AppTypography.body),
+            Text(
+              '• Loan agreement records (7 years per RBI guidelines)\n• KYC audit trail',
+              style: AppTypography.body,
+            ),
             const SizedBox(height: 12),
-            Text('Expected completion: 30 days', style: AppTypography.body.copyWith(color: AppColors.warning)),
+            Text(
+              'Expected completion: 30 days',
+              style: AppTypography.body.copyWith(color: AppColors.warning),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Data deletion request submitted. You\'ll be notified within 30 days.')),
+                const SnackBar(
+                  content: Text(
+                    'Data deletion request submitted. You\'ll be notified within 30 days.',
+                  ),
+                ),
               );
             },
-            child: const Text('Submit Request', style: TextStyle(color: AppColors.error)),
+            child: const Text(
+              'Submit Request',
+              style: TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -328,12 +468,16 @@ class _SectionHeader extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(title,
-          style: AppTypography.caption.copyWith(
-            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-          )),
+      child: Text(
+        title,
+        style: AppTypography.caption.copyWith(
+          color: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 }
@@ -366,7 +510,9 @@ class _SettingsTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark ? AppColors.cardDark : AppColors.cardLight,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          ),
         ),
         child: Row(
           children: [
@@ -384,8 +530,16 @@ class _SettingsTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
-                  Text(subtitle, style: AppTypography.caption.copyWith(color: muted)),
+                  Text(
+                    title,
+                    style: AppTypography.body.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: AppTypography.caption.copyWith(color: muted),
+                  ),
                 ],
               ),
             ),
@@ -406,7 +560,15 @@ class _NotifToggle extends StatelessWidget {
   final Color muted;
   final void Function(bool) onChanged;
 
-  const _NotifToggle(this.title, this.subtitle, this.value, this.locked, this.secondary, this.muted, this.onChanged);
+  const _NotifToggle(
+    this.title,
+    this.subtitle,
+    this.value,
+    this.locked,
+    this.secondary,
+    this.muted,
+    this.onChanged,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -416,8 +578,14 @@ class _NotifToggle extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
-              Text(subtitle, style: AppTypography.caption.copyWith(color: muted)),
+              Text(
+                title,
+                style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                subtitle,
+                style: AppTypography.caption.copyWith(color: muted),
+              ),
             ],
           ),
         ),
@@ -447,11 +615,13 @@ class _InfoTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: AppTypography.body),
-          Text(value,
-              style: AppTypography.body.copyWith(
-                color: onTap != null ? AppColors.secondary : muted,
-                fontWeight: onTap != null ? FontWeight.w600 : FontWeight.normal,
-              )),
+          Text(
+            value,
+            style: AppTypography.body.copyWith(
+              color: onTap != null ? AppColors.secondary : muted,
+              fontWeight: onTap != null ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
         ],
       ),
     );

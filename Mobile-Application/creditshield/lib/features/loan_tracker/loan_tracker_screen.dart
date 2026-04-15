@@ -30,6 +30,8 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
   bool _loading = true;
   String? _error;
   String? _applicationId;
+  String _loanType = 'personal';
+  String _employmentType = 'Salaried';
   String _currentStage = 'No active application';
   List<_Stage> _stages = const [];
 
@@ -66,12 +68,29 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
       if (!mounted) return;
       setState(() {
         _applicationId = tracker.applicationId;
+        _loanType =
+            (tracker.loanType == null || tracker.loanType!.trim().isEmpty)
+            ? 'personal'
+            : tracker.loanType!.trim();
+        _employmentType =
+            (tracker.employmentType == null ||
+                tracker.employmentType!.trim().isEmpty)
+            ? 'Salaried'
+            : tracker.employmentType!.trim();
         _currentStage = tracker.stage;
         _stages = _buildStages(tracker.stage);
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      final errorText = e.toString();
+      if (errorText.contains('401') ||
+          errorText.contains('Unauthorized') ||
+          errorText.contains('Missing or invalid Authorization header') ||
+          errorText.contains('Invalid or expired token')) {
+        context.go('/session-reauth');
+        return;
+      }
       setState(() {
         _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
@@ -84,9 +103,19 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
       return const [_Stage('No active application', StageStatus.pending)];
     }
 
+    if (currentStage.toLowerCase() == 'documents pending') {
+      return const [
+        _Stage('Submitted', StageStatus.completed),
+        _Stage('Documents Pending', StageStatus.actionRequired),
+        _Stage('Underwriting', StageStatus.pending),
+        _Stage('Offer Sent', StageStatus.pending),
+        _Stage('Disbursed', StageStatus.pending),
+      ];
+    }
+
     const ordered = [
       'Submitted',
-      'KYC Verified',
+      'KYC',
       'Underwriting',
       'Offer Sent',
       'Disbursed',
@@ -120,12 +149,12 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
 
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {
@@ -139,7 +168,10 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
               children: [
                 Text(_error!, style: AppTypography.body),
                 const SizedBox(height: AppSpacing.sm),
-                ElevatedButton(onPressed: _loadTracker, child: const Text('Retry')),
+                ElevatedButton(
+                  onPressed: _loadTracker,
+                  child: const Text('Retry'),
+                ),
               ],
             ),
           ),
@@ -165,7 +197,9 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
               decoration: BoxDecoration(
                 color: isDark ? AppColors.cardDark : AppColors.cardLight,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                border: Border.all(
+                  color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                ),
               ),
               child: Row(
                 children: [
@@ -173,17 +207,32 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Reference No.', style: AppTypography.caption.copyWith(color: muted)),
-                        Text(_applicationId ?? 'NA',
-                            style: AppTypography.body.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          'Reference No.',
+                          style: AppTypography.caption.copyWith(color: muted),
+                        ),
+                        Text(
+                          _applicationId ?? 'NA',
+                          style: AppTypography.body.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('Submitted', style: AppTypography.caption.copyWith(color: muted)),
-                      Text(_currentStage, style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        'Submitted',
+                        style: AppTypography.caption.copyWith(color: muted),
+                      ),
+                      Text(
+                        _currentStage,
+                        style: AppTypography.body.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -203,6 +252,7 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
                     muted: muted,
                     isDark: isDark,
                     pulseController: _pulseController,
+                    onUploadDocuments: _openDocumentUpload,
                   );
                 },
               ),
@@ -210,6 +260,19 @@ class _LoanTrackerScreenState extends State<LoanTrackerScreen>
           ],
         ),
       ),
+    );
+  }
+
+  void _openDocumentUpload() {
+    if (_applicationId == null || _applicationId!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing application reference.')),
+      );
+      return;
+    }
+    final encodedEmploymentType = Uri.encodeComponent(_employmentType);
+    context.push(
+      '/documents/$_loanType?applicationId=${_applicationId!.trim()}&employmentType=$encodedEmploymentType',
     );
   }
 }
@@ -221,6 +284,7 @@ class _StageItem extends StatelessWidget {
   final Color muted;
   final bool isDark;
   final AnimationController pulseController;
+  final VoidCallback onUploadDocuments;
 
   const _StageItem({
     required this.stage,
@@ -229,6 +293,7 @@ class _StageItem extends StatelessWidget {
     required this.muted,
     required this.isDark,
     required this.pulseController,
+    required this.onUploadDocuments,
   });
 
   @override
@@ -249,7 +314,9 @@ class _StageItem extends StatelessWidget {
                       width: 2,
                       color: stage.status == StageStatus.completed
                           ? secondary
-                          : (isDark ? AppColors.borderDark : AppColors.borderLight),
+                          : (isDark
+                                ? AppColors.borderDark
+                                : AppColors.borderLight),
                     ),
                   ),
               ],
@@ -274,17 +341,22 @@ class _StageItem extends StatelessWidget {
                   ),
                   if (stage.status == StageStatus.active) ...[
                     const SizedBox(height: 4),
-                    Text('In progress — We\'ll notify you as soon as there\'s an update.',
-                        style: AppTypography.caption.copyWith(color: secondary)),
+                    Text(
+                      'In progress — We\'ll notify you as soon as there\'s an update.',
+                      style: AppTypography.caption.copyWith(color: secondary),
+                    ),
                   ],
                   if (stage.status == StageStatus.actionRequired) ...[
                     const SizedBox(height: 8),
                     ElevatedButton.icon(
-                      onPressed: () {},
+                      onPressed: onUploadDocuments,
                       icon: const Icon(Icons.upload_outlined, size: 16),
                       label: const Text('Upload Document'),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         minimumSize: Size.zero,
                         textStyle: AppTypography.caption,
                       ),
@@ -315,7 +387,9 @@ class _StageItem extends StatelessWidget {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: secondary.withValues(alpha: 0.2 + 0.3 * pulseController.value),
+              color: secondary.withValues(
+                alpha: 0.2 + 0.3 * pulseController.value,
+              ),
               shape: BoxShape.circle,
               border: Border.all(color: secondary, width: 2),
             ),
@@ -323,7 +397,10 @@ class _StageItem extends StatelessWidget {
               child: Container(
                 width: 10,
                 height: 10,
-                decoration: BoxDecoration(color: secondary, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: secondary,
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
           ),
@@ -337,7 +414,11 @@ class _StageItem extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: AppColors.warning, width: 2),
           ),
-          child: const Icon(Icons.warning_amber_outlined, color: AppColors.warning, size: 16),
+          child: const Icon(
+            Icons.warning_amber_outlined,
+            color: AppColors.warning,
+            size: 16,
+          ),
         );
       case StageStatus.pending:
         return Container(

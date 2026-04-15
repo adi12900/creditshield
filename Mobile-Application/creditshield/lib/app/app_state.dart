@@ -26,6 +26,8 @@ class AppState extends ChangeNotifier {
   bool get isOffline => _isOffline;
   String? get resumeLoanType => _resumeLoanType;
   int get resumeStep => _resumeStep;
+  bool get hasPendingResumeApplication =>
+      _resumeLoanType != null && _resumeStep > 0;
 
   /// Req 20.2 — returns true if session has been inactive for 30+ minutes
   bool get isSessionExpired {

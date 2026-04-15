@@ -26,7 +26,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'type': 'status',
       'icon': Icons.track_changes_outlined,
       'title': 'Application Update',
-      'body': 'Your application CS-2024-78432 has moved to Employment Verified.',
+      'body':
+          'Your application CS-2024-78432 has moved to Employment Verified.',
       'time': '1 day ago',
       'read': false,
       'route': '/loan-tracker',
@@ -34,11 +35,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     {
       'type': 'offer',
       'icon': Icons.local_offer_outlined,
-      'title': 'New Offer Available',
-      'body': 'HDFC Bank has sent you a pre-approved offer of ₹50,000.',
+      'title': 'Application Update',
+      'body': 'Your application is ready for the next tracking step.',
       'time': '2 days ago',
       'read': true,
-      'route': '/lender-offers',
+      'route': '/loan-tracker',
     },
     {
       'type': 'consent',
@@ -64,8 +65,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
-    final unreadCount = _notifications.where((n) => !(n['read'] as bool)).length;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+    final unreadCount = _notifications
+        .where((n) => !(n['read'] as bool))
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -82,8 +87,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   n['read'] = true;
                 }
               }),
-              child: Text('Mark all read',
-                  style: AppTypography.caption.copyWith(color: secondary, fontWeight: FontWeight.w600)),
+              child: Text(
+                'Mark all read',
+                style: AppTypography.caption.copyWith(
+                  color: secondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
         ],
       ),
@@ -92,7 +102,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ? CsEmptyState(
                 icon: Icons.notifications_none_outlined,
                 heading: 'No Notifications',
-                message: 'You\'re all caught up! Notifications will appear here.',
+                message:
+                    'You\'re all caught up! Notifications will appear here.',
               )
             : ListView.separated(
                 padding: const EdgeInsets.all(AppSpacing.sm),
@@ -110,12 +121,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: isRead
-                            ? (isDark ? AppColors.cardDark : AppColors.cardLight)
+                            ? (isDark
+                                  ? AppColors.cardDark
+                                  : AppColors.cardLight)
                             : secondary.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isRead
-                              ? (isDark ? AppColors.borderDark : AppColors.borderLight)
+                              ? (isDark
+                                    ? AppColors.borderDark
+                                    : AppColors.borderLight)
                               : secondary.withValues(alpha: 0.3),
                         ),
                       ),
@@ -129,7 +144,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               color: secondary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(11),
                             ),
-                            child: Icon(n['icon'] as IconData, color: secondary, size: 20),
+                            child: Icon(
+                              n['icon'] as IconData,
+                              color: secondary,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -139,10 +158,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: Text(n['title'] as String,
-                                          style: AppTypography.body.copyWith(
-                                            fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
-                                          )),
+                                      child: Text(
+                                        n['title'] as String,
+                                        style: AppTypography.body.copyWith(
+                                          fontWeight: isRead
+                                              ? FontWeight.w500
+                                              : FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
                                     if (!isRead)
                                       Container(
@@ -156,14 +179,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 3),
-                                Text(n['body'] as String,
-                                    style: AppTypography.caption.copyWith(color: muted, height: 1.4)),
+                                Text(
+                                  n['body'] as String,
+                                  style: AppTypography.caption.copyWith(
+                                    color: muted,
+                                    height: 1.4,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
-                                Text(n['time'] as String,
-                                    style: AppTypography.caption.copyWith(
-                                      color: muted.withValues(alpha: 0.7),
-                                      fontSize: 11,
-                                    )),
+                                Text(
+                                  n['time'] as String,
+                                  style: AppTypography.caption.copyWith(
+                                    color: muted.withValues(alpha: 0.7),
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ],
                             ),
                           ),

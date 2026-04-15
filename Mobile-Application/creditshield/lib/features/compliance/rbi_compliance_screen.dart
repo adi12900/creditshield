@@ -28,7 +28,9 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondary = isDark ? AppColors.secondaryDark : AppColors.secondary;
-    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,7 +49,7 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
               Text('Mandatory RBI Disclosures', style: AppTypography.heading),
               const SizedBox(height: 8),
               Text(
-                'Confirm key borrower disclosures before lender scoring and offer generation.',
+                'Confirm key borrower disclosures before application tracking.',
                 style: AppTypography.body.copyWith(color: muted),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -55,13 +57,20 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Key Fact Statement (KFS) Snapshot', style: AppTypography.subheading),
+                    Text(
+                      'Key Fact Statement (KFS) Snapshot',
+                      style: AppTypography.subheading,
+                    ),
                     const SizedBox(height: 10),
                     _row('Loan amount', '₹50,000', muted),
                     _row('APR', '11.2% (all-inclusive)', muted),
                     _row('Tenure', '12 months', muted),
                     _row('Monthly repayment obligation', '₹4,428', muted),
-                    _row('Penal charges', '2% per month on overdue amount', muted),
+                    _row(
+                      'Penal charges',
+                      '2% per month on overdue amount',
+                      muted,
+                    ),
                   ],
                 ),
               ),
@@ -115,8 +124,12 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      _canProceed ? Icons.verified : Icons.warning_amber_outlined,
-                      color: _canProceed ? AppColors.success : AppColors.warning,
+                      _canProceed
+                          ? Icons.verified
+                          : Icons.warning_amber_outlined,
+                      color: _canProceed
+                          ? AppColors.success
+                          : AppColors.warning,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -126,7 +139,9 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
                             ? 'All RBI mandatory disclosures confirmed.'
                             : 'Complete all mandatory confirmations to continue.',
                         style: AppTypography.caption.copyWith(
-                          color: _canProceed ? AppColors.success : AppColors.warning,
+                          color: _canProceed
+                              ? AppColors.success
+                              : AppColors.warning,
                         ),
                       ),
                     ),
@@ -135,8 +150,10 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
               ),
               const SizedBox(height: AppSpacing.sm),
               CsButton(
-                label: 'Proceed to Risk Score',
-                onPressed: _canProceed ? () => context.push('/risk-score') : null,
+                label: 'Proceed to Tracker',
+                onPressed: _canProceed
+                    ? () => context.push('/loan-tracker')
+                    : null,
               ),
             ],
           ),
@@ -152,7 +169,10 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: AppTypography.caption.copyWith(color: muted)),
-          Text(value, style: AppTypography.caption.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -175,14 +195,26 @@ class _RbiComplianceScreenState extends State<RbiComplianceScreen> {
       ),
       child: Row(
         children: [
-          Checkbox(value: value, onChanged: (v) => onChanged(v ?? false), activeColor: secondary),
+          Checkbox(
+            value: value,
+            onChanged: (v) => onChanged(v ?? false),
+            activeColor: secondary,
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTypography.body.copyWith(fontWeight: FontWeight.w600)),
-                Text(subtitle, style: AppTypography.caption.copyWith(color: muted)),
+                Text(
+                  title,
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: AppTypography.caption.copyWith(color: muted),
+                ),
               ],
             ),
           ),

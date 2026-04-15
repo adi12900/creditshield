@@ -21,7 +21,7 @@ String get _defaultApiBaseUrl {
 
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
-      return 'http://10.0.2.2:8000';
+      return 'http://192.168.1.8:8000';
     case TargetPlatform.iOS:
     case TargetPlatform.linux:
     case TargetPlatform.macOS:
@@ -116,14 +116,108 @@ class BorrowerOfferDto {
 
 class BorrowerTrackerDto {
   final String? applicationId;
+  final String? borrowerName;
+  final String? loanType;
+  final String? employmentType;
+  final int? loanAmount;
   final String stage;
 
-  const BorrowerTrackerDto({required this.applicationId, required this.stage});
+  const BorrowerTrackerDto({
+    required this.applicationId,
+    required this.stage,
+    this.borrowerName,
+    this.loanType,
+    this.employmentType,
+    this.loanAmount,
+  });
 
   factory BorrowerTrackerDto.fromJson(Map<String, dynamic> json) {
     return BorrowerTrackerDto(
       applicationId: json['application_id'] as String?,
+      borrowerName: json['borrower_name'] as String?,
+      loanType: json['loan_type'] as String?,
+      employmentType: json['employment_type'] as String?,
+      loanAmount: (json['loan_amount'] as num?)?.toInt(),
       stage: (json['stage'] as String?) ?? 'No active application',
+    );
+  }
+}
+
+class BorrowerApplicationDto {
+  final String applicationId;
+  final String loanType;
+  final String employmentType;
+  final int loanAmount;
+  final String stage;
+
+  const BorrowerApplicationDto({
+    required this.applicationId,
+    required this.loanType,
+    required this.employmentType,
+    required this.loanAmount,
+    required this.stage,
+  });
+
+  factory BorrowerApplicationDto.fromJson(Map<String, dynamic> json) {
+    return BorrowerApplicationDto(
+      applicationId: (json['application_id'] as String?) ?? '',
+      loanType: (json['loan_type'] as String?) ?? 'personal',
+      employmentType: (json['employment_type'] as String?) ?? 'Salaried',
+      loanAmount: (json['loan_amount'] as num?)?.toInt() ?? 0,
+      stage: (json['stage'] as String?) ?? 'Submitted',
+    );
+  }
+}
+
+class BorrowerDocumentUploadDto {
+  final int documentId;
+  final String applicationId;
+  final String docType;
+  final String status;
+  final int? confidence;
+  final String? storageUrl;
+  final String applicationStage;
+
+  const BorrowerDocumentUploadDto({
+    required this.documentId,
+    required this.applicationId,
+    required this.docType,
+    required this.status,
+    required this.confidence,
+    required this.storageUrl,
+    required this.applicationStage,
+  });
+
+  factory BorrowerDocumentUploadDto.fromJson(Map<String, dynamic> json) {
+    return BorrowerDocumentUploadDto(
+      documentId: (json['document_id'] as num?)?.toInt() ?? 0,
+      applicationId: (json['application_id'] as String?) ?? '',
+      docType: (json['doc_type'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'Pending OCR',
+      confidence: (json['confidence'] as num?)?.toInt(),
+      storageUrl: json['storage_url'] as String?,
+      applicationStage:
+          (json['application_stage'] as String?) ?? 'Documents Pending',
+    );
+  }
+}
+
+class BorrowerRequiredDocumentDto {
+  final String code;
+  final String name;
+  final bool required;
+
+  const BorrowerRequiredDocumentDto({
+    required this.code,
+    required this.name,
+    required this.required,
+  });
+
+  factory BorrowerRequiredDocumentDto.fromJson(Map<String, dynamic> json) {
+    return BorrowerRequiredDocumentDto(
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      required: (json['required'] as bool?) ?? true,
     );
   }
 }
@@ -302,6 +396,125 @@ class AuthApiService {
       return BorrowerTrackerDto.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
       );
+    }
+    throw Exception(_extractError(response));
+  }
+
+  Future<BorrowerApplicationDto> createApplication({
+    required String accessToken,
+    required String loanType,
+    required int loanAmount,
+    required String employmentType,
+    required String purpose,
+    Map<String, dynamic>? loanDetails,
+  }) async {
+    final requestUri = _uri('/api/v1/borrower/applications');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({
+          'loan_type': loanType,
+          'loan_amount': loanAmount,
+          'employment_type': employmentType,
+          'purpose': purpose,
+          if (loanDetails != null && loanDetails.isNotEmpty)
+            'loan_details': loanDetails,
+        }),
+      ),
+      requestUri,
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return BorrowerApplicationDto.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw Exception(_extractError(response));
+  }
+
+  Future<BorrowerApplicationDto> createApplicationWithDetails({
+    required String accessToken,
+    required String loanType,
+    required int loanAmount,
+    required String employmentType,
+    required String purpose,
+    required Map<String, dynamic> loanDetails,
+  }) {
+    return createApplication(
+      accessToken: accessToken,
+      loanType: loanType,
+      loanAmount: loanAmount,
+      employmentType: employmentType,
+      purpose: purpose,
+      loanDetails: loanDetails,
+    );
+  }
+
+  Future<BorrowerDocumentUploadDto> uploadApplicationDocument({
+    required String accessToken,
+    required String applicationId,
+    required String docType,
+    String status = 'Pending OCR',
+    int? confidence,
+    String? storageUrl,
+  }) async {
+    final requestUri = _uri(
+      '/api/v1/borrower/applications/$applicationId/documents',
+    );
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({
+          'doc_type': docType,
+          'status': status,
+          if (confidence != null) 'confidence': confidence,
+          if (storageUrl != null && storageUrl.trim().isNotEmpty)
+            'storage_url': storageUrl,
+        }),
+      ),
+      requestUri,
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return BorrowerDocumentUploadDto.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+    throw Exception(_extractError(response));
+  }
+
+  Future<List<BorrowerRequiredDocumentDto>> getRequiredDocumentsForApplication({
+    required String accessToken,
+    required String applicationId,
+  }) async {
+    final requestUri = _uri(
+      '/api/v1/borrower/applications/$applicationId/documents/required',
+    );
+    final response = await _request(
+      () => _client.get(
+        requestUri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ),
+      requestUri,
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = jsonDecode(response.body) as List<dynamic>;
+      return body
+          .map(
+            (item) => BorrowerRequiredDocumentDto.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
     }
     throw Exception(_extractError(response));
   }
