@@ -8,7 +8,7 @@ import { setRuntimeLoanApplications, type LoanApplication } from '../../data/loa
 import { workflowApi } from '../../lib/workflowApi';
 
 export function DashboardLayout() {
-  const { user } = useStore();
+  const { user, selectedApplicationArn, setSelectedApplicationArn } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -47,11 +47,17 @@ export function DashboardLayout() {
         }));
 
         setRuntimeLoanApplications(mapped);
+
+        if (mapped.length === 0) return;
+        const exists = mapped.some((application) => application.arn === selectedApplicationArn);
+        if (!exists) {
+          setSelectedApplicationArn(mapped[0].arn);
+        }
       })
       .catch(() => {
         // Keep fallback local data if API is unavailable.
       });
-  }, [user]);
+  }, [selectedApplicationArn, setSelectedApplicationArn, user]);
 
   if (!user) return null;
 

@@ -1,32 +1,55 @@
 import { ArrowLeft, Download, Check, X, AlertTriangle, Eye, FileText, CheckCircle, Clock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { createDocumentReviewItems, getLoanApplicationByArn } from '../../data/loanApplications';
+import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { useStore } from '../../store';
 import { getLoanPolicy, getRequiredDocumentsForLoanType } from '../../lib/rbiPolicy';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowDocumentItem } from '../../lib/workflowApi';
 
 export function DocumentReviewPage() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const mockDocuments = createDocumentReviewItems(selectedApplication);
   const selectedPolicy = getLoanPolicy(selectedApplication.loanType);
   const requiredDocuments = getRequiredDocumentsForLoanType(selectedApplication.loanType);
-  const [selectedDoc, setSelectedDoc] = useState(mockDocuments[0]);
+  const [documents, setDocuments] = useState<WorkflowDocumentItem[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<WorkflowDocumentItem | null>(null);
   const user = useStore((state) => state.user);
 
   useEffect(() => {
-    setSelectedDoc(mockDocuments[0]);
-  }, [selectedApplication.arn]);
+    if (!user || user.role !== 'loan_officer') {
+      setDocuments([]);
+      setSelectedDoc(null);
+      return;
+    }
+
+    workflowApi
+      .getDocuments(selectedApplication.arn, user.role)
+      .then((rows) => {
+        setDocuments(rows);
+        setSelectedDoc(rows[0] ?? null);
+      })
+      .catch(() => {
+        setDocuments([]);
+        setSelectedDoc(null);
+      });
+  }, [selectedApplication.arn, user]);
 
   const handleReview = async (decision: 'approve' | 'reject') => {
     if (!user || user.role !== 'loan_officer') return;
 
     try {
+      if (!selectedDoc) {
+        window.alert('No document selected.');
+        return;
+      }
+
       await workflowApi.reviewDocument(selectedApplication.arn, selectedDoc.id, decision, user.role);
+      const refreshed = await workflowApi.getDocuments(selectedApplication.arn, user.role);
+      setDocuments(refreshed);
+      setSelectedDoc(refreshed.find((doc) => doc.id === selectedDoc.id) ?? refreshed[0] ?? null);
       window.alert(`Document ${decision === 'approve' ? 'approved' : 'rejected'} successfully.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to review document';
@@ -34,13 +57,13 @@ export function DocumentReviewPage() {
     }
   };
 
-  const verifiedDocs = mockDocuments.filter(doc => doc.status === 'Verified').length;
-  const totalDocs = mockDocuments.length;
+  const verifiedDocs = documents.filter(doc => doc.status === 'Verified').length;
+  const totalDocs = documents.length;
   const avgConfidence = Math.round(
-    mockDocuments.reduce((sum, doc) => sum + (doc.confidence || 0), 0) / mockDocuments.length
+    documents.length > 0 ? documents.reduce((sum, doc) => sum + (doc.confidence || 0), 0) / documents.length : 0
   );
   const matchedRequired = requiredDocuments.filter((requiredDoc) =>
-    mockDocuments.some((doc) => doc.type.toLowerCase().includes(requiredDoc.toLowerCase()))
+    documents.some((doc) => doc.type.toLowerCase().includes(requiredDoc.toLowerCase()))
   ).length;
 
   return (
@@ -131,21 +154,18 @@ export function DocumentReviewPage() {
               <h3 className="font-semibold text-slate-900">Documents</h3>
             </div>
             <div className="p-2">
-              {mockDocuments.map((doc) => (
+              {documents.map((doc) => (
                 <button
                   key={doc.id}
                   onClick={() => setSelectedDoc(doc)}
                   className={`w-full text-left p-3 rounded-lg transition-all mb-1 ${
-                    selectedDoc.id === doc.id
+                    selectedDoc?.id === doc.id
                       ? 'bg-green-50 border-2 border-green-600'
                       : 'hover:bg-slate-50 border-2 border-transparent'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-1">
                     <span className="text-sm font-medium text-slate-900">{doc.type}</span>
-                    {doc.tampering && (
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
-                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -163,6 +183,9 @@ export function DocumentReviewPage() {
                 </button>
               ))}
             </div>
+            {documents.length === 0 && (
+              <p className="px-3 pb-3 text-xs text-slate-500">No documents found for this ARN.</p>
+            )}
           </div>
         </div>
 
@@ -170,7 +193,7 @@ export function DocumentReviewPage() {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-900">{selectedDoc.type}</h3>
+              <h3 className="font-semibold text-slate-900">{selectedDoc?.type ?? 'No Document'}</h3>
               <div className="flex gap-2">
                 <button className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2">
                   <Download className="w-4 h-4" />
@@ -182,18 +205,6 @@ export function DocumentReviewPage() {
                 </button>
               </div>
             </div>
-
-            {selectedDoc.tampering && (
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-red-900 text-sm">Tampering Detected</p>
-                  <p className="text-red-700 text-xs mt-1">
-                    Metadata anomaly detected. Please verify document authenticity.
-                  </p>
-                </div>
-              </div>
-            )}
 
             <div className="bg-slate-100 rounded-lg aspect-[3/4] flex items-center justify-center mb-4">
               <div className="text-center">
@@ -217,11 +228,11 @@ export function DocumentReviewPage() {
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => handleReview('approve')} className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2">
+              <button disabled={!selectedDoc} onClick={() => handleReview('approve')} className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400 font-medium flex items-center justify-center gap-2">
                 <Check className="w-4 h-4" />
                 Approve Document
               </button>
-              <button onClick={() => handleReview('reject')} className="flex-1 px-4 py-2.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium flex items-center justify-center gap-2">
+              <button disabled={!selectedDoc} onClick={() => handleReview('reject')} className="flex-1 px-4 py-2.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400 font-medium flex items-center justify-center gap-2">
                 <X className="w-4 h-4" />
                 Reject Document
               </button>
@@ -233,40 +244,16 @@ export function DocumentReviewPage() {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h3 className="font-semibold text-slate-900 mb-4">OCR Extracted Data</h3>
-            {selectedDoc.ocrData ? (
-              <div className="space-y-4">
-                {Object.entries(selectedDoc.ocrData).map(([key, data]) => (
-                  <div key={key}>
-                    <label className="text-xs font-medium text-slate-600">{key}</label>
-                    <div className="mt-1">
-                      <input
-                        type="text"
-                        value={data.value}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm ${
-                          data.confidence < 80
-                            ? 'border-amber-300 bg-amber-50'
-                            : 'border-slate-300'
-                        }`}
-                      />
-                      <p className="text-xs text-slate-500 mt-1">
-                        Confidence: {data.confidence}%
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-sm text-slate-500">OCR processing pending</p>
-              </div>
-            )}
+            <div className="text-center py-8">
+              <p className="text-sm text-slate-500">OCR data is not exposed by this API yet.</p>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-6">
             <h3 className="font-semibold text-slate-900 mb-4">RBI Mandatory Documents</h3>
             <div className="space-y-2">
               {requiredDocuments.map((requiredDoc) => {
-                const isAvailable = mockDocuments.some((doc) =>
+                const isAvailable = documents.some((doc) =>
                   doc.type.toLowerCase().includes(requiredDoc.toLowerCase())
                 );
                 return (

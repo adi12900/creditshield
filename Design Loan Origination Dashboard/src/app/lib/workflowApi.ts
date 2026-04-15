@@ -106,6 +106,21 @@ export interface WorkflowKycAml {
   can_clear_hold: boolean;
 }
 
+export interface WorkflowDocumentItem {
+  id: string;
+  type: string;
+  status: 'Verified' | 'Pending OCR' | 'Flagged';
+  confidence: number;
+}
+
+export interface WorkflowCommunicationItem {
+  id: string;
+  channel: 'email' | 'sms' | 'call';
+  subject: string;
+  message: string;
+  sent_at: string;
+}
+
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
 
 export interface AdminCreateUserRequest {
@@ -149,14 +164,15 @@ export const workflowApi = {
   getBureauReport: (arn: string, role: WorkflowRole) => request<WorkflowBureauReport>(`/api/v1/workflow/credit-analyst/bureau/${arn}`, {}, role),
   getAiScore: (arn: string, role: WorkflowRole) => request<WorkflowAiScore>(`/api/v1/workflow/credit-analyst/ai-score/${arn}`, {}, role),
   getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) => request(`/api/v1/workflow/underwriter/decision-engine/${arn}`, {}, role),
+  getDocuments: (arn: string, role: WorkflowRole) => request<WorkflowDocumentItem[]>(`/api/v1/workflow/loan-officer/documents/${arn}`, {}, role),
   reviewDocument: (arn: string, documentId: string, decision: 'approve' | 'reject', role: WorkflowRole, reason?: string) =>
-    request(`/api/v1/workflow/loan-officer/documents/${arn}/review`, {
+    request<WorkflowDocumentItem>(`/api/v1/workflow/loan-officer/documents/${arn}/review`, {
       method: 'POST',
       body: JSON.stringify({ document_id: documentId, decision, reason }),
     }, role),
-  getCommunications: (arn: string, role: WorkflowRole) => request(`/api/v1/workflow/loan-officer/communications/${arn}`, {}, role),
+  getCommunications: (arn: string, role: WorkflowRole) => request<WorkflowCommunicationItem[]>(`/api/v1/workflow/loan-officer/communications/${arn}`, {}, role),
   sendCommunication: (arn: string, role: WorkflowRole, channel: 'email' | 'sms' | 'call', subject: string, message: string) =>
-    request(`/api/v1/workflow/loan-officer/communications/${arn}/send`, {
+    request<WorkflowCommunicationItem>(`/api/v1/workflow/loan-officer/communications/${arn}/send`, {
       method: 'POST',
       body: JSON.stringify({ channel, subject, message }),
     }, role),
