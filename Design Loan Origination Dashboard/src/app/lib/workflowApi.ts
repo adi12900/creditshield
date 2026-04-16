@@ -373,13 +373,17 @@ export interface WorkflowCommunicationItem {
 export interface WorkflowApplication {
   arn: string;
   borrower_name: string;
+  borrower_email?: string | null;
+  borrower_phone?: string | null;
   loan_amount: number;
+  loan_type: string;
   stage: string;
   risk_grade: string;
   credit_score: number;
   kyc_status: string;
   employment_type: string;
   purpose: string;
+  created_at?: string | null;
 }
 
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';

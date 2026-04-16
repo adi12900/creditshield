@@ -183,6 +183,8 @@ class WorkflowService:
         return {
             "arn": row.arn,
             "borrower_name": row.borrower_name,
+            "borrower_email": row.borrower_email,
+            "borrower_phone": row.borrower_phone,
             "loan_amount": loan_amount,
             "loan_type": row.loan_type,
             "stage": stage,
@@ -191,6 +193,7 @@ class WorkflowService:
             "kyc_status": kyc_status,
             "employment_type": employment_type,
             "purpose": row.purpose or "General Purpose",
+            "created_at": row.created_at,
         }
 
     def _update_application_fields(self, arn: str, **fields: Any) -> bool:
