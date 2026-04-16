@@ -7,6 +7,27 @@ import { useStore } from '../../store';
 import { getLoanPolicy, getRequiredDocumentsForLoanType } from '../../lib/rbiPolicy';
 import { workflowApi, type WorkflowDocumentItem } from '../../lib/workflowApi';
 
+function getPathFromUrl(url: string): string {
+  try {
+    return new URL(url).pathname.toLowerCase();
+  } catch {
+    return url.toLowerCase().split('?')[0].split('#')[0];
+  }
+}
+
+function isImageDocument(url: string, docType?: string): boolean {
+  const path = getPathFromUrl(url);
+  const imageByExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(path);
+  const type = (docType || '').toLowerCase();
+  const looksLikeImageDoc = type.includes('photo') || type.includes('selfie') || type.includes('image');
+  return imageByExt || looksLikeImageDoc;
+}
+
+function isPdfDocument(url: string): boolean {
+  const path = getPathFromUrl(url);
+  return /\.pdf$/i.test(path);
+}
+
 export function DocumentReviewPage() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
@@ -252,7 +273,13 @@ export function DocumentReviewPage() {
 
             <div className="bg-slate-100 rounded-lg aspect-[3/4] flex items-center justify-center mb-4 overflow-hidden">
               {selectedDoc?.storage_url ? (
-                selectedDoc.storage_url.match(/\.(jpg|jpeg|png)$/i) ? (
+                isPdfDocument(selectedDoc.storage_url) ? (
+                  <iframe
+                    src={`${selectedDoc.storage_url}#toolbar=0&navpanes=0`}
+                    title={selectedDoc.type}
+                    className="w-full h-full border-0"
+                  />
+                ) : isImageDocument(selectedDoc.storage_url, selectedDoc.type) ? (
                   <img
                     src={selectedDoc.storage_url}
                     alt={selectedDoc.type}
@@ -263,15 +290,7 @@ export function DocumentReviewPage() {
                   <div className="text-center p-6">
                     <FileText className="w-16 h-16 text-slate-400 mx-auto mb-3" />
                     <p className="text-sm text-slate-600 font-medium">{selectedDoc.type}</p>
-                    <a
-                      href={selectedDoc.storage_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Open PDF
-                    </a>
+                    <p className="mt-2 text-xs text-slate-500">Inline preview is not available for this file type.</p>
                   </div>
                 )
               ) : (
