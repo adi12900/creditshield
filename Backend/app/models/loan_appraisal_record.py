@@ -21,6 +21,7 @@ class LoanAppraisalRecord(Base):
     confidence_score: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     rows_analyzed: Mapped[int | None] = mapped_column(nullable=True)
     kpi_metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    salary_diagnostics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     report_pdf_storage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_pdf_access_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_text: Mapped[str | None] = mapped_column(Text, nullable=True)

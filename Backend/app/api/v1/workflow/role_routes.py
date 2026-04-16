@@ -1,8 +1,12 @@
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.core.security import require_auth_roles
+from app.models.loan_application import LoanApplication
+from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.schemas.workflow import (
     AuditLogItem,
     CommunicationMessageRequest,
@@ -289,17 +293,83 @@ def credit_analyst_recalculate_ratios(arn: str, payload: RatioRecalculateRequest
     "/credit-analyst/ai-score/{arn}",
     dependencies=[Depends(require_roles({"credit_analyst", "loan_officer", "system_admin"}))],
 )
-def credit_analyst_ai_score(arn: str) -> dict:
+def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
     try:
         app = workflow_service.get_application(arn)
         composite = app["credit_score"]
+        application_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+        actual_appraisal: dict[str, object] | None = None
+        reasons = ["RC-001", "RC-014"]
+
+        if application_row:
+            record = (
+                db.query(LoanAppraisalRecord)
+                .filter(LoanAppraisalRecord.application_id == application_row.id)
+                .filter(LoanAppraisalRecord.status == "success")
+                .order_by(LoanAppraisalRecord.updated_at.desc(), LoanAppraisalRecord.id.desc())
+                .first()
+            )
+            if record:
+                metrics = record.kpi_metrics or {}
+                income_metrics = metrics.get("income_analysis") if isinstance(metrics.get("income_analysis"), dict) else {}
+                cashflow_metrics = metrics.get("cashflow_analysis") if isinstance(metrics.get("cashflow_analysis"), dict) else {}
+                liability_metrics = metrics.get("liability_analysis") if isinstance(metrics.get("liability_analysis"), dict) else {}
+                loan_metrics = metrics.get("loan_analysis") if isinstance(metrics.get("loan_analysis"), dict) else {}
+                behavior_metrics = metrics.get("behavioral_risk") if isinstance(metrics.get("behavioral_risk"), dict) else {}
+
+                monthly_balance_table = metrics.get("monthly_balance_table") if isinstance(metrics.get("monthly_balance_table"), list) else []
+                month_count = len(monthly_balance_table)
+                if month_count <= 0:
+                    try:
+                        month_count = int((metrics.get("analysis_period") or {}).get("month_count", 0) or 0)
+                    except (TypeError, ValueError):
+                        month_count = 0
+
+                actual_appraisal = {
+                    "available": True,
+                    "final_score": float(record.final_score) if record.final_score is not None else None,
+                    "risk_level": record.risk_level,
+                    "recommendation": record.recommendation,
+                    "confidence_score": float(record.confidence_score) if record.confidence_score is not None else None,
+                    "rows_analyzed": record.rows_analyzed,
+                    "analysis_period": metrics.get("analysis_period", {}),
+                    "monthly_balance_table": monthly_balance_table,
+                    "opening_outstanding_before_first_month": (monthly_balance_table[0].get("opening_balance") if monthly_balance_table and isinstance(monthly_balance_table[0], dict) else None),
+                    "income_analysis": income_metrics,
+                    "cashflow_analysis": cashflow_metrics,
+                    "liability_analysis": liability_metrics,
+                    "loan_analysis": loan_metrics,
+                    "behavioral_risk": behavior_metrics,
+                    "kpi_metrics": metrics,
+                    "salary_diagnostics": record.salary_diagnostics or {
+                        "salary_months_detected": income_metrics.get("salary_months_detected"),
+                        "salary_variance_ratio": income_metrics.get("salary_variance_ratio"),
+                        "salary_trend_pct": income_metrics.get("salary_trend_pct"),
+                        "salary_delay_std_days": income_metrics.get("salary_delay_std_days"),
+                        "employer_switch_count": income_metrics.get("employer_switch_count"),
+                        "employers_detected": income_metrics.get("employers_detected"),
+                        "salary_reduction_signal": income_metrics.get("salary_reduction_signal"),
+                        "salary_delay_signal": income_metrics.get("salary_delay_signal"),
+                        "company_switch_signal": income_metrics.get("company_switch_signal"),
+                    },
+                    "rulebook_top_insights": metrics.get("rulebook_top_insights", []),
+                    "report_pdf_access_url": record.report_pdf_access_url,
+                    "report_text": record.report_text,
+                    "month_count": month_count,
+                }
+
+                reasons = [str(item) for item in (metrics.get("rulebook_top_insights", []) or [])[:4]] or ["RC-POLICY-CLEAR"]
+
         return {
             "arn": arn,
-            "composite_score": composite,
-            "confidence_percent": 92,
+            "composite_score": float(actual_appraisal["final_score"]) if actual_appraisal and actual_appraisal.get("final_score") is not None else composite,
+            "confidence_percent": int(float(actual_appraisal["confidence_score"])) if actual_appraisal and actual_appraisal.get("confidence_score") is not None else 92,
             "risk_grade": app["risk_grade"],
             "decision": "AUTO_APPROVE" if app["risk_grade"] in {"A+", "A"} else "MANUAL_REVIEW",
-            "reason_codes": ["RC-001", "RC-014"],
+            "model_source": "loan_appraisal_record" if actual_appraisal else "workflow_proxy",
+            "appraisal_available": bool(actual_appraisal),
+            "actual_appraisal": actual_appraisal,
+            "reason_codes": reasons if actual_appraisal else reasons,
         }
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc

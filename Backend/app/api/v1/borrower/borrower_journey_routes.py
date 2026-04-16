@@ -120,38 +120,513 @@ def _application_required_docs(loan_type: str, employment_type: str | None = Non
 
     return sorted(required_docs)
 
-def _build_report_pdf(report_text: str, arn: str) -> bytes:
+def _build_report_pdf(analysis_result: dict[str, Any], report_text: str, arn: str) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     stream = BytesIO()
-    pdf = canvas.Canvas(stream, pagesize=A4)
-    width, height = A4
+    page_width, page_height = A4
+    margin_x = 15 * mm
+    margin_y = 14 * mm
 
-    lines = [line.rstrip() for line in report_text.splitlines()]
-    if not lines:
-        lines = ["No report content generated"]
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "CS_Title",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor("#F8FAFC"),
+        alignment=TA_CENTER,
+    )
+    subtitle_style = ParagraphStyle(
+        "CS_Subtitle",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=11,
+        textColor=colors.HexColor("#E2E8F0"),
+        alignment=TA_CENTER,
+    )
+    section_style = ParagraphStyle(
+        "CS_Section",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        leading=14,
+        textColor=colors.HexColor("#0F172A"),
+        spaceBefore=4,
+        spaceAfter=4,
+    )
+    body_style = ParagraphStyle(
+        "CS_Body",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor("#1E293B"),
+    )
+    small_style = ParagraphStyle(
+        "CS_Small",
+        parent=body_style,
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.HexColor("#475569"),
+    )
+    label_style = ParagraphStyle(
+        "CS_Label",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+    )
 
-    lines_per_page = 50
-    sections = [lines[i:i + lines_per_page] for i in range(0, len(lines), lines_per_page)]
-    while len(sections) < 4:
-        sections.append([])
+    def _safe_text(value: Any) -> str:
+        text = str(value).strip()
+        return text if text else "N/A"
 
-    for page_index in range(4):
-        page_lines = sections[page_index] if page_index < len(sections) else []
-        pdf.setFont("Helvetica-Bold", 12)
-        pdf.drawString(40, height - 40, f"CreditShield Loan Appraisal Report | ARN: {arn} | Page {page_index + 1} of 4")
-        pdf.setFont("Helvetica", 10)
-        y = height - 70
-        for line in page_lines:
-            wrapped = line if line else " "
-            pdf.drawString(40, y, wrapped[:120])
-            y -= 14
-            if y < 60:
-                break
-        pdf.showPage()
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
-    pdf.save()
+    def _money(value: Any) -> str:
+        try:
+            return f"Rs {float(value):,.2f}"
+        except (TypeError, ValueError):
+            return _safe_text(value)
+
+    def _pct(value: Any) -> str:
+        try:
+            return f"{float(value) * 100:.2f}%" if abs(float(value)) <= 1.0 else f"{float(value):.2f}%"
+        except (TypeError, ValueError):
+            return _safe_text(value)
+
+    def _table_from_pairs(pairs: list[tuple[str, Any]], col_widths: list[float] | None = None, value_transform=None) -> Table:
+        rows: list[list[Any]] = []
+        for label, value in pairs:
+            display = value_transform(value) if value_transform else value
+            rows.append([Paragraph(str(label), label_style), Paragraph(_safe_text(display), body_style)])
+        table = Table(rows, colWidths=col_widths or [54 * mm, 124 * mm], hAlign="LEFT")
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E8F0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E0F2FE")),
+                    ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#0F172A")),
+                ]
+            )
+        )
+        return table
+
+    def _metric_cards(metrics: list[tuple[str, Any, str]]) -> Table:
+        cards: list[Any] = []
+        for title, value, accent in metrics:
+            cards.append(
+                Table(
+                    [[Paragraph(title, small_style)], [Paragraph(_safe_text(value), ParagraphStyle("card_value", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=15, leading=17, textColor=colors.HexColor(accent), alignment=TA_CENTER))]],
+                    colWidths=[40 * mm],
+                )
+            )
+        outer = Table([cards], colWidths=[40 * mm] * len(cards), hAlign="CENTER")
+        outer.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E8F0")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        return outer
+
+    result_block = analysis_result.get("result", {})
+    professional = _safe_dict = lambda value: value if isinstance(value, dict) else {}
+    professional_appraisal = _safe_dict(result_block.get("professional_appraisal"))
+    validated = _safe_dict(result_block.get("validated_appraisal"))
+    income = _safe_dict(professional_appraisal.get("income_diagnostics"))
+    cashflow = _safe_dict(professional_appraisal.get("cashflow_diagnostics"))
+    liability = _safe_dict(professional_appraisal.get("liability_diagnostics"))
+    loan_amount_analysis = _safe_dict(professional_appraisal.get("loan_amount_analysis"))
+    top_cashflow = _safe_dict(result_block.get("cashflow_analysis"))
+    top_income = _safe_dict(result_block.get("income_analysis"))
+
+    # Expense breakdown should prefer Bedrock diagnostics when available.
+    expense_breakdown = _safe_dict(cashflow.get("expense_breakdown"))
+    if not expense_breakdown:
+        expense_breakdown = _safe_dict(
+            _safe_dict(validated.get("enhanced_expense_analysis")).get("expense_breakdown")
+        )
+    if not expense_breakdown:
+        expense_breakdown = _safe_dict(top_cashflow.get("expense_breakdown"))
+
+    # Last fallback: map generic expense categories into the 5 report buckets.
+    if not expense_breakdown:
+        expense_categories = _safe_dict(top_cashflow.get("expense_categories"))
+
+        def _cat_amount(*keys: str) -> float:
+            total = 0.0
+            for k, v in expense_categories.items():
+                kl = str(k).strip().lower()
+                if any(term in kl for term in keys):
+                    total += _safe_float(v, 0.0)
+            return round(total, 2)
+
+        expense_breakdown = {
+            "rent_housing": _cat_amount("rent", "housing", "landlord"),
+            "food_groceries": _cat_amount("food", "grocery", "grocer"),
+            "travel_fuel": _cat_amount("travel", "transport", "fuel", "petrol", "diesel"),
+            "bills": _cat_amount("bill", "utility", "utilities", "electric", "water", "gas", "recharge", "broadband"),
+            "lifestyle_discretionary": _cat_amount("shopping", "entertain", "restaurant", "liquor", "bar", "casino", "movie"),
+        }
+
+    final_score = _safe_float(result_block.get("final_score"), 0.0)
+    risk_level = _safe_text(result_block.get("risk_level", "Not Assessed"))
+    recommendation = _safe_text(result_block.get("recommendation", "PENDING"))
+    confidence_score = _safe_float(result_block.get("confidence_score"), 0.0)
+    monthly_income = _safe_float(income.get("monthly_income_estimate") or result_block.get("income_analysis", {}).get("salary_mean"), 0.0)
+    total_inflow = _safe_float(cashflow.get("total_inflow") or top_cashflow.get("total_inflow"), 0.0)
+    total_outflow = _safe_float(cashflow.get("total_outflow") or top_cashflow.get("total_outflow"), 0.0)
+    monthly_balance_table = result_block.get("monthly_balance_table") if isinstance(result_block.get("monthly_balance_table"), list) else []
+    month_count = len(monthly_balance_table)
+    if month_count <= 0:
+        try:
+            month_count = int(analysis_result.get("analysis_period", {}).get("month_count", 0) or 0)
+        except (TypeError, ValueError):
+            month_count = 0
+    month_count = max(1, month_count)
+    net_savings_ratio = _safe_float(cashflow.get("net_savings_ratio") or top_cashflow.get("net_savings_ratio"), 0.0)
+    low_balance_days = int(_safe_float(cashflow.get("low_balance_days") or top_cashflow.get("low_balance_days"), 0.0))
+    min_balance = _safe_float(cashflow.get("minimum_balance") or top_cashflow.get("minimum_balance"), 0.0)
+    peak_balance = _safe_float(cashflow.get("peak_balance") or top_cashflow.get("peak_balance"), 0.0)
+    monthly_expenses = total_outflow / float(month_count) if total_outflow > 0 else 0.0
+    debt_to_income = _safe_float(liability.get("debt_to_income_ratio"), 0.0)
+    liquidity_stress = (low_balance_days / 365.0) * 100.0 if low_balance_days >= 0 else 0.0
+
+    analysis_period = analysis_result.get("analysis_period", {})
+    rows_analyzed = analysis_result.get("rows_analyzed", 0)
+    loan_type = _safe_text(analysis_result.get("loan_type", "Personal"))
+    loan_amount = _safe_float(analysis_result.get("loan_amount", 0.0), 0.0)
+    salary_months = int(_safe_float(top_income.get("salary_months_detected"), 0.0))
+    salary_trend_pct = _safe_float(top_income.get("salary_trend_pct"), 0.0)
+    salary_delay_std_days = _safe_float(top_income.get("salary_delay_std_days"), 0.0)
+    employer_switch_count = int(_safe_float(top_income.get("employer_switch_count"), 0.0))
+    salary_reduction_signal = "Detected" if salary_trend_pct < -0.05 else "Not detected"
+    late_salary_signal = "Likely delayed/irregular" if salary_delay_std_days > 3.0 else "Mostly on-time"
+    switching_signal = "Detected" if employer_switch_count > 0 else "Not detected"
+
+    story: list[Any] = []
+
+    # Page 1: cover and decision summary.
+    story.append(
+        Table(
+            [[Paragraph("CreditShield", title_style)], [Paragraph("Professional Loan Appraisal Report", subtitle_style)]],
+            colWidths=[page_width - (2 * margin_x)],
+        )
+    )
+    story[-1].setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0F172A")),
+                ("TOPPADDING", (0, 0), (-1, -1), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+            ]
+        )
+    )
+    story.append(Spacer(1, 5))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Application ARN", arn),
+                ("Source File", analysis_result.get("source_file", "N/A")),
+                ("Analysis Period", f"{_safe_text(analysis_period.get('period_start'))} to {_safe_text(analysis_period.get('period_end'))}"),
+                ("Rows Analysed", rows_analyzed),
+            ],
+            col_widths=[42 * mm, 130 * mm],
+        )
+    )
+    story.append(Spacer(1, 6))
+    story.append(
+        _metric_cards(
+            [
+                ("Final Score", f"{final_score:.2f}", "#0F766E"),
+                ("Risk Level", risk_level, "#B45309" if "Moderate" in risk_level else "#B91C1C" if "High" in risk_level else "#166534"),
+                ("Recommendation", recommendation, "#1D4ED8"),
+            ]
+        )
+    )
+    story.append(Spacer(1, 4))
+    story.append(
+        _metric_cards(
+            [
+                ("Avg Monthly Inflow", _money(monthly_income), "#0F766E"),
+                ("Avg Monthly Outflow", _money(monthly_expenses), "#B45309"),
+                ("Savings Ratio", _pct(net_savings_ratio), "#1D4ED8"),
+            ]
+        )
+    )
+    story.append(Spacer(1, 6))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Decision Summary", _safe_text(professional_appraisal.get("executive_summary") or validated.get("corrected_summary") or result_block.get("summary"))),
+                ("Confidence", _safe_text(f"{confidence_score:.2f}")),
+                ("Monthly EMI (approx.)", _money(_safe_float(loan_amount_analysis.get("estimated_monthly_emi"), 0.0))),
+                ("EMI / Income", _pct(_safe_float(loan_amount_analysis.get("emi_to_income_ratio"), 0.0))),
+            ],
+            col_widths=[50 * mm, 122 * mm],
+        )
+    )
+
+    story.append(PageBreak())
+
+    # Page 2: income + cashflow.
+    story.append(Paragraph("Income & Cashflow Analysis", section_style))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Income Classification", income.get("classification") or result_block.get("income_analysis", {}).get("classification") or "Unknown"),
+                ("Income Stability", income.get("stability") or result_block.get("income_analysis", {}).get("salary_trend") or "Unknown"),
+                ("Average Monthly Inflow", _money(monthly_income)),
+                ("Annual Inflow", _money(total_inflow)),
+                ("Trend", income.get("income_trend_pct") or result_block.get("income_analysis", {}).get("salary_trend_pct") or 0),
+            ],
+            col_widths=[58 * mm, 114 * mm],
+            value_transform=lambda v: _pct(v) if isinstance(v, (int, float)) and abs(float(v)) <= 1 else v,
+        )
+    )
+    story.append(Spacer(1, 5))
+    story.append(
+        _table_from_pairs(
+            [
+                (f"Total Inflow ({month_count}m)", _money(total_inflow)),
+                (f"Total Outflow ({month_count}m)", _money(total_outflow)),
+                (f"Net Savings ({month_count}m)", _money(total_inflow - total_outflow)),
+                ("Net Savings Ratio", _pct(net_savings_ratio)),
+                ("Liquidity Stress", f"{liquidity_stress:.2f}%"),
+                ("Low Balance Days", low_balance_days),
+            ],
+            col_widths=[58 * mm, 114 * mm],
+        )
+    )
+    story.append(Spacer(1, 5))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Avg Monthly Inflow / Outflow", f"{_money(monthly_income)} / {_money(monthly_expenses)}"),
+                ("Savings Buffer", _safe_text(cashflow.get("savings_interpretation") or result_block.get("cashflow_analysis", {}).get("savings_interpretation") or "N/A")),
+                ("Cashflow Health", _safe_text(cashflow.get("health_rating") or result_block.get("cashflow_analysis", {}).get("cashflow_health_rating") or "N/A")),
+                ("Minimum Balance", _money(min_balance)),
+                ("Peak Balance", _money(peak_balance)),
+            ],
+            col_widths=[58 * mm, 114 * mm],
+        )
+    )
+    if salary_months > 0:
+        story.append(Spacer(1, 5))
+        story.append(Paragraph("Salary Diagnostics", section_style))
+        story.append(
+            _table_from_pairs(
+                [
+                    ("Salary Months Detected", salary_months),
+                    ("Salary Trend", f"{salary_trend_pct * 100:.2f}%"),
+                    ("Salary Reduction Signal", salary_reduction_signal),
+                    ("Salary Delay Variability", f"{salary_delay_std_days:.2f} days"),
+                    ("Late Salary Signal", late_salary_signal),
+                    ("Employer Switching", f"{switching_signal} ({employer_switch_count} switch events)"),
+                ],
+                col_widths=[58 * mm, 114 * mm],
+            )
+        )
+    story.append(Spacer(1, 5))
+    story.append(Paragraph("Month-wise Income, Expense & Outstanding", section_style))
+    opening_outstanding = None
+    first_month_label = "N/A"
+    if monthly_balance_table:
+        first_row = monthly_balance_table[0] if isinstance(monthly_balance_table[0], dict) else {}
+        opening_outstanding = first_row.get("opening_balance")
+        first_month_label = _safe_text(first_row.get("month", "N/A"))
+    if opening_outstanding is not None:
+        story.append(Paragraph(f"Opening Outstanding (Before {first_month_label}): {_money(opening_outstanding)}", body_style))
+        story.append(Spacer(1, 3))
+
+    if monthly_balance_table:
+        month_rows = [
+            [
+                Paragraph("Month", label_style),
+                Paragraph("Income (Credit)", label_style),
+                Paragraph("Expenses (Debit)", label_style),
+                Paragraph("Outstanding", label_style),
+            ]
+        ]
+        for row in monthly_balance_table:
+            if not isinstance(row, dict):
+                continue
+            month_rows.append(
+                [
+                    Paragraph(_safe_text(row.get("month")), body_style),
+                    Paragraph(_money(row.get("credit", 0)), body_style),
+                    Paragraph(_money(row.get("debit", 0)), body_style),
+                    Paragraph(_money(row.get("balance_remaining", 0)), body_style),
+                ]
+            )
+        monthly_table = Table(month_rows, colWidths=[28 * mm, 46 * mm, 46 * mm, 52 * mm], repeatRows=1)
+        monthly_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E8F0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(monthly_table)
+    else:
+        story.append(Paragraph("No month-wise table available.", body_style))
+
+    story.append(PageBreak())
+
+    # Page 3: expense + liability + behavioral.
+    story.append(Paragraph("Expense, Liability & Behavioural Analysis", section_style))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Rent / Housing", _money(expense_breakdown.get("rent_housing", 0))),
+                ("Food / Groceries", _money(expense_breakdown.get("food_groceries", 0))),
+                ("Travel / Fuel", _money(expense_breakdown.get("travel_fuel", 0))),
+                ("Bills", _money(expense_breakdown.get("bills", 0))),
+                ("Lifestyle / Discretionary", _money(expense_breakdown.get("lifestyle_discretionary", 0))),
+            ],
+            col_widths=[58 * mm, 114 * mm],
+        )
+    )
+    story.append(Spacer(1, 5))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Existing EMIs", _safe_text(liability.get("existing_emis") or result_block.get("liability_analysis", {}).get("existing_emis") or "N/A")),
+                ("Estimated Monthly Liability", _money(_safe_float(liability.get("estimated_monthly_liability"), 0.0))),
+                ("Debt-to-Income Ratio", f"{debt_to_income * 100:.2f}%"),
+                ("BNPL / Credit Usage", _safe_text(liability.get("bnpl_usage") or result_block.get("liability_analysis", {}).get("bnpl_usage") or "N/A")),
+                ("Hidden Liability Count", int(_safe_float(liability.get("hidden_liabilities") if isinstance(liability.get("hidden_liabilities"), (int, float)) else result_block.get("loan_analysis", {}).get("hidden_emi_count", 0), 0.0))),
+            ],
+            col_widths=[58 * mm, 114 * mm],
+        )
+    )
+    story.append(Spacer(1, 5))
+    risk_items = professional_appraisal.get("key_risks") or validated.get("behavioral_flags") or []
+    if not isinstance(risk_items, list):
+        risk_items = [str(risk_items)]
+    story.append(Paragraph("Top Risk Drivers", section_style))
+    for idx, item in enumerate(risk_items[:6], 1):
+        story.append(Paragraph(f"{idx}. {_safe_text(item)}", body_style))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("Rule Insights", section_style))
+    for idx, item in enumerate((professional_appraisal.get("rulebook_insights") or result_block.get("rulebook_top_insights") or [])[:6], 1):
+        story.append(Paragraph(f"{idx}. {_safe_text(item)}", body_style))
+
+    story.append(PageBreak())
+
+    # Page 4: notes + appendix.
+    story.append(Paragraph("Decision Notes & Appendix", section_style))
+    story.append(
+        _table_from_pairs(
+            [
+                ("Affordability", _safe_text(loan_amount_analysis.get("affordability") or "N/A")),
+                ("Affordability Interpretation", _safe_text(loan_amount_analysis.get("interpretation") or "N/A")),
+                ("Final Underwriting View", _safe_text(professional_appraisal.get("final_underwriting_view", {}).get("justification") if isinstance(professional_appraisal.get("final_underwriting_view"), dict) else professional_appraisal.get("final_underwriting_view"))),
+            ],
+            col_widths=[60 * mm, 112 * mm],
+        )
+    )
+    story.append(Spacer(1, 5))
+    story.append(Paragraph("Notable Transactions", section_style))
+    notable_tx = professional_appraisal.get("notable_transactions") or []
+    if isinstance(notable_tx, list) and notable_tx:
+        tx_rows = []
+        for tx in notable_tx[:6]:
+            if isinstance(tx, dict):
+                tx_rows.append(
+                    [
+                        Paragraph(_safe_text(tx.get("date")), body_style),
+                        Paragraph(_safe_text(tx.get("type")), body_style),
+                        Paragraph(_safe_text(tx.get("amount")), body_style),
+                        Paragraph(_safe_text(tx.get("reason")), body_style),
+                    ]
+                )
+        if tx_rows:
+            tx_table = Table([ [Paragraph("Date", label_style), Paragraph("Type", label_style), Paragraph("Amount", label_style), Paragraph("Reason", label_style)] ] + tx_rows, colWidths=[25 * mm, 34 * mm, 28 * mm, 90 * mm], repeatRows=1)
+            tx_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+                        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E8F0")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
+            story.append(tx_table)
+    else:
+        story.append(Paragraph("No notable transactions detected in the current statement window.", body_style))
+
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("Appendix: Narrative Report Extract", section_style))
+    appendix_lines = [line.strip() for line in report_text.splitlines() if line.strip()][:20]
+    for line in appendix_lines:
+        story.append(Paragraph(_safe_text(line), small_style))
+
+    def _draw_page(canvas, doc) -> None:  # type: ignore[no-untyped-def]
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#0F172A"))
+        canvas.rect(0, page_height - 17 * mm, page_width, 17 * mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 10)
+        canvas.drawString(margin_x, page_height - 8.8 * mm, "CreditShield Loan Appraisal Report")
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(page_width - margin_x, page_height - 8.8 * mm, f"ARN: {arn}")
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(margin_x, 9.5 * mm, f"Page {canvas.getPageNumber()}")
+        canvas.drawRightString(page_width - margin_x, 9.5 * mm, "Confidential - Internal Use Only")
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        stream,
+        pagesize=A4,
+        leftMargin=margin_x,
+        rightMargin=margin_x,
+        topMargin=22 * mm,
+        bottomMargin=16 * mm,
+    )
+    doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
     return stream.getvalue()
 
 
@@ -166,6 +641,7 @@ def _upsert_appraisal_record(
     confidence_score: float | None = None,
     rows_analyzed: int | None = None,
     kpi_metrics: dict[str, Any] | None = None,
+    salary_diagnostics: dict[str, Any] | None = None,
     report_pdf_storage_url: str | None = None,
     report_pdf_access_url: str | None = None,
     report_text: str | None = None,
@@ -188,6 +664,7 @@ def _upsert_appraisal_record(
     record.confidence_score = confidence_score
     record.rows_analyzed = rows_analyzed
     record.kpi_metrics = kpi_metrics
+    record.salary_diagnostics = salary_diagnostics
     record.report_pdf_storage_url = report_pdf_storage_url
     record.report_pdf_access_url = report_pdf_access_url
     record.report_text = report_text
@@ -238,10 +715,9 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
         statement_name = statement_doc.storage_url.rsplit("/", 1)[-1] or "bank_statement_12m.pdf"
         statement_format = _statement_format_from_name(statement_doc.storage_url)
         if statement_format == "unknown":
-            raise LoanAppraisalServiceError(
-                "bank_statement_12m file must be .csv or .pdf",
-                422,
-            )
+            statement_format = _statement_format_from_bytes(statement_bytes)
+        if statement_format == "unknown":
+            raise LoanAppraisalServiceError("bank_statement_12m file must be .csv, .xlsx, or .pdf", 422)
         analysis_result = await run_in_threadpool(
             loan_appraisal_service.analyze_uploaded_statement,
             application.loan_type,
@@ -257,7 +733,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             analysis_result,
             "text",
         )
-        pdf_bytes = _build_report_pdf(report_text, application.arn)
+        pdf_bytes = _build_report_pdf(analysis_result, report_text, application.arn)
 
         report_object_key = (
             f"borrowers/{application.borrower_id}/applications/{application.arn}/"
@@ -268,13 +744,38 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
 
         result_block = analysis_result.get("result", {})
         professional_block = result_block.get("professional_appraisal", {})
+        monthly_balance_table = result_block.get("monthly_balance_table", [])
+        opening_outstanding = None
+        if isinstance(monthly_balance_table, list) and monthly_balance_table:
+            first_row = monthly_balance_table[0]
+            if isinstance(first_row, dict):
+                opening_outstanding = first_row.get("opening_balance")
         kpi_metrics = {
             "analysis_period": analysis_result.get("analysis_period", {}),
+            "income_analysis": result_block.get("income_analysis", {}),
+            "cashflow_analysis": result_block.get("cashflow_analysis", {}),
+            "liquidity_analysis": result_block.get("liquidity_analysis", {}),
+            "liability_analysis": result_block.get("liability_analysis", {}),
+            "loan_analysis": result_block.get("loan_analysis", {}),
+            "behavioral_risk": result_block.get("behavioral_risk", {}),
             "income_diagnostics": professional_block.get("income_diagnostics", {}),
             "cashflow_diagnostics": professional_block.get("cashflow_diagnostics", {}),
             "liability_diagnostics": professional_block.get("liability_diagnostics", {}),
             "loan_amount_analysis": professional_block.get("loan_amount_analysis", {}),
             "rulebook_top_insights": result_block.get("rulebook_top_insights", []),
+            "monthly_balance_table": monthly_balance_table,
+            "opening_outstanding_before_first_month": opening_outstanding,
+        }
+        salary_diagnostics = {
+            "salary_months_detected": result_block.get("income_analysis", {}).get("salary_months_detected"),
+            "salary_variance_ratio": result_block.get("income_analysis", {}).get("salary_variance_ratio"),
+            "salary_trend_pct": result_block.get("income_analysis", {}).get("salary_trend_pct"),
+            "salary_delay_std_days": result_block.get("income_analysis", {}).get("salary_delay_std_days"),
+            "employer_switch_count": result_block.get("income_analysis", {}).get("employer_switch_count"),
+            "employers_detected": result_block.get("income_analysis", {}).get("employers_detected"),
+            "salary_reduction_signal": result_block.get("income_analysis", {}).get("salary_reduction_signal"),
+            "salary_delay_signal": result_block.get("income_analysis", {}).get("salary_delay_signal"),
+            "company_switch_signal": result_block.get("income_analysis", {}).get("company_switch_signal"),
         }
 
         record = _upsert_appraisal_record(
@@ -291,6 +792,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             ),
             rows_analyzed=analysis_result.get("rows_analyzed"),
             kpi_metrics=kpi_metrics,
+            salary_diagnostics=salary_diagnostics,
             report_pdf_storage_url=report_storage_url,
             report_pdf_access_url=report_access_url,
             report_text=report_text,
@@ -471,7 +973,7 @@ def _statement_format_from_name(file_name: str = "", content_type: str | None = 
         return "csv"
     if normalized.endswith(".pdf"):
         return "pdf"
-        if normalized.endswith(".xlsx"):
+    if normalized.endswith(".xlsx") or normalized.endswith(".xls"):
             return "xlsx"
 
     mime = (content_type or "").strip().lower()
@@ -483,6 +985,16 @@ def _statement_format_from_name(file_name: str = "", content_type: str | None = 
             return "xlsx"
 
     return "unknown"
+
+
+    def _statement_format_from_bytes(payload: bytes) -> str:
+        if not payload:
+            return "unknown"
+        if payload.startswith(b"%PDF"):
+            return "pdf"
+        if payload.startswith(b"PK\x03\x04"):
+            return "xlsx"
+        return "unknown"
 
 
 def _missing_required_docs_for_application(db: Session, application: LoanApplication) -> list[str]:
@@ -982,7 +1494,11 @@ async def upload_application_document_file(
 
     original_name = (file.filename or "document.bin").strip()
     if normalized_doc_type == "bank_statement_12m":
+        file_bytes = await file.read()
+        await file.seek(0)
         statement_format = _statement_format_from_name(original_name, file.content_type)
+        if statement_format == "unknown":
+            statement_format = _statement_format_from_bytes(file_bytes)
         if statement_format == "unknown":
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

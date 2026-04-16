@@ -102,6 +102,41 @@ export interface WorkflowAiScore {
   risk_grade: 'A+' | 'A' | 'B' | 'C';
   decision: 'AUTO_APPROVE' | 'MANUAL_REVIEW' | 'AUTO_REJECT';
   reason_codes: string[];
+  model_source?: string;
+  appraisal_available?: boolean;
+  actual_appraisal?: {
+    available?: boolean;
+    final_score?: number | null;
+    risk_level?: string | null;
+    recommendation?: string | null;
+    confidence_score?: number | null;
+    rows_analyzed?: number | null;
+    analysis_period?: {
+      period_start?: string;
+      period_end?: string;
+      month_count?: number | string;
+    };
+    monthly_balance_table?: Array<{
+      month: string;
+      credit: number;
+      debit: number;
+      savings: number;
+      balance_remaining: number;
+      opening_balance?: number;
+    }>;
+    opening_outstanding_before_first_month?: number | null;
+    income_analysis?: Record<string, unknown>;
+    cashflow_analysis?: Record<string, unknown>;
+    liability_analysis?: Record<string, unknown>;
+    loan_analysis?: Record<string, unknown>;
+    behavioral_risk?: Record<string, unknown>;
+    salary_diagnostics?: Record<string, unknown>;
+    kpi_metrics?: Record<string, unknown>;
+    rulebook_top_insights?: string[];
+    report_pdf_access_url?: string | null;
+    report_text?: string | null;
+    month_count?: number;
+  } | null;
 }
 
 export interface WorkflowKycAml {
