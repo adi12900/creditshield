@@ -1,8 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -23,6 +23,7 @@ class LoanApplication(Base):
     kyc_status: Mapped[str] = mapped_column(String(20), nullable=False)
     employment_type: Mapped[str] = mapped_column(String(20), nullable=False)
     purpose: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    co_applicant_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     borrower_id: Mapped[int | None] = mapped_column(ForeignKey("borrowers.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
