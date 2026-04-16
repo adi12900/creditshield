@@ -260,16 +260,64 @@ class WorkflowService:
             ],
         }
 
-    def get_documents(self, arn: str) -> list[dict[str, Any]]:
+    def get_documents(self, arn: str, db=None) -> list[dict[str, Any]]:
         self._get_application(arn)
+        if db:
+            from sqlalchemy import text
+            rows = db.execute(text("""
+                SELECT d.id, d.doc_type, d.status, d.confidence, d.agent_verdict, d.storage_url, d.uploaded_at
+                FROM documents d
+                JOIN loan_applications la ON d.application_id = la.id
+                WHERE la.arn = :arn
+                ORDER BY d.uploaded_at DESC
+            """), {"arn": arn}).fetchall()
+            return [
+                {
+                    "id": str(row[0]),
+                    "type": row[1],
+                    "status": row[2],
+                    "confidence": row[3] or 0,
+                    "agent_verdict": row[4],
+                    "storage_url": row[5],
+                    "uploaded_at": row[6].isoformat() if row[6] else None,
+                }
+                for row in rows
+            ]
         return self._documents.get(arn, [])
 
-    def review_document(self, arn: str, document_id: str, decision: str, reason: str | None) -> dict[str, Any]:
+    def review_document(self, arn: str, document_id: str, decision: str, reason: str | None, db=None) -> dict[str, Any]:
+        if db:
+            from sqlalchemy import text
+            new_status = "Verified" if decision == "approve" else "Flagged"
+            db.execute(text("""
+                UPDATE documents SET status = :status
+                WHERE id = :doc_id AND application_id = (
+                    SELECT id FROM loan_applications WHERE arn = :arn
+                )
+            """), {"status": new_status, "doc_id": int(document_id), "arn": arn})
+            db.commit()
+            row = db.execute(text("""
+                SELECT d.id, d.doc_type, d.status, d.confidence, d.agent_verdict
+                FROM documents d
+                JOIN loan_applications la ON d.application_id = la.id
+                WHERE d.id = :doc_id AND la.arn = :arn
+            """), {"doc_id": int(document_id), "arn": arn}).fetchone()
+            if not row:
+                raise WorkflowServiceError(f"Document {document_id} not found", 404)
+            self.add_audit_log(
+                user="Loan Officer",
+                action=f"Document {decision.title()}",
+                resource=f"{arn}:{document_id}",
+                details=reason or "No reason provided",
+                risk="Low" if decision == "approve" else "Medium",
+            )
+            return {"id": str(row[0]), "type": row[1], "status": row[2],
+                    "confidence": row[3] or 0, "agent_verdict": row[4]}
+
         docs = self.get_documents(arn)
         target = next((doc for doc in docs if doc["id"] == document_id), None)
         if not target:
             raise WorkflowServiceError(f"Document {document_id} not found", 404)
-
         target["status"] = "Verified" if decision == "approve" else "Flagged"
         self.add_audit_log(
             user="Loan Officer",

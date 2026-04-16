@@ -50,6 +50,9 @@ class DocumentItem(BaseModel):
     type: str
     status: Literal["Verified", "Pending OCR", "Flagged"]
     confidence: int = Field(ge=0, le=100)
+    agent_verdict: str | None = None
+    storage_url: str | None = None
+    uploaded_at: str | None = None
 
 
 class DocumentReviewRequest(BaseModel):

@@ -150,6 +150,9 @@ export interface WorkflowDocumentItem {
   type: string;
   status: 'Verified' | 'Pending OCR' | 'Flagged';
   confidence: number;
+  agent_verdict?: string;
+  storage_url?: string;
+  uploaded_at?: string;
 }
 
 export interface WorkflowCommunicationItem {

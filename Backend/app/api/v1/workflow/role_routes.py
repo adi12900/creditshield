@@ -70,9 +70,18 @@ def loan_officer_dashboard() -> DashboardResponse:
     response_model=list[DocumentItem],
     dependencies=[Depends(require_roles({"loan_officer"}))],
 )
-def loan_officer_documents(arn: str) -> list[DocumentItem]:
+def loan_officer_documents(arn: str, db: Session = Depends(get_db)) -> list[DocumentItem]:
     try:
-        return [DocumentItem(**item) for item in workflow_service.get_documents(arn)]
+        docs = workflow_service.get_documents(arn, db=db)
+        return [DocumentItem(
+            id=d["id"],
+            type=d["type"],
+            status=d["status"],
+            confidence=d.get("confidence") or 0,
+            agent_verdict=d.get("agent_verdict"),
+            storage_url=d.get("storage_url"),
+            uploaded_at=d.get("uploaded_at"),
+        ) for d in docs]
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 
@@ -81,9 +90,9 @@ def loan_officer_documents(arn: str) -> list[DocumentItem]:
     "/loan-officer/documents/{arn}/review",
     dependencies=[Depends(require_roles({"loan_officer"}))],
 )
-def loan_officer_review_document(arn: str, payload: DocumentReviewRequest) -> dict:
+def loan_officer_review_document(arn: str, payload: DocumentReviewRequest, db: Session = Depends(get_db)) -> dict:
     try:
-        return workflow_service.review_document(arn, payload.document_id, payload.decision, payload.reason)
+        return workflow_service.review_document(arn, payload.document_id, payload.decision, payload.reason, db=db)
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 
