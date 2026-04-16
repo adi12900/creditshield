@@ -10,7 +10,7 @@ import logging
 from random import randint
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +20,7 @@ from app.models.borrower_kyc_profile import BorrowerKycProfile
 from app.models.document import Document
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
+from app.services.document_ai_verification_service import run_document_verification_task
 from app.services.loan_appraisal_service import LoanAppraisalServiceError, loan_appraisal_service
 from app.services.s3 import (
     download_bytes_from_s3,
@@ -1902,6 +1903,7 @@ async def upload_application_document(
 @router.post("/applications/{application_id}/documents/upload")
 async def upload_application_document_file(
     application_id: str,
+    background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
     file: UploadFile = File(...),
     status_value: str = Form(default="Pending OCR"),
@@ -1987,6 +1989,9 @@ async def upload_application_document_file(
     db.commit()
     db.refresh(doc)
     db.refresh(application)
+
+    if doc.status == "Pending OCR" and doc.storage_url:
+        background_tasks.add_task(run_document_verification_task, int(doc.id))
 
     appraisal_payload: dict[str, Any] | None = None
     if application.stage == "Underwriting":

@@ -467,12 +467,24 @@ class WorkflowService:
                 WHERE la.arn = :arn
                 ORDER BY d.uploaded_at DESC
             """), {"arn": arn}).fetchall()
+
+            def _to_percent(raw: Any) -> int:
+                if raw is None:
+                    return 0
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError):
+                    return 0
+                if value <= 1.0:
+                    value *= 100.0
+                return max(0, min(100, int(round(value))))
+
             return [
                 {
                     "id": str(row[0]),
                     "type": row[1],
                     "status": row[2],
-                    "confidence": row[3] or 0,
+                    "confidence": _to_percent(row[3]),
                     "agent_verdict": row[4],
                     "storage_url": (
                         generate_presigned_url(extract_object_key_from_url(row[5]))
@@ -512,7 +524,7 @@ class WorkflowService:
                 risk="Low" if decision == "approve" else "Medium",
             )
             return {"id": str(row[0]), "type": row[1], "status": row[2],
-                    "confidence": row[3] or 0, "agent_verdict": row[4]}
+                    "confidence": int(round((float(row[3]) * 100.0) if row[3] is not None and float(row[3]) <= 1.0 else float(row[3] or 0))), "agent_verdict": row[4]}
 
         docs = self.get_documents(arn)
         target = next((doc for doc in docs if doc["id"] == document_id), None)
