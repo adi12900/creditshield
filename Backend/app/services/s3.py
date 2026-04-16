@@ -29,6 +29,11 @@ def _build_storage_url(object_key: str) -> str:
     return f"https://{_s3_bucket()}.s3.{_s3_region()}.amazonaws.com/{object_key}"
 
 
+def _build_content_disposition(disposition: str, object_key: str) -> str:
+    filename = object_key.rsplit("/", 1)[-1] or "document.pdf"
+    return f'{disposition}; filename="{filename}"'
+
+
 def extract_object_key_from_url(storage_url: str) -> str:
     """Extract S3 object key from s3://, path-style, virtual-hosted, or pre-signed URLs."""
     parsed = urlparse(storage_url)
@@ -69,10 +74,18 @@ def extract_object_key_from_url(storage_url: str) -> str:
     return key
 
 
-def generate_presigned_url(object_key: str, expires_in: int = 3600) -> str:
+def generate_presigned_url(
+    object_key: str,
+    expires_in: int = 3600,
+    response_disposition: str | None = None,
+) -> str:
+    params = {"Bucket": _s3_bucket(), "Key": object_key}
+    if response_disposition in {"inline", "attachment"}:
+        params["ResponseContentDisposition"] = _build_content_disposition(response_disposition, object_key)
+
     return _s3_client().generate_presigned_url(
         "get_object",
-        Params={"Bucket": _s3_bucket(), "Key": object_key},
+        Params=params,
         ExpiresIn=expires_in,
     )
 

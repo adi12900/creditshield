@@ -309,7 +309,18 @@ def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
                     },
                     "rulebook_top_insights": metrics.get("rulebook_top_insights", []),
                     "report_pdf_access_url": (
-                        generate_presigned_url(extract_object_key_from_url(record.report_pdf_storage_url))
+                        generate_presigned_url(
+                            extract_object_key_from_url(record.report_pdf_storage_url),
+                            response_disposition="inline",
+                        )
+                        if record.report_pdf_storage_url
+                        else None
+                    ),
+                    "report_pdf_download_url": (
+                        generate_presigned_url(
+                            extract_object_key_from_url(record.report_pdf_storage_url),
+                            response_disposition="attachment",
+                        )
                         if record.report_pdf_storage_url
                         else None
                     ),
