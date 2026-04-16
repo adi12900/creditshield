@@ -7,13 +7,13 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { buildRBIComplianceProfile } from '../../lib/rbiCompliance';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowApplication } from '../../lib/workflowApi';
 
 type UnderwritingQueueItem = {
   arn: string;
   borrowerName: string;
   loanAmount: number;
-  riskGrade: string;
+  riskGrade: 'A+' | 'A' | 'B' | 'C';
   creditScore: number;
   recommendation: string;
   status: 'Completed' | 'In Progress';
@@ -24,7 +24,18 @@ export function UnderwriterDashboard() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [apiApplications, setApiApplications] = useState<WorkflowApplication[]>([]);
+  const fallbackApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const selectedApiApplication = apiApplications.find((item) => item.arn === selectedApplicationArn) ?? null;
+  const selectedApplication = {
+    ...fallbackApplication,
+    arn: selectedApiApplication?.arn ?? fallbackApplication.arn,
+    borrowerName: selectedApiApplication?.borrower_name ?? fallbackApplication.borrowerName,
+    loanAmount: selectedApiApplication?.loan_amount ?? fallbackApplication.loanAmount,
+    riskGrade: selectedApiApplication?.risk_grade ?? fallbackApplication.riskGrade,
+    creditScore: selectedApiApplication?.credit_score ?? fallbackApplication.creditScore,
+    stage: (selectedApiApplication?.stage as typeof fallbackApplication.stage | undefined) ?? fallbackApplication.stage,
+  };
   const rbiProfile = buildRBIComplianceProfile(selectedApplication);
   const [queueCount, setQueueCount] = useState(0);
   const [underwritingQueue, setUnderwritingQueue] = useState<UnderwritingQueueItem[]>([]);
@@ -41,12 +52,18 @@ export function UnderwriterDashboard() {
     if (!user || user.role !== 'underwriter') return;
     Promise.all([workflowApi.underwriterDashboard(user.role), workflowApi.listApplications()])
       .then(([dashboard, applications]) => {
+        setApiApplications(applications);
+        if (!applications.some((item) => item.arn === selectedApplicationArn) && applications.length > 0) {
+          setSelectedApplicationArn(applications[0].arn);
+        }
+
         const queue = applications.map((app) => {
           const recommendation = app.risk_grade === 'A+' || app.risk_grade === 'A'
             ? 'Approved'
             : app.risk_grade === 'B'
               ? 'Approved with Conditions'
               : 'Declined';
+          const status: UnderwritingQueueItem['status'] = app.stage === 'Underwriting' ? 'In Progress' : 'Completed';
 
           return {
             arn: app.arn,
@@ -55,7 +72,7 @@ export function UnderwriterDashboard() {
             riskGrade: app.risk_grade,
             creditScore: app.credit_score,
             recommendation,
-            status: app.stage === 'Underwriting' ? 'In Progress' : 'Completed',
+            status,
           };
         });
 
@@ -64,7 +81,7 @@ export function UnderwriterDashboard() {
         setQueueCount(queueStat?.value !== undefined ? Number(queueStat.value) : queue.filter((item) => item.status === 'In Progress').length);
       })
       .catch(() => undefined);
-  }, [user]);
+  }, [selectedApplicationArn, setSelectedApplicationArn, user]);
 
   return (
     <div className="space-y-6">
@@ -102,6 +119,14 @@ export function UnderwriterDashboard() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter borrowers to underwrite the right application."
+        applications={apiApplications.map((application) => ({
+          arn: application.arn,
+          borrowerName: application.borrower_name,
+          email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+          stage: application.stage,
+          riskGrade: application.risk_grade,
+          loanAmount: application.loan_amount,
+        }))}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">

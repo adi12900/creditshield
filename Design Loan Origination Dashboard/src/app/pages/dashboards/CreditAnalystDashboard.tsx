@@ -138,7 +138,7 @@ export function CreditAnalystDashboard() {
                   className="hover:bg-slate-50 cursor-pointer"
                   onClick={() => {
                     setSelectedApplicationArn(app.arn);
-                    navigate('/dashboard/bureau-reports');
+                    navigate('/dashboard/ai-score');
                   }}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">{app.arn}</td>
@@ -166,7 +166,7 @@ export function CreditAnalystDashboard() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedApplicationArn(app.arn);
-                        navigate('/dashboard/bureau-reports');
+                        navigate('/dashboard/ai-score');
                       }}
                       className="text-sm text-green-600 hover:text-green-700 font-medium"
                     >
@@ -203,10 +203,10 @@ export function CreditAnalystDashboard() {
           <h3 className="text-sm font-semibold text-slate-900 mb-3">Quick Actions</h3>
           <div className="space-y-2">
             <button
-              onClick={() => navigate('/dashboard/bureau-reports')}
+              onClick={() => navigate('/dashboard/ai-score')}
               className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
             >
-              View Bureau Report
+              View AI Score
             </button>
             <button
               onClick={() => navigate('/dashboard/financial-ratios')}

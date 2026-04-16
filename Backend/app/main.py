@@ -17,10 +17,11 @@ from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import Base, SessionLocal, engine
 from app.models import borrower as _borrower_models  # noqa: F401
 from app.models import user as _user_models  # noqa: F401
 from app.models import aadhaar_registry as _aadhaar_models  # noqa: F401
+from app.models import credit_memo as _credit_memo_models  # noqa: F401
 from app.services.risk.setu_aa_service import setu_aa_service
 
 logger = logging.getLogger("uvicorn.error")
@@ -52,6 +53,7 @@ if agent_router is not None:
 @app.on_event("startup")
 def startup_database_check() -> None:
     try:
+        Base.metadata.create_all(bind=engine, tables=[_credit_memo_models.CreditMemo.__table__])
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         logger.info("Database connection status: connected")

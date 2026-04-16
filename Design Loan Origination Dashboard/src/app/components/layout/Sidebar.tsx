@@ -84,11 +84,6 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       href: '/dashboard',
     },
     {
-      label: 'Bureau Reports',
-      icon: FileSearch,
-      href: '/dashboard/bureau-reports',
-    },
-    {
       label: 'Financial Ratios',
       icon: Calculator,
       href: '/dashboard/financial-ratios',
@@ -119,6 +114,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       label: 'Decision Engine',
       icon: GitMerge,
       href: '/dashboard/decision-engine',
+    },
+    {
+      label: 'AI Score Breakdown',
+      icon: Activity,
+      href: '/dashboard/ai-score',
     },
     {
       label: 'Policy Override',

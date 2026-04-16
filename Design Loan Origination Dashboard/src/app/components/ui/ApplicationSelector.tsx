@@ -7,13 +7,21 @@ interface ApplicationSelectorProps {
   selectedArn: string;
   onSelect: (arn: string) => void;
   subtitle: string;
+  applications?: Array<{
+    arn: string;
+    borrowerName: string;
+    email: string;
+    stage: string;
+    riskGrade: 'A+' | 'A' | 'B' | 'C' | 'D';
+    loanAmount: number;
+  }>;
 }
 
-export function ApplicationSelector({ selectedArn, onSelect, subtitle }: ApplicationSelectorProps) {
+export function ApplicationSelector({ selectedArn, onSelect, subtitle, applications: applicationsProp }: ApplicationSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState('All stages');
   const [riskFilter, setRiskFilter] = useState('All grades');
-  const applications = getLoanApplications();
+  const applications = applicationsProp ?? getLoanApplications();
 
   const stageOptions = useMemo(() => {
     const stages = Array.from(new Set(applications.map((application) => application.stage)));

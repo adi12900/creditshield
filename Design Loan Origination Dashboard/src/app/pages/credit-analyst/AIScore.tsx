@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/button';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { buildAIRiskProfile } from '../../lib/aiRiskModel';
 import { useStore } from '../../store';
-import { workflowApi, type WorkflowAiScore } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowAiScore, type WorkflowApplication } from '../../lib/workflowApi';
 
 function formatMoney(value: number): string {
   return `Rs ${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -63,17 +63,49 @@ export function AIScorePage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [eligibleApplications, setEligibleApplications] = useState<WorkflowApplication[]>([]);
+  const localSelectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const selectedWorkflowApplication = eligibleApplications.find((application) => application.arn === selectedApplicationArn) ?? null;
+  const selectedApplication = {
+    ...localSelectedApplication,
+    arn: selectedWorkflowApplication?.arn ?? localSelectedApplication.arn,
+    borrowerName: selectedWorkflowApplication?.borrower_name ?? localSelectedApplication.borrowerName,
+    loanAmount: selectedWorkflowApplication?.loan_amount ?? localSelectedApplication.loanAmount,
+    stage: selectedWorkflowApplication?.stage ?? localSelectedApplication.stage,
+    riskGrade: selectedWorkflowApplication?.risk_grade ?? localSelectedApplication.riskGrade,
+    creditScore: selectedWorkflowApplication?.credit_score ?? localSelectedApplication.creditScore,
+    kycStatus: selectedWorkflowApplication?.kyc_status ?? localSelectedApplication.kycStatus,
+    employmentType: selectedWorkflowApplication?.employment_type ?? localSelectedApplication.employmentType,
+  };
+  const canAccessAiPage = user?.role === 'credit_analyst' || user?.role === 'underwriter' || user?.role === 'system_admin';
   const localProfile = buildAIRiskProfile(selectedApplication);
   const [apiScore, setApiScore] = useState<WorkflowAiScore | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'credit_analyst') return;
+    if (!canAccessAiPage || !user) {
+      setEligibleApplications([]);
+      return;
+    }
+
+    workflowApi
+      .listApplications()
+      .then((rows) => {
+        setEligibleApplications(rows);
+        const exists = rows.some((row) => row.arn === selectedApplicationArn);
+        if (!exists && rows.length > 0) {
+          setSelectedApplicationArn(rows[0].arn);
+        }
+      })
+      .catch(() => setEligibleApplications([]));
+  }, [canAccessAiPage, selectedApplicationArn, setSelectedApplicationArn, user]);
+
+  useEffect(() => {
+    if (!user || !canAccessAiPage) return;
     workflowApi
       .getAiScore(selectedApplicationArn, user.role)
       .then((score) => setApiScore(score))
       .catch(() => setApiScore(null));
-  }, [selectedApplicationArn, user]);
+  }, [canAccessAiPage, selectedApplicationArn, user]);
 
   const aiRiskProfile = useMemo(() => {
     if (!apiScore) return localProfile;
@@ -169,6 +201,26 @@ export function AIScorePage() {
     ? [...(actualAppraisal?.rulebook_top_insights ?? []).slice(0, 4)]
     : apiScore?.reason_codes ?? aiRiskProfile.reasonCodes;
 
+  if (!canAccessAiPage) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
+        You are not allowed to access this page.
+      </div>
+    );
+  }
+
+  if (eligibleApplications.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 space-y-2">
+        <h1 className="text-xl font-semibold text-slate-900">AI Score Breakdown</h1>
+        <p className="text-sm text-slate-700">
+          No applications are available for this role yet.
+          {user?.role === 'underwriter' ? ' Underwriters can view only applications submitted by Credit Analyst through Credit Memo.' : ''}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 text-white shadow-2xl">
@@ -223,6 +275,14 @@ export function AIScorePage() {
             selectedArn={selectedApplication.arn}
             onSelect={setSelectedApplicationArn}
             subtitle="Search and filter borrowers to inspect the real appraisal record, model score, and factor contributions."
+            applications={eligibleApplications.map((application) => ({
+              arn: application.arn,
+              borrowerName: application.borrower_name,
+              email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+              stage: application.stage,
+              riskGrade: application.risk_grade,
+              loanAmount: application.loan_amount,
+            }))}
           />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_1fr_1fr]">
