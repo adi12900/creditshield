@@ -4,6 +4,7 @@ import { clearAuthToken } from './lib/workflowApi';
 
 export type UserRole =
   | 'loan_officer'
+  | 'field_officer'
   | 'credit_analyst'
   | 'underwriter'
   | 'compliance_officer'

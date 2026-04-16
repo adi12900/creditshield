@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     system_admin_username: str = "system_admin"
     system_admin_password: str = "Admin@123"
     system_admin_full_name: str = "System Administrator"
+    field_officer_username: str = "field_officer"
+    field_officer_password: str = "Field@123"
+    field_officer_full_name: str = "Field Officer"
     otp_service_url: str = "http://localhost:3001"
 
     model_config = SettingsConfigDict(

@@ -12,6 +12,16 @@ export function LoginPage() {
   const setUser = useStore((state) => state.setUser);
   const navigate = useNavigate();
 
+  const applyLoginPreset = (preset: 'system_admin' | 'field_officer') => {
+    if (preset === 'field_officer') {
+      setUsername('field_officer');
+      setPassword('Field@123');
+      return;
+    }
+    setUsername('system_admin');
+    setPassword('Admin@123');
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -76,6 +86,23 @@ export function LoginPage() {
             </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Welcome Back</h2>
             <p className="text-slate-600">Sign in to access the LOS platform</p>
+          </div>
+
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => applyLoginPreset('system_admin')}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Use System Admin Login
+            </button>
+            <button
+              type="button"
+              onClick={() => applyLoginPreset('field_officer')}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Use Field Officer Login
+            </button>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">

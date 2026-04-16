@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_auth_roles
+from app.core.security import AuthenticatedUser, require_auth_roles
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.schemas.workflow import (
@@ -17,6 +17,9 @@ from app.schemas.workflow import (
     DashboardResponse,
     DocumentItem,
     DocumentReviewRequest,
+    FieldOfficerCaseDetail,
+    FieldOfficerCaseItem,
+    FieldVisitReportRequest,
     GenerateReportRequest,
     LoanApplicationOut,
     LoanOfferResponse,
@@ -598,5 +601,71 @@ def compliance_rbi_compliance(arn: str) -> dict:
 def compliance_rbi_audit_export(arn: str) -> dict:
     try:
         return workflow_service.get_rbi_audit_export(arn)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.get(
+    "/field-officer/dashboard",
+    response_model=DashboardResponse,
+    dependencies=[Depends(require_roles({"field_officer"}))],
+)
+def field_officer_dashboard() -> DashboardResponse:
+    return DashboardResponse(**workflow_service.role_dashboard("field_officer"))
+
+
+@router.get(
+    "/field-officer/cases",
+    response_model=list[FieldOfficerCaseItem],
+)
+def field_officer_cases(
+    status: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    current_user: AuthenticatedUser = Depends(require_auth_roles({"field_officer"})),
+) -> list[FieldOfficerCaseItem]:
+    try:
+        rows = workflow_service.list_field_officer_cases(current_user.username, status=status, query=search)
+        return [FieldOfficerCaseItem(**row) for row in rows]
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.get(
+    "/field-officer/cases/{arn}",
+    response_model=FieldOfficerCaseDetail,
+)
+def field_officer_case_detail(
+    arn: str,
+    current_user: AuthenticatedUser = Depends(require_auth_roles({"field_officer"})),
+) -> FieldOfficerCaseDetail:
+    try:
+        return FieldOfficerCaseDetail(**workflow_service.get_field_officer_case_detail(current_user.username, arn))
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/field-officer/cases/{arn}/start-visit",
+)
+def field_officer_start_visit(
+    arn: str,
+    current_user: AuthenticatedUser = Depends(require_auth_roles({"field_officer"})),
+) -> dict:
+    try:
+        return workflow_service.start_field_visit(current_user.username, arn)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/field-officer/cases/{arn}/submit-report",
+)
+def field_officer_submit_report(
+    arn: str,
+    payload: FieldVisitReportRequest,
+    current_user: AuthenticatedUser = Depends(require_auth_roles({"field_officer"})),
+) -> dict:
+    try:
+        return workflow_service.submit_field_visit_report(current_user.username, arn, payload.model_dump())
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc

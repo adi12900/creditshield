@@ -9,6 +9,7 @@ UserRole = Literal[
     "credit_analyst",
     "underwriter",
     "compliance_officer",
+    "field_officer",
 ]
 
 LoanStage = Literal[
@@ -43,6 +44,38 @@ class DashboardStat(BaseModel):
 class DashboardResponse(BaseModel):
     role: UserRole
     stats: list[DashboardStat]
+
+
+FieldVisitStatus = Literal["Pending Visit", "In Progress", "Completed"]
+
+
+class FieldOfficerCaseItem(BaseModel):
+    arn: str
+    borrower_name: str
+    loan_amount: float
+    status: FieldVisitStatus
+
+
+class FieldOfficerCaseDetail(BaseModel):
+    arn: str
+    borrower_name: str
+    borrower_phone: str | None = None
+    borrower_address: str
+    loan_amount: float
+    loan_type: str
+    stage: str
+    status: FieldVisitStatus
+    map_link: str
+    report_submitted: bool = False
+
+
+class FieldVisitReportRequest(BaseModel):
+    address_verified: bool
+    business_verified: bool
+    income_estimate: float = Field(ge=0)
+    risk_level: Literal["Low", "Medium", "High"]
+    remarks: str = Field(min_length=3, max_length=2000)
+    evidence_urls: list[str] = Field(default_factory=list)
 
 
 class DocumentItem(BaseModel):

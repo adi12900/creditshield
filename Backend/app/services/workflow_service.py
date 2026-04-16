@@ -117,6 +117,8 @@ class WorkflowService:
         self._credit_memos: dict[str, dict[str, Any]] = {}
         self._policy_overrides: dict[str, list[dict[str, Any]]] = {}
         self._underwriter_decisions: dict[str, list[dict[str, Any]]] = {}
+        self._field_visit_status: dict[str, str] = {}
+        self._field_visit_reports: dict[str, dict[str, Any]] = {}
 
         self._reports: list[RegulatoryReport] = [
             RegulatoryReport(
@@ -269,6 +271,27 @@ class WorkflowService:
 
     def role_dashboard(self, role: str) -> dict[str, Any]:
         apps = self.list_applications()
+        if role == "field_officer":
+            pending = 0
+            in_progress = 0
+            completed = 0
+            for app in apps:
+                status = self._field_visit_status.get(app["arn"], "Pending Visit")
+                if status == "Completed":
+                    completed += 1
+                elif status == "In Progress":
+                    in_progress += 1
+                else:
+                    pending += 1
+            return {
+                "role": role,
+                "stats": [
+                    {"key": "assigned_cases", "value": len(apps)},
+                    {"key": "pending_visit", "value": pending},
+                    {"key": "in_progress", "value": in_progress},
+                    {"key": "completed", "value": completed},
+                ],
+            }
         if role == "loan_officer":
             return {
                 "role": role,
@@ -299,6 +322,138 @@ class WorkflowService:
                 {"key": "kyc_pending", "value": len([a for a in apps if a["kyc_status"] == "Pending"])},
                 {"key": "reports_due", "value": len([r for r in self._reports if r.status != "Submitted"])},
             ],
+        }
+
+    def _field_assignment_seed(self, value: str) -> int:
+        return sum(ord(char) for char in value)
+
+    def _get_assigned_field_cases(self, username: str) -> list[dict[str, Any]]:
+        applications = [
+            app for app in self.list_applications()
+            if app["stage"] not in {"Disbursed", "Rejected"}
+        ]
+        if not applications:
+            return []
+
+        assigned = [
+            app for app in applications
+            if (self._field_assignment_seed(app["arn"]) + self._field_assignment_seed(username)) % 2 == 0
+        ]
+        if not assigned:
+            assigned = applications[: min(3, len(applications))]
+        return assigned
+
+    def _ensure_field_assignment(self, username: str, arn: str) -> None:
+        assigned_arns = {item["arn"] for item in self._get_assigned_field_cases(username)}
+        if arn not in assigned_arns:
+            raise WorkflowServiceError("Case is not assigned to this field officer", 403)
+
+    def list_field_officer_cases(self, username: str, status: str | None = None, query: str | None = None) -> list[dict[str, Any]]:
+        cases = []
+        normalized_status = status.strip().lower() if status else None
+        normalized_query = query.strip().lower() if query else None
+
+        for app in self._get_assigned_field_cases(username):
+            visit_status = self._field_visit_status.get(app["arn"], "Pending Visit")
+            if normalized_status and visit_status.lower() != normalized_status:
+                continue
+            if normalized_query and normalized_query not in app["arn"].lower() and normalized_query not in app["borrower_name"].lower():
+                continue
+
+            cases.append({
+                "arn": app["arn"],
+                "borrower_name": app["borrower_name"],
+                "loan_amount": app["loan_amount"],
+                "status": visit_status,
+            })
+
+        return cases
+
+    def get_field_officer_case_detail(self, username: str, arn: str) -> dict[str, Any]:
+        self._ensure_field_assignment(username, arn)
+        app = self._get_application(arn)
+
+        borrower_phone = None
+        borrower_address = f"Address on file for {app['borrower_name']}"
+        try:
+            with SessionLocal() as db:
+                row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if row:
+                    borrower_phone = row.borrower_phone
+                    if isinstance(row.co_applicant_details, dict):
+                        borrower_address = str(
+                            row.co_applicant_details.get("address")
+                            or row.co_applicant_details.get("borrower_address")
+                            or borrower_address
+                        )
+        except Exception:
+            pass
+
+        map_link = f"https://www.google.com/maps/search/?api=1&query={app['borrower_name'].replace(' ', '+')}"
+        return {
+            "arn": app["arn"],
+            "borrower_name": app["borrower_name"],
+            "borrower_phone": borrower_phone,
+            "borrower_address": borrower_address,
+            "loan_amount": app["loan_amount"],
+            "loan_type": app.get("purpose") or "General Loan",
+            "stage": app["stage"],
+            "status": self._field_visit_status.get(arn, "Pending Visit"),
+            "map_link": map_link,
+            "report_submitted": arn in self._field_visit_reports,
+        }
+
+    def start_field_visit(self, username: str, arn: str) -> dict[str, Any]:
+        self._ensure_field_assignment(username, arn)
+        current_status = self._field_visit_status.get(arn, "Pending Visit")
+        if current_status != "Completed":
+            self._field_visit_status[arn] = "In Progress"
+
+        self.add_audit_log(
+            user="Field Officer",
+            action="Field Visit Started",
+            resource=arn,
+            details=f"Started by {username}",
+            risk="Low",
+        )
+        return {"arn": arn, "status": self._field_visit_status.get(arn, "In Progress")}
+
+    def submit_field_visit_report(self, username: str, arn: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_field_assignment(username, arn)
+        app = self._get_application(arn)
+
+        self._field_visit_reports[arn] = {
+            **payload,
+            "arn": arn,
+            "submitted_by": username,
+            "submitted_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        self._field_visit_status[arn] = "Completed"
+
+        stage_progression = {
+            "Lead": "Submitted",
+            "Submitted": "Documents Pending",
+            "Documents Pending": "KYC",
+            "KYC": "Underwriting",
+            "Underwriting": "Offer Sent",
+        }
+        next_stage = stage_progression.get(app["stage"], app["stage"])
+        if next_stage != app["stage"]:
+            self._update_application_fields(arn, stage=next_stage)
+
+        self.add_audit_log(
+            user="Field Officer",
+            action="Field Report Submitted",
+            resource=arn,
+            details=f"Risk={payload.get('risk_level')}; next_stage={next_stage}",
+            risk="Medium" if payload.get("risk_level") == "High" else "Low",
+        )
+
+        return {
+            "arn": arn,
+            "status": "Completed",
+            "next_stage": next_stage,
+            "submitted_at": self._field_visit_reports[arn]["submitted_at"],
         }
 
     def get_documents(self, arn: str, db=None) -> list[dict[str, Any]]:
