@@ -109,6 +109,31 @@ class PolicyOverrideRequest(BaseModel):
     decision: Literal["approve", "reject"]
 
 
+class UnderwriterDecisionStep(BaseModel):
+    name: str
+    status: Literal["passed", "failed", "pending"]
+
+
+class UnderwriterDecisionEngineResponse(BaseModel):
+    arn: str
+    decision: Literal["AUTO_APPROVE", "MANUAL_REVIEW", "AUTO_REJECT"]
+    steps: list[UnderwriterDecisionStep]
+
+
+class UnderwriterDecisionSubmitRequest(BaseModel):
+    decision: Literal["approve", "reject", "manual_review"]
+    reason: str | None = None
+
+
+class ClarificationRequest(BaseModel):
+    message: str = Field(min_length=5)
+
+
+class AdditionalDocumentRequest(BaseModel):
+    required_documents: list[str] = Field(min_length=1)
+    message: str | None = None
+
+
 class ComplianceActionRequest(BaseModel):
     reason: str
 

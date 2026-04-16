@@ -8,7 +8,9 @@ from app.core.security import require_auth_roles
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.schemas.workflow import (
+    AdditionalDocumentRequest,
     AuditLogItem,
+    ClarificationRequest,
     CommunicationMessageRequest,
     ComplianceActionRequest,
     CreditMemoDraftRequest,
@@ -23,6 +25,8 @@ from app.schemas.workflow import (
     RatioRecalculateRequest,
     RatioRecalculateResponse,
     RegulatoryReport,
+    UnderwriterDecisionEngineResponse,
+    UnderwriterDecisionSubmitRequest,
 )
 from app.services.workflow_service import WorkflowServiceError, workflow_service
 
@@ -358,21 +362,82 @@ def underwriter_dashboard() -> DashboardResponse:
 
 @router.get(
     "/underwriter/decision-engine/{arn}",
+    response_model=UnderwriterDecisionEngineResponse,
     dependencies=[Depends(require_roles({"underwriter"}))],
 )
-def underwriter_decision_engine(arn: str) -> dict:
+def underwriter_decision_engine(arn: str) -> UnderwriterDecisionEngineResponse:
     try:
         app = workflow_service.get_application(arn)
         decision = "AUTO_REJECT" if app["risk_grade"] == "C" else "AUTO_APPROVE" if app["risk_grade"] in {"A+", "A"} else "MANUAL_REVIEW"
-        return {
-            "arn": arn,
-            "decision": decision,
-            "steps": [
+        return UnderwriterDecisionEngineResponse(
+            arn=arn,
+            decision=decision,
+            steps=[
                 {"name": "Hard Filters", "status": "failed" if decision == "AUTO_REJECT" else "passed"},
                 {"name": "Policy Rules", "status": "passed"},
                 {"name": "Credit Score Evaluation", "status": "passed" if decision == "AUTO_APPROVE" else "pending"},
             ],
-        }
+        )
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/underwriter/decision-engine/{arn}/submit",
+    dependencies=[Depends(require_roles({"underwriter"}))],
+)
+def underwriter_submit_decision(arn: str, payload: UnderwriterDecisionSubmitRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        return workflow_service.submit_underwriter_decision(arn, payload.decision, payload.reason, db=db)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.get(
+    "/underwriter/case-summary/{arn}",
+    dependencies=[Depends(require_roles({"underwriter"}))],
+)
+def underwriter_case_summary(arn: str, db: Session = Depends(get_db)) -> dict:
+    try:
+        return workflow_service.underwriter_case_summary(arn, db=db)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.get(
+    "/underwriter/decisions/{arn}/history",
+    dependencies=[Depends(require_roles({"underwriter"}))],
+)
+def underwriter_decision_history(arn: str) -> list[dict]:
+    try:
+        return workflow_service.underwriter_decision_history(arn)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/underwriter/case/{arn}/send-back",
+    dependencies=[Depends(require_roles({"underwriter"}))],
+)
+def underwriter_send_back_for_clarification(arn: str, payload: ClarificationRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        return workflow_service.send_back_for_clarification(arn, payload.message, db=db)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
+@router.post(
+    "/underwriter/case/{arn}/request-documents",
+    dependencies=[Depends(require_roles({"underwriter"}))],
+)
+def underwriter_request_additional_documents(arn: str, payload: AdditionalDocumentRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        return workflow_service.request_additional_documents(
+            arn,
+            required_documents=payload.required_documents,
+            message=payload.message,
+            db=db,
+        )
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 

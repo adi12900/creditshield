@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     system_admin_username: str = "system_admin"
     system_admin_password: str = "Admin@123"
     system_admin_full_name: str = "System Administrator"
+    otp_service_url: str = "http://localhost:3001"
 
     model_config = SettingsConfigDict(
         env_file=".env",
