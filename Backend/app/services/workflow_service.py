@@ -4,9 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import httpx
 from sqlalchemy import text
-from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.loan_application import LoanApplication
