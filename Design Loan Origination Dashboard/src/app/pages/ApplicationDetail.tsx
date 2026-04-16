@@ -1,4 +1,4 @@
-import { ArrowLeft, User, FileText, Shield, TrendingUp, MessageSquare, Activity, CheckCircle, Clock, AlertCircle, FileSearch } from 'lucide-react';
+import { ArrowLeft, User, FileText, Shield, TrendingUp, MessageSquare, Activity, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { RiskBadge } from '../components/ui/RiskBadge';
 import { ScoreGauge } from '../components/ui/ScoreGauge';
 import { AIExplanationPanel } from '../components/ui/AIExplanationPanel';
@@ -18,6 +18,7 @@ export function ApplicationDetailPage() {
   const [documentSummary, setDocumentSummary] = useState('0/0');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -82,7 +83,11 @@ export function ApplicationDetailPage() {
   }, [riskGrade]);
 
   const applicationStatus = activeApplication?.stage || 'Unknown';
-  const compositeScore = activeApplication?.credit_score ?? 700;
+  const finalScore = activeApplication?.final_score ?? null;
+  const hasFinalScore = finalScore != null;
+  const compositeScore = hasFinalScore ? finalScore : (activeApplication?.credit_score ?? 700);
+  const scoreMax = hasFinalScore ? 100 : 900;
+  const scoreLabel = hasFinalScore ? 'AI Final Score' : 'Credit Score Proxy';
   const confidencePercent = decision === 'AUTO_APPROVE' ? 91 : decision === 'MANUAL_REVIEW' ? 82 : 74;
 
   if (loading) {
@@ -105,6 +110,24 @@ export function ApplicationDetailPage() {
 
   const selectApplication = (arn: string) => {
     setSelectedApplicationArn(arn);
+  };
+
+  const handleApproveForCreditAnalyst = async () => {
+    if (!activeApplication || approving) return;
+
+    setApproving(true);
+    try {
+      const response = await workflowApi.verifyCibilReport(activeApplication.arn, 'loan_officer');
+      setActiveApplication({
+        ...response,
+        stage: 'CREDIT_ANALYST',
+      });
+    } catch (approveError) {
+      const message = approveError instanceof Error ? approveError.message : 'Failed to approve application';
+      window.alert(message);
+    } finally {
+      setApproving(false);
+    }
   };
 
   return (
@@ -155,8 +178,10 @@ export function ApplicationDetailPage() {
               <TrendingUp className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-slate-600">Credit Score</p>
-              <p className="text-xl font-bold text-slate-900">{activeApplication.credit_score}</p>
+              <p className="text-xs text-slate-600">{hasFinalScore ? 'AI Final Score' : 'Credit Score'}</p>
+              <p className="text-xl font-bold text-slate-900">
+                {hasFinalScore ? `${finalScore!.toFixed(1)}/100` : activeApplication.credit_score}
+              </p>
             </div>
           </div>
         </div>
@@ -253,6 +278,12 @@ export function ApplicationDetailPage() {
                 <p className="text-sm text-slate-600 mb-1">Employment Type</p>
                 <p className="font-medium text-slate-900">{activeApplication.employment_type}</p>
               </div>
+              <div>
+                <p className="text-sm text-slate-600 mb-1">CIBIL Verification</p>
+                <p className={`font-medium ${activeApplication.is_cibil_verified ? 'text-green-700' : 'text-amber-700'}`}>
+                  {activeApplication.is_cibil_verified ? 'Verified' : 'Pending'}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -337,29 +368,74 @@ export function ApplicationDetailPage() {
         <div className="space-y-6">
           {/* AI Credit Score */}
           <div className="bg-white border border-slate-200 rounded-lg p-6">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">AI Credit Score</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">AI Credit Score</h3>
+              {hasFinalScore && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">AI Scored</span>
+              )}
+            </div>
             <ScoreGauge
               score={compositeScore}
-              label="Composite Score"
+              maxScore={scoreMax}
+              label={scoreLabel}
               showConfidence
               confidence={confidencePercent}
             />
+            {hasFinalScore && (
+              <div className="mt-4">
+                <div className="flex justify-between text-xs text-slate-500 mb-1">
+                  <span>0</span>
+                  <span className="font-medium text-slate-700">{finalScore.toFixed(1)} / 100</span>
+                  <span>100</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, finalScore)}%`,
+                      backgroundColor: finalScore >= 75 ? '#28A745' : finalScore >= 55 ? '#00A86B' : finalScore >= 35 ? '#FD7E14' : '#DC3545',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             <p className="mt-3 text-center text-xs text-slate-500">
-              Confidence interval: {compositeScore} ± {Math.max(8, Math.round((100 - confidencePercent) / 2))}
+              {hasFinalScore
+                ? `AI model score out of 100 • Confidence: ${confidencePercent}%`
+                : `Confidence interval: ${compositeScore} ± ${Math.max(8, Math.round((100 - confidencePercent) / 2))}`}
             </p>
             <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Tier 1 (Bureau)</span>
-                <span className="font-semibold text-slate-900">{activeApplication.credit_score}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Tier 2 (Behavioral)</span>
-                <span className="font-semibold text-slate-900">{Math.max(300, activeApplication.credit_score - 25)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600">Tier 3 (Alternative)</span>
-                <span className="font-semibold text-slate-900">{Math.min(900, activeApplication.credit_score + 15)}</span>
-              </div>
+              {hasFinalScore ? (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">AI Final Score</span>
+                    <span className="font-semibold text-slate-900">{finalScore.toFixed(1)} / 100</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Bureau Credit Score</span>
+                    <span className="font-semibold text-slate-900">{activeApplication.credit_score}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Risk Grade</span>
+                    <span className="font-semibold text-slate-900">{activeApplication.risk_grade}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Tier 1 (Bureau)</span>
+                    <span className="font-semibold text-slate-900">{activeApplication.credit_score}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Tier 2 (Behavioral)</span>
+                    <span className="font-semibold text-slate-900">{Math.max(300, activeApplication.credit_score - 25)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Tier 3 (Alternative)</span>
+                    <span className="font-semibold text-slate-900">{Math.min(900, activeApplication.credit_score + 15)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -380,8 +456,12 @@ export function ApplicationDetailPage() {
           <div className="bg-white border border-slate-200 rounded-lg p-6">
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Quick Actions</h3>
             <div className="space-y-2">
-              <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
-                Approve for Credit Analyst
+              <button
+                onClick={handleApproveForCreditAnalyst}
+                disabled={approving}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {approving ? 'Approving...' : 'Approve for Credit Analyst'}
               </button>
               <button className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium">
                 Request Documents
@@ -424,13 +504,6 @@ export function ApplicationDetailPage() {
           </div>
         </div>
       </div>
-      <button
-        onClick={() => navigate('/dashboard/cibil-reports')}
-        className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-800"
-      >
-        <FileSearch className="h-4 w-4" />
-        Verify CIBIL Report
-      </button>
     </div>
   );
 }

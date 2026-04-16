@@ -17,10 +17,12 @@ LoanStage = Literal[
     "Submitted",
     "Documents Pending",
     "KYC",
+    "CREDIT_ANALYST",
     "Underwriting",
     "Offer Sent",
     "Disbursed",
     "Rejected",
+    "REJECTED",
 ]
 
 
@@ -35,9 +37,11 @@ class LoanApplicationOut(BaseModel):
     risk_grade: Literal["A+", "A", "B", "C"]
     credit_score: int
     kyc_status: Literal["Verified", "Pending"]
-    employment_type: Literal["Salaried", "Self Employed"]
+    is_cibil_verified: bool = False
+    employment_type: Literal["Salaried", "Self Employed", "Business Owner", "Freelancer", "Student", "Unemployed"]
     purpose: str
     created_at: datetime | None = None
+    final_score: float | None = None
 
 
 class DashboardStat(BaseModel):

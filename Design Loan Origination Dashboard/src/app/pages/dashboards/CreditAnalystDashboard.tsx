@@ -39,14 +39,16 @@ export function CreditAnalystDashboard() {
     if (!user || user.role !== 'credit_analyst') return;
     Promise.all([workflowApi.creditAnalystDashboard(user.role), workflowApi.listApplications()])
       .then(([dashboard, applications]) => {
-        const queue = applications.map((app) => ({
+        const queue = applications
+          .filter((app) => app.stage === 'CREDIT_ANALYST')
+          .map((app) => ({
           arn: app.arn,
           borrowerName: app.borrower_name,
           loanAmount: app.loan_amount,
           creditScore: app.credit_score,
           riskGrade: app.risk_grade,
           status: app.current_stage === 'Credit Review' || app.current_stage === 'Documents Pending' ? 'In Progress' : 'Completed',
-        }));
+          }));
 
         const inProgressStat = dashboard?.stats?.find((item) => item.key === 'in_progress');
         setAnalysisQueue(queue);
@@ -92,6 +94,14 @@ export function CreditAnalystDashboard() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Search and filter borrowers to analyze the correct profile in Credit Analyst workbench."
+        applications={analysisQueue.map((application) => ({
+          arn: application.arn,
+          borrowerName: application.borrowerName,
+          email: `${application.borrowerName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+          stage: 'CREDIT_ANALYST',
+          riskGrade: application.riskGrade as 'A+' | 'A' | 'B' | 'C' | 'D',
+          loanAmount: application.loanAmount,
+        }))}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">

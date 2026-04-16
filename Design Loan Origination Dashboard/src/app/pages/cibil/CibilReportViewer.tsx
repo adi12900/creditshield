@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { CibilReport } from './CibilReport';
 import { fetchCibilReportById, type CibilReportData } from './cibilUsers';
+import { workflowApi } from '../../lib/workflowApi';
 
 export function CibilReportViewerPage() {
   const { id } = useParams();
   const [report, setReport] = useState<CibilReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const reportId = useMemo(() => decodeURIComponent(id ?? ''), [id]);
 
@@ -69,8 +72,42 @@ export function CibilReportViewerPage() {
     return <Navigate to="/dashboard/cibil-reports" replace />;
   }
 
+  const handleVerify = async () => {
+    if (!reportId || verifying || report.isCibilVerified) return;
+    try {
+      setVerifying(true);
+      setVerifyError(null);
+      await workflowApi.verifyCibilReport(reportId, 'loan_officer');
+      setReport((prev) => (prev ? { ...prev, isCibilVerified: true } : prev));
+    } catch (err: unknown) {
+      setVerifyError(err instanceof Error ? err.message : 'Failed to verify CIBIL report');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm text-slate-600">CIBIL Verification Status</p>
+            <p className={`text-sm font-semibold ${report.isCibilVerified ? 'text-green-700' : 'text-amber-700'}`}>
+              {report.isCibilVerified ? 'Verified' : 'Pending'}
+            </p>
+          </div>
+          <button
+            onClick={handleVerify}
+            disabled={verifying || report.isCibilVerified}
+            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {report.isCibilVerified ? 'CIBIL Verified' : verifying ? 'Verifying...' : 'Verify CIBIL Report'}
+          </button>
+        </div>
+        {verifyError && (
+          <p className="mt-2 text-xs text-red-700">{verifyError}</p>
+        )}
+      </div>
       <CibilReport report={report} />
     </div>
   );

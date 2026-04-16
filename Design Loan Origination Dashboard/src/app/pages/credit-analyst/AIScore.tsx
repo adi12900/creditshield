@@ -97,10 +97,11 @@ export function AIScorePage() {
     workflowApi
       .listApplications()
       .then((rows) => {
-        setEligibleApplications(rows);
-        const exists = rows.some((row) => row.arn === selectedApplicationArn);
-        if (!exists && rows.length > 0) {
-          setSelectedApplicationArn(rows[0].arn);
+        const filteredRows = rows.filter((row) => row.stage === 'CREDIT_ANALYST');
+        setEligibleApplications(filteredRows);
+        const exists = filteredRows.some((row) => row.arn === selectedApplicationArn);
+        if (!exists && filteredRows.length > 0) {
+          setSelectedApplicationArn(filteredRows[0].arn);
         }
       })
       .catch(() => setEligibleApplications([]));

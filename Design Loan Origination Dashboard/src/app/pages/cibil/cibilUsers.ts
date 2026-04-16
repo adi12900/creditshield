@@ -62,6 +62,7 @@ export interface CibilListItem {
 export interface CibilReportData extends CibilListItem {
   controlNumber: string;
   reportDate: string;
+  isCibilVerified: boolean;
   dob: string;
   gender: 'Male' | 'Female';
   pan: string;
@@ -321,6 +322,7 @@ function toReportData(application: WorkflowApplication): CibilReportData {
     ...base,
     controlNumber: toControlNumber(base.id),
     reportDate: new Date().toLocaleDateString('en-GB'),
+    isCibilVerified: Boolean(application.is_cibil_verified),
     dob: synthetic.dob,
     gender: synthetic.gender,
     pan: synthetic.pan,

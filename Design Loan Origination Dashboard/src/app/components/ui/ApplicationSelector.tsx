@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { workflowApi, type WorkflowApplication } from '../../lib/workflowApi';
 import { RiskBadge } from './RiskBadge';
+import { useStore } from '../../store';
 
 interface ApplicationSelectorProps {
   selectedArn: string;
@@ -23,15 +24,50 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle, applicati
   const [riskFilter, setRiskFilter] = useState('All grades');
   const [applications, setApplications] = useState<WorkflowApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  const user = useStore((state) => state.user);
+
+  const mappedPropApplications = useMemo<WorkflowApplication[]>(() => {
+    if (!applicationsProp) return [];
+    return applicationsProp.map((application) => ({
+      arn: application.arn,
+      borrower_name: application.borrowerName,
+      borrower_email: application.email,
+      borrower_phone: null,
+      loan_amount: application.loanAmount,
+      loan_type: 'Unknown',
+      stage: application.stage,
+      risk_grade: application.riskGrade,
+      credit_score: 0,
+      kyc_status: 'Pending',
+      is_cibil_verified: false,
+      employment_type: 'Unknown',
+      purpose: 'Unknown',
+      created_at: null,
+      final_score: null,
+    }));
+  }, [applicationsProp]);
 
   // Fetch real applications from API
   useEffect(() => {
+    if (applicationsProp) {
+      setApplications(mappedPropApplications);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     workflowApi
       .listApplications()
-      .then(setApplications)
+      .then((rows) => {
+        if (user?.role === 'credit_analyst') {
+          setApplications(rows.filter((application) => application.stage === 'CREDIT_ANALYST'));
+          return;
+        }
+        setApplications(rows);
+      })
       .catch(() => setApplications([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [applicationsProp, mappedPropApplications, user?.role]);
 
   const stageOptions = useMemo(() => {
     const stages = Array.from(new Set(applications.map((a) => a.stage)));
