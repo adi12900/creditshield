@@ -1,5 +1,5 @@
 import { Calculator, TrendingUp } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
@@ -13,6 +13,13 @@ export function LoanStructuringPage() {
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
   const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const requestedAmount = useMemo(() => Math.max(100000, Number(selectedApplication.loanAmount || 0)), [selectedApplication.loanAmount]);
+  const minOfferAmount = useMemo(() => Math.min(100000, requestedAmount), [requestedAmount]);
+
+  useEffect(() => {
+    // Reset structuring amount to the borrower's requested amount whenever file changes.
+    setLoanAmount(requestedAmount);
+  }, [requestedAmount, selectedApplication.arn]);
 
   const calculateEMI = () => {
     const p = loanAmount;
@@ -36,13 +43,13 @@ export function LoanStructuringPage() {
   const handleGenerateOffer = async () => {
     if (!user || user.role !== 'underwriter') return;
     try {
+      const offeredAmount = Math.min(loanAmount, requestedAmount);
       const offer = await workflowApi.generateLoanOffer(selectedApplication.arn, user.role, {
-        loan_amount: loanAmount,
+        loan_amount: offeredAmount,
         tenure_months: tenure,
         interest_rate: interestRate,
       });
       window.alert(`Offer generated. EMI ₹${offer.emi}`);
-      window.location.reload();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate offer';
       window.alert(message);
@@ -75,16 +82,16 @@ export function LoanStructuringPage() {
                 </label>
                 <input
                   type="range"
-                  min="100000"
-                  max="2000000"
+                  min={String(minOfferAmount)}
+                  max={String(requestedAmount)}
                   step="50000"
                   value={loanAmount}
-                  onChange={(e) => setLoanAmount(Number(e.target.value))}
+                  onChange={(e) => setLoanAmount(Math.min(Number(e.target.value), requestedAmount))}
                   className="w-full"
                 />
                 <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>₹1L</span>
-                  <span>₹20L</span>
+                  <span>₹{Math.round(minOfferAmount / 100000)}L</span>
+                  <span>₹{(requestedAmount / 100000).toFixed(2)}L (requested)</span>
                 </div>
               </div>
 

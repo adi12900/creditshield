@@ -298,6 +298,18 @@ def credit_analyst_ai_score(
                     except (TypeError, ValueError):
                         month_count = 0
 
+                report_pdf_access_url = None
+                report_pdf_download_url = None
+                if record.report_pdf_storage_url:
+                    try:
+                        object_key = extract_object_key_from_url(record.report_pdf_storage_url)
+                        report_pdf_access_url = generate_presigned_url(object_key, response_disposition="inline")
+                        report_pdf_download_url = generate_presigned_url(object_key, response_disposition="attachment")
+                    except Exception:
+                        # Do not fail AI score response when PDF link generation fails.
+                        report_pdf_access_url = None
+                        report_pdf_download_url = None
+
                 actual_appraisal = {
                     "available": True,
                     "final_score": float(record.final_score) if record.final_score is not None else None,
@@ -330,22 +342,8 @@ def credit_analyst_ai_score(
                         "company_switch_signal": income_metrics.get("company_switch_signal"),
                     },
                     "rulebook_top_insights": metrics.get("rulebook_top_insights", []),
-                    "report_pdf_access_url": (
-                        generate_presigned_url(
-                            extract_object_key_from_url(record.report_pdf_storage_url),
-                            response_disposition="inline",
-                        )
-                        if record.report_pdf_storage_url
-                        else None
-                    ),
-                    "report_pdf_download_url": (
-                        generate_presigned_url(
-                            extract_object_key_from_url(record.report_pdf_storage_url),
-                            response_disposition="attachment",
-                        )
-                        if record.report_pdf_storage_url
-                        else None
-                    ),
+                    "report_pdf_access_url": report_pdf_access_url,
+                    "report_pdf_download_url": report_pdf_download_url,
                     "report_text": record.report_text,
                     "month_count": month_count,
                 }
@@ -365,6 +363,8 @@ def credit_analyst_ai_score(
         }
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"AI score generation failed: {exc}") from exc
 
 
 @router.post(
