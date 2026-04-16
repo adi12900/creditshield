@@ -4,9 +4,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+import httpx
 from sqlalchemy import text
+from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models.document import Document
 from app.models.loan_application import LoanApplication
+from app.models.loan_appraisal_record import LoanAppraisalRecord
+from app.models.user import User, UserRole
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 
 
@@ -111,6 +116,7 @@ class WorkflowService:
 
         self._credit_memos: dict[str, dict[str, Any]] = {}
         self._policy_overrides: dict[str, list[dict[str, Any]]] = {}
+        self._underwriter_decisions: dict[str, list[dict[str, Any]]] = {}
 
         self._reports: list[RegulatoryReport] = [
             RegulatoryReport(
@@ -225,6 +231,34 @@ class WorkflowService:
 
     def get_application(self, arn: str) -> dict[str, Any]:
         return self._get_application(arn)
+
+    def _get_application_row(self, arn: str, db) -> LoanApplication:
+        row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+        if not row:
+            raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
+        return row
+
+    def _get_loan_officer_emails(self, db) -> list[str]:
+        rows = (
+            db.query(User)
+            .filter(User.role == UserRole.LOAN_OFFICER)
+            .filter(User.is_active.is_(True))
+            .order_by(User.id.asc())
+            .all()
+        )
+        return [row.email for row in rows if row.email]
+
+    def _send_email_notification(self, to: str, subject: str, html: str) -> tuple[bool, str | None]:
+        try:
+            response = httpx.post(
+                f"{settings.otp_service_url}/send-email",
+                json={"to": to, "subject": subject, "html": html},
+                timeout=12,
+            )
+            response.raise_for_status()
+            return True, None
+        except Exception as exc:  # noqa: BLE001
+            return False, str(exc)
 
     def role_dashboard(self, role: str) -> dict[str, Any]:
         apps = self.list_applications()
@@ -602,6 +636,276 @@ class WorkflowService:
             risk="Medium",
         )
         return item
+
+    def submit_underwriter_decision(self, arn: str, decision: str, reason: str | None = None, db=None) -> dict[str, Any]:
+        self._get_application(arn)
+        normalized = decision.strip().lower()
+        if normalized not in {"approve", "reject", "manual_review"}:
+            raise WorkflowServiceError("decision must be one of approve, reject, manual_review", 422)
+
+        if normalized == "approve":
+            new_stage = "Underwriting"
+            status = "approved_for_structuring"
+            risk = "Low"
+        elif normalized == "reject":
+            new_stage = "Rejected"
+            status = "rejected"
+            risk = "High"
+        else:
+            new_stage = "Underwriting"
+            status = "manual_review"
+            risk = "Medium"
+
+        previous = self._get_application(arn)["stage"]
+        if not self._update_application_fields(arn, stage=new_stage):
+            app = self._get_application(arn)
+            app["stage"] = new_stage
+
+        history_entry = {
+            "decision": normalized,
+            "reason": reason,
+            "status": status,
+            "stage": new_stage,
+            "decided_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        self._underwriter_decisions.setdefault(arn, []).insert(0, history_entry)
+
+        self.add_audit_log(
+            user="Underwriter",
+            action="Underwriter Decision Submitted",
+            resource=arn,
+            details=f"Decision={normalized}; stage {previous} -> {new_stage}; reason={reason or 'N/A'}",
+            risk=risk,
+        )
+
+        email_status = None
+        email_error = None
+        if normalized in {"approve", "reject"} and db is not None:
+            row = self._get_application_row(arn, db)
+            if row.borrower_email:
+                decision_label = "Approved" if normalized == "approve" else "Rejected"
+                html = (
+                    f"<h2>CreditShield Loan Decision</h2>"
+                    f"<p>Application <strong>{arn}</strong> has been <strong>{decision_label}</strong>.</p>"
+                    f"<p>Reason: {reason or 'As per underwriting review'}</p>"
+                    f"<p>Thank you, CreditShield Team.</p>"
+                )
+                success, error = self._send_email_notification(
+                    to=row.borrower_email,
+                    subject=f"Loan Application {decision_label} - {arn}",
+                    html=html,
+                )
+                email_status = "sent" if success else "failed"
+                email_error = error
+            else:
+                email_status = "skipped"
+                email_error = "Borrower email not available"
+
+        return {
+            "arn": arn,
+            "decision": normalized,
+            "status": status,
+            "stage": new_stage,
+            "reason": reason,
+            "email_status": email_status,
+            "email_error": email_error,
+        }
+
+    def underwriter_case_summary(self, arn: str, db) -> dict[str, Any]:
+        app_row = self._get_application_row(arn, db)
+        app = self._to_workflow_application(app_row)
+
+        documents = (
+            db.query(Document)
+            .filter(Document.application_id == app_row.id)
+            .order_by(Document.uploaded_at.desc(), Document.id.desc())
+            .all()
+        )
+        docs_payload = [
+            {
+                "id": str(doc.id),
+                "type": doc.doc_type,
+                "doc_type": doc.doc_type,
+                "status": doc.status,
+                "confidence": doc.confidence,
+                "storage_url": doc.storage_url,
+                "uploaded_at": doc.uploaded_at.isoformat() if doc.uploaded_at else None,
+            }
+            for doc in documents
+        ]
+
+        appraisal = (
+            db.query(LoanAppraisalRecord)
+            .filter(LoanAppraisalRecord.application_id == app_row.id)
+            .order_by(LoanAppraisalRecord.updated_at.desc(), LoanAppraisalRecord.id.desc())
+            .first()
+        )
+
+        kpi_metrics = appraisal.kpi_metrics if appraisal and isinstance(appraisal.kpi_metrics, dict) else {}
+        income = kpi_metrics.get("income_analysis") if isinstance(kpi_metrics.get("income_analysis"), dict) else {}
+        liabilities = kpi_metrics.get("liability_analysis") if isinstance(kpi_metrics.get("liability_analysis"), dict) else {}
+        cashflow = kpi_metrics.get("cashflow_analysis") if isinstance(kpi_metrics.get("cashflow_analysis"), dict) else {}
+        behavioral = kpi_metrics.get("behavioral_risk") if isinstance(kpi_metrics.get("behavioral_risk"), dict) else {}
+
+        monthly_income = float(income.get("monthly_income_estimate") or income.get("salary_mean") or 0)
+        obligations = float(liabilities.get("monthly_obligations") or liabilities.get("total_monthly_emi") or 0)
+        proposed_emi = float(liabilities.get("proposed_emi") or 0)
+        dti = ((obligations + proposed_emi) / monthly_income * 100) if monthly_income > 0 else None
+        foir = (obligations / monthly_income * 100) if monthly_income > 0 else None
+        disposable_income = monthly_income - obligations if monthly_income > 0 else None
+        emi_eligibility = max(0.0, monthly_income * 0.45 - obligations) if monthly_income > 0 else None
+
+        red_flags: list[str] = []
+        if dti is not None and dti > 45:
+            red_flags.append("High debt ratio")
+        if behavioral.get("income_mismatch"):
+            red_flags.append("Income mismatch")
+        if behavioral.get("fake_documents"):
+            red_flags.append("Fake documents")
+
+        audit_entries = [
+            {
+                "timestamp": item.timestamp.isoformat(),
+                "action": item.action,
+                "details": item.details,
+                "risk": item.risk,
+            }
+            for item in self._audit_logs
+            if item.resource == arn
+        ]
+        loan_officers = self._get_loan_officer_emails(db)
+
+        return {
+            "application": {
+                **app,
+                "borrower_email": app_row.borrower_email,
+                "borrower_phone": app_row.borrower_phone,
+                "co_applicant_details": app_row.co_applicant_details,
+                "created_at": app_row.created_at.isoformat() if app_row.created_at else None,
+                "updated_at": app_row.updated_at.isoformat() if app_row.updated_at else None,
+            },
+            "creditworthiness": {
+                "credit_score": app["credit_score"],
+                "risk_grade": app["risk_grade"],
+                "existing_loans": liabilities.get("active_loans"),
+                "past_defaults": liabilities.get("defaults_count"),
+                "late_payments": liabilities.get("late_payments"),
+                "credit_utilization_ratio": liabilities.get("credit_utilization_ratio"),
+            },
+            "risk_analysis": {
+                "system_risk_score": float(appraisal.final_score) if appraisal and appraisal.final_score is not None else None,
+                "risk_category": appraisal.risk_level if appraisal else None,
+                "confidence_score": float(appraisal.confidence_score) if appraisal and appraisal.confidence_score is not None else None,
+                "red_flags": red_flags,
+            },
+            "financial_ratios": {
+                "dti": round(dti, 2) if dti is not None else None,
+                "foir": round(foir, 2) if foir is not None else None,
+                "emi_eligibility": round(emi_eligibility, 2) if emi_eligibility is not None else None,
+                "disposable_income": round(disposable_income, 2) if disposable_income is not None else None,
+            },
+            "document_verification": {
+                "documents": docs_payload,
+                "ocr_status": cashflow.get("ocr_status"),
+                "fraud_detection_flags": red_flags,
+                "digilocker_fetch_status": "verified" if app["kyc_status"] == "Verified" else "pending",
+            },
+            "underwriting_notes": {
+                "internal_comments": appraisal.report_text if appraisal else None,
+                "risk_justification": appraisal.recommendation if appraisal else None,
+                "exception_notes": [entry for entry in audit_entries if "Override" in entry["action"]],
+                "previous_decisions": self._underwriter_decisions.get(arn, []),
+            },
+            "status_tracking": {
+                "current_status": app["stage"],
+                "stage_history": audit_entries,
+                "assigned_officer": loan_officers[0] if loan_officers else None,
+            },
+            "kpi_metrics": kpi_metrics,
+        }
+
+    def underwriter_decision_history(self, arn: str) -> list[dict[str, Any]]:
+        self._get_application(arn)
+        return self._underwriter_decisions.get(arn, [])
+
+    def send_back_for_clarification(self, arn: str, message: str, db) -> dict[str, Any]:
+        app_row = self._get_application_row(arn, db)
+        previous = app_row.stage
+        self._update_application_fields(arn, stage="Documents Pending")
+
+        officer_emails = self._get_loan_officer_emails(db)
+        email_results: list[dict[str, str | None]] = []
+        for email in officer_emails:
+            html = (
+                f"<h2>Clarification Required - {arn}</h2>"
+                f"<p>Underwriter has sent this application back for clarification.</p>"
+                f"<p><strong>Message:</strong> {message}</p>"
+                f"<p>Please update the borrower case and resubmit.</p>"
+            )
+            success, error = self._send_email_notification(email, f"Clarification Required - {arn}", html)
+            email_results.append({"email": email, "status": "sent" if success else "failed", "error": error})
+
+        self.add_audit_log(
+            user="Underwriter",
+            action="Sent Back For Clarification",
+            resource=arn,
+            details=message,
+            risk="Medium",
+        )
+
+        return {
+            "arn": arn,
+            "status": "clarification_requested",
+            "stage": "Documents Pending",
+            "previous_stage": previous,
+            "message": message,
+            "loan_officer_email_results": email_results,
+        }
+
+    def request_additional_documents(self, arn: str, required_documents: list[str], message: str | None, db) -> dict[str, Any]:
+        app_row = self._get_application_row(arn, db)
+        self._update_application_fields(arn, stage="Documents Pending")
+
+        existing_docs = (
+            db.query(Document)
+            .filter(Document.application_id == app_row.id)
+            .order_by(Document.uploaded_at.desc(), Document.id.desc())
+            .all()
+        )
+        existing_doc_codes = [doc.doc_type for doc in existing_docs]
+
+        officer_emails = self._get_loan_officer_emails(db)
+        email_results: list[dict[str, str | None]] = []
+        requested_html = "".join([f"<li>{doc}</li>" for doc in required_documents])
+        existing_html = "".join([f"<li>{doc}</li>" for doc in existing_doc_codes]) or "<li>No documents uploaded yet</li>"
+
+        for email in officer_emails:
+            html = (
+                f"<h2>Additional Documents Requested - {arn}</h2>"
+                f"<p><strong>Underwriter note:</strong> {message or 'Please collect and upload the requested documents.'}</p>"
+                f"<p><strong>Requested Documents:</strong></p><ul>{requested_html}</ul>"
+                f"<p><strong>Currently Uploaded Documents:</strong></p><ul>{existing_html}</ul>"
+            )
+            success, error = self._send_email_notification(email, f"Additional Documents Needed - {arn}", html)
+            email_results.append({"email": email, "status": "sent" if success else "failed", "error": error})
+
+        self.add_audit_log(
+            user="Underwriter",
+            action="Requested Additional Documents",
+            resource=arn,
+            details=f"Requested: {', '.join(required_documents)}",
+            risk="Medium",
+        )
+
+        return {
+            "arn": arn,
+            "status": "additional_documents_requested",
+            "stage": "Documents Pending",
+            "requested_documents": required_documents,
+            "existing_documents": existing_doc_codes,
+            "message": message,
+            "loan_officer_email_results": email_results,
+        }
 
     def get_kyc_aml(self, arn: str) -> dict[str, Any]:
         app = self._get_application(arn)

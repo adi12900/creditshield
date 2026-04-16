@@ -178,6 +178,10 @@ const apiRoleToLabel: Record<AdminUserRole, string> = {
   compliance_officer: 'Compliance Officer',
 };
 
+const PASSWORD_PATTERN = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
+const PASSWORD_RULE_MESSAGE =
+  'Password must be at least 8 characters and include at least one uppercase letter, one number, and one symbol.';
+
 export function UserManagementPage() {
   const [managedUsers, setManagedUsers] = useState<UiUser[]>(users);
   const [firstName, setFirstName] = useState('');
@@ -212,6 +216,11 @@ export function UserManagementPage() {
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
       setErrorMessage('Please fill all required fields.');
+      return;
+    }
+
+    if (!PASSWORD_PATTERN.test(password)) {
+      setErrorMessage(PASSWORD_RULE_MESSAGE);
       return;
     }
 

@@ -24,7 +24,22 @@ async function request<T>(path: string, options: RequestInit = {}, role?: string
     let detail = `Request failed with status ${response.status}`;
     try {
       const body = await response.json();
-      detail = body?.detail || detail;
+      if (Array.isArray(body?.detail)) {
+        const messages: Array<string | null> = body.detail
+          .map((item: unknown) => {
+            if (typeof item === 'string') {
+              return item;
+            }
+            if (item && typeof item === 'object' && 'msg' in item && typeof (item as { msg?: unknown }).msg === 'string') {
+              return (item as { msg: string }).msg;
+            }
+            return null;
+          })
+          .filter((msg: string | null): msg is string => Boolean(msg));
+        detail = messages.length ? messages.join('; ') : detail;
+      } else if (typeof body?.detail === 'string') {
+        detail = body.detail;
+      }
     } catch {
       // Ignore parse errors and keep generic message.
     }
@@ -145,6 +160,62 @@ export interface WorkflowKycAml {
   can_clear_hold: boolean;
 }
 
+export interface UnderwriterDecisionStep {
+  name: string;
+  status: 'passed' | 'failed' | 'pending';
+}
+
+export interface UnderwriterDecisionEngineResponse {
+  arn: string;
+  decision: 'AUTO_APPROVE' | 'MANUAL_REVIEW' | 'AUTO_REJECT';
+  steps: UnderwriterDecisionStep[];
+}
+
+export interface UnderwriterDecisionSubmitResponse {
+  arn: string;
+  decision: 'approve' | 'reject' | 'manual_review';
+  status: string;
+  stage: string;
+  reason?: string | null;
+  email_status?: string | null;
+  email_error?: string | null;
+}
+
+export interface UnderwriterCaseSummary {
+  application: Record<string, unknown>;
+  creditworthiness: Record<string, unknown>;
+  risk_analysis: Record<string, unknown>;
+  financial_ratios: Record<string, unknown>;
+  document_verification: {
+    documents: WorkflowDocumentItem[];
+    ocr_status?: string;
+    fraud_detection_flags?: string[];
+    digilocker_fetch_status?: string;
+  };
+  underwriting_notes: {
+    internal_comments?: string;
+    risk_justification?: string;
+    exception_notes?: Array<Record<string, unknown>>;
+    previous_decisions?: Array<Record<string, unknown>>;
+  };
+  status_tracking: {
+    current_status?: string;
+    stage_history?: Array<Record<string, unknown>>;
+    assigned_officer?: string;
+  };
+  kpi_metrics?: Record<string, unknown>;
+}
+
+export interface UnderwriterCaseActionResponse {
+  arn: string;
+  status: string;
+  stage?: string;
+  message?: string;
+  requested_documents?: string[];
+  existing_documents?: string[];
+  loan_officer_email_results?: Array<{ email: string; status: string; error?: string | null }>;
+}
+
 export interface WorkflowDocumentItem {
   id: string;
   type: string;
@@ -209,7 +280,27 @@ export const workflowApi = {
   complianceDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/compliance/dashboard', {}, role),
   getBureauReport: (arn: string, role: WorkflowRole) => request<WorkflowBureauReport>(`/api/v1/workflow/credit-analyst/bureau/${arn}`, {}, role),
   getAiScore: (arn: string, role: WorkflowRole) => request<WorkflowAiScore>(`/api/v1/workflow/credit-analyst/ai-score/${arn}`, {}, role),
-  getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) => request(`/api/v1/workflow/underwriter/decision-engine/${arn}`, {}, role),
+  getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) =>
+    request<UnderwriterDecisionEngineResponse>(`/api/v1/workflow/underwriter/decision-engine/${arn}`, {}, role),
+  getUnderwriterCaseSummary: (arn: string, role: WorkflowRole) =>
+    request<UnderwriterCaseSummary>(`/api/v1/workflow/underwriter/case-summary/${arn}`, {}, role),
+  getUnderwriterDecisionHistory: (arn: string, role: WorkflowRole) =>
+    request<Array<Record<string, unknown>>>(`/api/v1/workflow/underwriter/decisions/${arn}/history`, {}, role),
+  submitUnderwriterDecision: (arn: string, role: WorkflowRole, payload: { decision: 'approve' | 'reject' | 'manual_review'; reason?: string }) =>
+    request<UnderwriterDecisionSubmitResponse>(`/api/v1/workflow/underwriter/decision-engine/${arn}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, role),
+  sendBackForClarification: (arn: string, role: WorkflowRole, message: string) =>
+    request<UnderwriterCaseActionResponse>(`/api/v1/workflow/underwriter/case/${arn}/send-back`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }, role),
+  requestAdditionalDocuments: (arn: string, role: WorkflowRole, payload: { required_documents: string[]; message?: string }) =>
+    request<UnderwriterCaseActionResponse>(`/api/v1/workflow/underwriter/case/${arn}/request-documents`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, role),
   getDocuments: (arn: string, role: WorkflowRole) => request<WorkflowDocumentItem[]>(`/api/v1/workflow/loan-officer/documents/${arn}`, {}, role),
   reviewDocument: (arn: string, documentId: string, decision: 'approve' | 'reject', role: WorkflowRole, reason?: string) =>
     request<WorkflowDocumentItem>(`/api/v1/workflow/loan-officer/documents/${arn}/review`, {

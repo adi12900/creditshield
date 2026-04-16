@@ -55,7 +55,7 @@ export function UnderwriterDashboard() {
             riskGrade: app.risk_grade,
             creditScore: app.credit_score,
             recommendation,
-            status: app.current_stage === 'Underwriting' ? 'In Progress' : 'Completed',
+            status: app.stage === 'Underwriting' ? 'In Progress' : 'Completed',
           };
         });
 
@@ -155,7 +155,7 @@ export function UnderwriterDashboard() {
                   className="hover:bg-slate-50 cursor-pointer"
                   onClick={() => {
                     setSelectedApplicationArn(app.arn);
-                    navigate('/dashboard/loan-structuring');
+                    navigate('/dashboard/decision-engine');
                   }}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">{app.arn}</td>
@@ -184,7 +184,7 @@ export function UnderwriterDashboard() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedApplicationArn(app.arn);
-                        navigate('/dashboard/loan-structuring');
+                        navigate('/dashboard/decision-engine');
                       }}
                       className="text-sm text-green-600 hover:text-green-700 font-medium"
                     >
