@@ -9,6 +9,7 @@ from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
+from app.models.credit_memo import CreditMemo
 from app.models.user import User, UserRole
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 from app.services.s3 import extract_object_key_from_url, generate_presigned_url
@@ -210,10 +211,15 @@ class WorkflowService:
             raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
         return app
 
-    def list_applications(self, stage: str | None = None) -> list[dict[str, Any]]:
+    def list_applications(self, stage: str | None = None, require_submitted_memo: bool = False) -> list[dict[str, Any]]:
         try:
             with SessionLocal() as db:
                 query = db.query(LoanApplication)
+                if require_submitted_memo:
+                    query = (
+                        query.join(CreditMemo, CreditMemo.application_id == LoanApplication.id)
+                        .filter(CreditMemo.is_submitted.is_(True))
+                    )
                 if stage:
                     query = query.filter(LoanApplication.stage == stage)
                 rows = query.order_by(LoanApplication.id.asc()).all()
@@ -224,6 +230,8 @@ class WorkflowService:
             pass
 
         applications = list(self._applications.values())
+        if require_submitted_memo:
+            applications = [app for app in applications if self._credit_memos.get(app["arn"], {}).get("submitted")]
         if stage:
             applications = [app for app in applications if app["stage"] == stage]
         return applications
@@ -589,12 +597,67 @@ class WorkflowService:
             "policy_pass": dti <= 45 and foir <= 40 and ltv <= 80,
         }
 
+    def has_submitted_credit_memo(self, arn: str, db=None) -> bool:
+        if db is not None:
+            row = self._get_application_row(arn, db)
+            memo = (
+                db.query(CreditMemo)
+                .filter(CreditMemo.application_id == row.id)
+                .first()
+            )
+            return bool(memo and memo.is_submitted)
+
+        try:
+            with SessionLocal() as session:
+                row = session.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if row:
+                    memo = (
+                        session.query(CreditMemo)
+                        .filter(CreditMemo.application_id == row.id)
+                        .first()
+                    )
+                    if memo is not None:
+                        return bool(memo.is_submitted)
+        except Exception:
+            pass
+
+        return bool(self._credit_memos.get(arn, {}).get("submitted"))
+
     def save_credit_memo(self, arn: str, payload: dict[str, Any], submitted: bool) -> dict[str, Any]:
         self._get_application(arn)
         payload = dict(payload)
         payload["submitted"] = submitted
         payload["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
         self._credit_memos[arn] = payload
+
+        try:
+            with SessionLocal() as db:
+                app_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if app_row:
+                    memo = (
+                        db.query(CreditMemo)
+                        .filter(CreditMemo.application_id == app_row.id)
+                        .first()
+                    )
+                    if memo is None:
+                        memo = CreditMemo(application_id=app_row.id)
+
+                    memo.summary = str(payload.get("summary") or "")
+                    memo.strengths = str(payload.get("strengths") or "")
+                    memo.risk_factors = str(payload.get("risk_factors") or "")
+                    memo.recommendation = str(payload.get("recommendation") or "")
+                    memo.conditions = payload.get("conditions")
+                    memo.payload = payload
+                    memo.is_submitted = bool(memo.is_submitted or submitted)
+                    if submitted:
+                        memo.submitted_at = datetime.now(tz=timezone.utc)
+
+                    db.add(memo)
+                    db.commit()
+        except Exception:
+            # Keep API resilient by falling back to in-memory storage if DB write fails.
+            pass
+
         if submitted:
             self.move_stage(arn, "Underwriting", "Credit Memo Submitted", "Credit Analyst")
         return payload

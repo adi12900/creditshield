@@ -21,7 +21,6 @@ import { ApplicationIntakePage } from './pages/loan-officer/ApplicationIntake';
 import { ESignAgreementPage } from './pages/loan-officer/ESignAgreement';
 
 // Credit Analyst Pages
-import { BureauReportPage } from './pages/credit-analyst/BureauReport';
 import { FinancialRatiosPage } from './pages/credit-analyst/FinancialRatios';
 import { AIScorePage } from './pages/credit-analyst/AIScore';
 import { CreditMemoPage } from './pages/credit-analyst/CreditMemo';
@@ -148,9 +147,8 @@ export default function App() {
           <Route path="e-sign-agreement" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ESignAgreementPage /></RoleProtectedRoute>} />
 
           {/* Credit Analyst Routes */}
-          <Route path="bureau-reports" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><BureauReportPage /></RoleProtectedRoute>} />
           <Route path="financial-ratios" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><FinancialRatiosPage /></RoleProtectedRoute>} />
-          <Route path="ai-score" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><AIScorePage /></RoleProtectedRoute>} />
+          <Route path="ai-score" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'underwriter', 'system_admin']}><AIScorePage /></RoleProtectedRoute>} />
           <Route path="credit-memo" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><CreditMemoPage /></RoleProtectedRoute>} />
           <Route path="cibil-reports" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportsPage /></RoleProtectedRoute>} />
           <Route path="cibil-report/:id" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportViewerPage /></RoleProtectedRoute>} />

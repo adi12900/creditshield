@@ -1,20 +1,95 @@
 import { Save, Send, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowAiScore, type WorkflowApplication, type WorkflowBureauReport } from '../../lib/workflowApi';
 
 export function CreditMemoPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const [summary, setSummary] = useState(`The applicant ${selectedApplication.borrowerName} demonstrates a ${selectedApplication.riskGrade} grade risk profile with a CIBIL score of ${selectedApplication.creditScore}. The current loan amount is ₹${selectedApplication.loanAmount.toLocaleString('en-IN')} and the selected file is in ${selectedApplication.stage} stage. Recommendation should be aligned to the live queue selection.`);
-  const [strengths, setStrengths] = useState(`• Strong credit score (${selectedApplication.creditScore})\n• Current stage: ${selectedApplication.stage}\n• Risk grade: ${selectedApplication.riskGrade}`);
-  const [riskFactors, setRiskFactors] = useState(`• Recent inquiries: ${selectedApplication.slaBreached ? 'Above threshold' : 'Within threshold'}\n• Employment type: ${selectedApplication.employmentType}`);
+  const [applications, setApplications] = useState<WorkflowApplication[]>([]);
+  const [applicationLoading, setApplicationLoading] = useState(false);
+  const [bureauSummary, setBureauSummary] = useState<WorkflowBureauReport | null>(null);
+  const [aiSummary, setAiSummary] = useState<WorkflowAiScore | null>(null);
+  const [summary, setSummary] = useState('');
+  const [strengths, setStrengths] = useState('');
+  const [riskFactors, setRiskFactors] = useState('');
   const [recommendation, setRecommendation] = useState<'Approve' | 'Approve with Conditions' | 'Decline'>('Approve');
   const [conditions, setConditions] = useState('');
+
+  const fallbackApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const selectedApiApplication = applications.find((item) => item.arn === selectedApplicationArn) ?? null;
+  const selectedApplication = useMemo(() => ({
+    arn: selectedApiApplication?.arn ?? fallbackApplication.arn,
+    borrowerName: selectedApiApplication?.borrower_name ?? fallbackApplication.borrowerName,
+    loanAmount: selectedApiApplication?.loan_amount ?? fallbackApplication.loanAmount,
+    stage: selectedApiApplication?.stage ?? fallbackApplication.stage,
+    riskGrade: selectedApiApplication?.risk_grade ?? fallbackApplication.riskGrade,
+    creditScore: selectedApiApplication?.credit_score ?? fallbackApplication.creditScore,
+    employmentType: selectedApiApplication?.employment_type ?? fallbackApplication.employmentType,
+    kycStatus: selectedApiApplication?.kyc_status ?? fallbackApplication.kycStatus,
+  }), [fallbackApplication, selectedApiApplication]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'credit_analyst') {
+      setApplications([]);
+      return;
+    }
+
+    setApplicationLoading(true);
+    workflowApi
+      .listApplications()
+      .then((rows) => {
+        setApplications(rows);
+        if (!rows.some((row) => row.arn === selectedApplicationArn) && rows.length > 0) {
+          setSelectedApplicationArn(rows[0].arn);
+        }
+      })
+      .catch(() => setApplications([]))
+      .finally(() => setApplicationLoading(false));
+  }, [selectedApplicationArn, setSelectedApplicationArn, user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'credit_analyst' || !selectedApplicationArn) return;
+
+    workflowApi
+      .getBureauReport(selectedApplicationArn, user.role)
+      .then((data) => setBureauSummary(data))
+      .catch(() => setBureauSummary(null));
+
+    workflowApi
+      .getAiScore(selectedApplicationArn, user.role)
+      .then((data) => setAiSummary(data))
+      .catch(() => setAiSummary(null));
+  }, [selectedApplicationArn, user]);
+
+  useEffect(() => {
+    const aiDecision = aiSummary?.decision === 'AUTO_APPROVE'
+      ? 'Auto Approve'
+      : aiSummary?.decision === 'AUTO_REJECT'
+        ? 'Auto Reject'
+        : 'Manual Review';
+
+    setSummary(
+      `Applicant ${selectedApplication.borrowerName} is currently in ${selectedApplication.stage}. ` +
+      `CIBIL score is ${bureauSummary?.credit_score ?? selectedApplication.creditScore} and AI composite score is ${aiSummary?.composite_score ?? selectedApplication.creditScore}. ` +
+      `Current AI recommendation is ${aiDecision}. Loan amount under review is ₹${selectedApplication.loanAmount.toLocaleString('en-IN')}.`,
+    );
+
+    setStrengths(
+      `• CIBIL score: ${bureauSummary?.credit_score ?? selectedApplication.creditScore}\n` +
+      `• Risk grade: ${selectedApplication.riskGrade}\n` +
+      `• KYC status: ${selectedApplication.kycStatus}`,
+    );
+
+    setRiskFactors(
+      `• Employment type: ${selectedApplication.employmentType}\n` +
+      `• AI confidence: ${aiSummary?.confidence_percent ?? 0}%\n` +
+      `• Tradelines reviewed: ${bureauSummary?.tradelines?.length ?? 0}`,
+    );
+  }, [aiSummary, bureauSummary, selectedApplication]);
 
   const payload = {
     summary,
@@ -40,7 +115,7 @@ export function CreditMemoPage() {
     try {
       await workflowApi.submitCreditMemo(selectedApplication.arn, user.role, payload);
       window.alert('Credit memo submitted to underwriter.');
-      window.location.reload();
+      setApplications((prev) => prev.filter((application) => application.arn !== selectedApplication.arn));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to submit memo';
       window.alert(message);
@@ -60,22 +135,52 @@ export function CreditMemoPage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Select a borrower before drafting the credit memo so the analysis stays tied to the right file."
+        applications={applications.map((application) => ({
+          arn: application.arn,
+          borrowerName: application.borrower_name,
+          email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+          stage: application.stage,
+          riskGrade: application.risk_grade,
+          loanAmount: application.loan_amount,
+        }))}
       />
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-semibold text-slate-900 mb-4">Pre-Populated Data</h3>
+        {applicationLoading && (
+          <p className="text-xs text-slate-500 mb-3">Loading applications from database...</p>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="p-3 bg-slate-50 rounded-lg">
             <p className="text-xs text-slate-600">Bureau Score</p>
-            <p className="text-lg font-bold text-slate-900">{selectedApplication.creditScore}</p>
+            <p className="text-lg font-bold text-slate-900">{bureauSummary?.credit_score ?? selectedApplication.creditScore}</p>
           </div>
           <div className="p-3 bg-slate-50 rounded-lg">
-            <p className="text-xs text-slate-600">DTI Ratio</p>
-            <p className="text-lg font-bold text-slate-900">{selectedApplication.riskGrade === 'C' ? '54%' : selectedApplication.riskGrade === 'B' ? '48%' : '42%'}</p>
+            <p className="text-xs text-slate-600">CIBIL Tradelines</p>
+            <p className="text-lg font-bold text-slate-900">{bureauSummary?.tradelines?.length ?? 0}</p>
           </div>
           <div className="p-3 bg-slate-50 rounded-lg">
-            <p className="text-xs text-slate-600">AI Risk Grade</p>
-            <p className="text-lg font-bold text-green-600">{selectedApplication.riskGrade} ({selectedApplication.riskGrade === 'A+' ? 'Excellent' : selectedApplication.riskGrade === 'A' ? 'Good' : selectedApplication.riskGrade === 'B' ? 'Moderate' : 'High Risk'})</p>
+            <p className="text-xs text-slate-600">AI Composite Score</p>
+            <p className="text-lg font-bold text-green-600">{aiSummary?.composite_score ?? selectedApplication.creditScore}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+            <p className="text-sm font-semibold text-indigo-900">CIBIL Summary</p>
+            <ul className="mt-2 text-sm text-indigo-800 space-y-1">
+              <li>Score trend points: {bureauSummary?.score_trend?.length ?? 0}</li>
+              <li>Active tradelines: {(bureauSummary?.tradelines ?? []).filter((item) => item.status === 'Active').length}</li>
+              <li>Max DPD observed: {Math.max(0, ...(bureauSummary?.tradelines ?? []).map((item) => item.dpd ?? 0))}</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+            <p className="text-sm font-semibold text-emerald-900">AI Summary</p>
+            <ul className="mt-2 text-sm text-emerald-800 space-y-1">
+              <li>Decision: {aiSummary?.decision ?? 'N/A'}</li>
+              <li>Confidence: {aiSummary?.confidence_percent ?? 0}%</li>
+              <li>Top reason: {aiSummary?.reason_codes?.[0] ?? 'N/A'}</li>
+            </ul>
           </div>
         </div>
 

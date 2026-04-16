@@ -45,17 +45,21 @@ def require_roles(allowed_roles: set[str]) -> Callable:
 @router.get("/applications", response_model=list[LoanApplicationOut])
 def list_applications(
     stage: str | None = Query(default=None),
-    _user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
+    current_user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
 ) -> list[LoanApplicationOut]:
-    return [LoanApplicationOut(**item) for item in workflow_service.list_applications(stage=stage)]
+    require_submitted_memo = current_user.role == "underwriter"
+    return [LoanApplicationOut(**item) for item in workflow_service.list_applications(stage=stage, require_submitted_memo=require_submitted_memo)]
 
 
 @router.get("/applications/{arn}", response_model=LoanApplicationOut)
 def get_application(
     arn: str,
-    _user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
+    current_user=Depends(require_auth_roles({"system_admin", "loan_officer", "credit_analyst", "underwriter", "compliance_officer"})),
+    db: Session = Depends(get_db),
 ) -> LoanApplicationOut:
     try:
+        if current_user.role == "underwriter" and not workflow_service.has_submitted_credit_memo(arn, db=db):
+            raise HTTPException(status_code=403, detail="Application is not yet submitted via credit memo")
         return LoanApplicationOut(**workflow_service.get_application(arn))
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
@@ -235,10 +239,15 @@ def credit_analyst_recalculate_ratios(arn: str, payload: RatioRecalculateRequest
 
 @router.get(
     "/credit-analyst/ai-score/{arn}",
-    dependencies=[Depends(require_roles({"credit_analyst"}))],
 )
-def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
+def credit_analyst_ai_score(
+    arn: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_auth_roles({"credit_analyst", "underwriter"})),
+) -> dict:
     try:
+        if current_user.role == "underwriter" and not workflow_service.has_submitted_credit_memo(arn, db=db):
+            raise HTTPException(status_code=403, detail="Application is not yet submitted via credit memo")
         app = workflow_service.get_application(arn)
         composite = app["credit_score"]
         application_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
