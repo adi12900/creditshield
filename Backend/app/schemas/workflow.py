@@ -26,25 +26,13 @@ LoanStage = Literal[
 class LoanApplicationOut(BaseModel):
     arn: str
     borrower_name: str
-    borrower_email: str | None = None
-    borrower_phone: str | None = None
     loan_amount: float
-    loan_type: str = "digital_personal_loan"
     stage: LoanStage
     risk_grade: Literal["A+", "A", "B", "C"]
     credit_score: int
     kyc_status: Literal["Verified", "Pending"]
-    employment_type: Literal[
-        "Salaried",
-        "Self Employed",
-        "Business Owner",
-        "Freelancer",
-        "Student",
-        "Unemployed",
-    ]
+    employment_type: Literal["Salaried", "Self Employed"]
     purpose: str
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 class DashboardStat(BaseModel):
@@ -61,23 +49,7 @@ class DocumentItem(BaseModel):
     id: str
     type: str
     status: Literal["Verified", "Pending OCR", "Flagged"]
-    confidence: int | None = Field(default=None, ge=0, le=100)
-    storage_url: str | None = None
-    uploaded_by_user_id: int | None = None
-    uploaded_at: datetime | None = None
-
-
-class OcrFieldItem(BaseModel):
-    value: str
     confidence: int = Field(ge=0, le=100)
-
-
-class DocumentOcrResponse(BaseModel):
-    document_id: str
-    arn: str
-    doc_type: str
-    ocr_data: dict[str, OcrFieldItem]
-    extracted_at: datetime
 
 
 class DocumentReviewRequest(BaseModel):
@@ -160,110 +132,3 @@ class GenerateReportRequest(BaseModel):
     name: str
     report_type: str
     reporting_period: str
-
-
-class IntakeSubmitRequest(BaseModel):
-    file_complete: bool = Field(
-        ...,
-        description="Loan officer confirms that applicant file is complete and ready for credit analyst review",
-    )
-
-
-class SystemAdminMetric(BaseModel):
-    key: str
-    label: str
-    value: int | float | str
-    subtitle: str | None = None
-
-
-class SystemIntegrationHealth(BaseModel):
-    name: str
-    status: Literal["Healthy", "Degraded", "Down"]
-    latency_ms: int = Field(ge=0)
-
-
-class SystemRoleActivity(BaseModel):
-    role: str
-    active_users: int = Field(ge=0)
-    total_users: int = Field(ge=0)
-
-
-class SystemEventItem(BaseModel):
-    timestamp: datetime
-    event: str
-    user: str
-
-
-class SystemAdminDashboardResponse(BaseModel):
-    metrics: list[SystemAdminMetric]
-    integrations: list[SystemIntegrationHealth]
-    role_activity: list[SystemRoleActivity]
-    recent_events: list[SystemEventItem]
-
-
-class WorkflowStageItem(BaseModel):
-    id: int
-    name: str
-    assigned_role: str
-    avg_duration_minutes: int = Field(ge=0)
-    status: Literal["Active", "Inactive"]
-
-
-class WorkflowConditionItem(BaseModel):
-    id: str
-    condition: str
-    outcome: str
-
-
-class WorkflowDesignerResponse(BaseModel):
-    metrics: list[SystemAdminMetric]
-    workflow_name: str
-    stages: list[WorkflowStageItem]
-    conditions: list[WorkflowConditionItem]
-
-
-class RuleEngineRuleItem(BaseModel):
-    id: int
-    name: str
-    category: str
-    condition: str
-    action: str
-    severity: Literal["High", "Medium", "Low"]
-    status: Literal["Active", "Inactive"]
-    last_modified: str
-
-
-class RuleEngineResponse(BaseModel):
-    metrics: list[SystemAdminMetric]
-    rules: list[RuleEngineRuleItem]
-
-
-class LoanOfficerChecklistItem(BaseModel):
-    id: str
-    item: str
-    done: bool
-
-
-class CommunicationTemplateItem(BaseModel):
-    id: str
-    name: str
-    category: str
-    channel: Literal["email", "sms", "call"]
-    subject: str
-    body: str
-
-
-class LoanOfficerApplicationSummary(BaseModel):
-    arn: str
-    application_status: str
-    active_stage: str
-    processing_time_days: float
-    documents_verified: int
-    documents_total: int
-    communications_total: int
-    email_count: int
-    sms_count: int
-    call_count: int
-    risk_score: int
-    risk_confidence_percent: int
-    timeline: list[dict[str, str | bool]]

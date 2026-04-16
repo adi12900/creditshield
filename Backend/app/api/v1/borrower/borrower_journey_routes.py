@@ -4,31 +4,15 @@ from io import BytesIO
 import copy
 import logging
 from random import randint
-import re
-from typing import Any
-from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import AuthenticatedUser, get_current_user, require_auth_roles
 from app.models.borrower import Borrower
 from app.models.borrower_kyc_profile import BorrowerKycProfile
-from app.models.document import Document
-from app.models.education_loan_details import EducationLoanDetails
-from app.models.gold_loan_details import GoldLoanDetails
-from app.models.home_loan_details import HomeLoanDetails
 from app.models.loan_application import LoanApplication
-from app.models.loan_appraisal_record import LoanAppraisalRecord
-from app.services.loan_appraisal_service import LoanAppraisalServiceError, loan_appraisal_service
-from app.services.s3 import (
-    download_bytes_from_s3,
-    extract_object_key_from_url,
-    generate_presigned_url,
-    upload_file_to_s3,
-)
 
 router = APIRouter(
     prefix="/borrower",
@@ -1430,6 +1414,18 @@ def borrower_kyc_complete(
     }
 
 
+@router.post("/eligibility/check")
+def check_eligibility(payload: dict, current_user: AuthenticatedUser = Depends(get_current_user)) -> dict:
+    income = float(payload.get("monthly_income", 0) or 0)
+    obligations = float(payload.get("existing_obligations", 0) or 0)
+    score = max(0, min(100, int((income - obligations) / 1000) + 50))
+    return {
+        "eligible": income > obligations,
+        "score": score,
+        "reason": "Eligibility estimated from income-obligation profile",
+    }
+
+
 @router.get("/loan-types")
 def loan_types() -> list[dict]:
     return [
@@ -1452,17 +1448,14 @@ def create_application(
     if not profile or profile.kyc_status != "Verified":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Complete KYC before applying for loan")
 
-    loan_type = str(payload.get("loan_type", "personal")).strip().lower()
-    if loan_type not in ALLOWED_LOAN_TYPES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid loan_type")
-
+    loan_type = str(payload.get("loan_type", "personal"))
     amount = int(payload.get("loan_amount", 0) or 0)
     if amount <= 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="loan_amount must be greater than 0")
 
-    employment_type = _normalize_employment_type(str(payload.get("employment_type", "Salaried")))
-    if employment_type not in ALLOWED_EMPLOYMENT_TYPES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid employment_type")
+    employment_type = str(payload.get("employment_type", "Salaried"))
+    if employment_type not in {"Salaried", "Self Employed"}:
+        employment_type = "Salaried"
 
     credit_score = int(payload.get("credit_score", 730) or 730)
     credit_score = max(300, min(900, credit_score))
@@ -1489,17 +1482,12 @@ def create_application(
         co_applicant_details=_normalize_co_applicant_details(payload),
     )
     db.add(application)
-    db.flush()
-
-    _create_loan_type_details(db, application, loan_type, payload.get("loan_details", {}))
-
     db.commit()
     db.refresh(application)
 
     return {
         "application_id": application.arn,
         "loan_type": application.loan_type,
-        "employment_type": application.employment_type,
         "loan_amount": int(application.loan_amount),
         "stage": application.stage,
         "co_applicant_details": application.co_applicant_details,
@@ -1513,7 +1501,7 @@ def get_current_application(
     db: Session = Depends(get_db),
 ) -> dict:
     borrower = _get_borrower_or_404(db, current_user)
-    application = _latest_active_application(db, borrower.id)
+    application = _latest_application(db, borrower.id)
     if not application:
         return {
             "application_id": None,
@@ -1521,9 +1509,7 @@ def get_current_application(
         }
     return {
         "application_id": application.arn,
-        "borrower_name": application.borrower_name,
         "loan_type": application.loan_type,
-        "employment_type": application.employment_type,
         "loan_amount": int(application.loan_amount),
         "stage": application.stage,
         "created_at": application.created_at.isoformat(),
@@ -1541,8 +1527,9 @@ def required_documents(
     if has_co_applicant:
         docs.extend(["co_applicant_aadhaar_card", "co_applicant_bank_statement_12m"])
     return [
-        {"code": code, "name": code.replace("_", " ").title(), "required": True}
-        for code in docs
+        {"code": "id_proof", "name": "Identity Proof", "required": True},
+        {"code": "address_proof", "name": "Address Proof", "required": True},
+        {"code": "income_proof", "name": "Income Proof", "required": True},
     ]
 
 
@@ -2061,7 +2048,7 @@ def borrower_dashboard(
     db: Session = Depends(get_db),
 ) -> dict:
     borrower = _get_borrower_or_404(db, current_user)
-    application = _latest_active_application(db, borrower.id)
+    application = _latest_application(db, borrower.id)
     return {
         "borrower": current_user.username,
         "active_application": application.arn if application else None,
@@ -2077,15 +2064,11 @@ def borrower_tracker(
     db: Session = Depends(get_db),
 ) -> dict:
     borrower = _get_borrower_or_404(db, current_user)
-    application = _latest_active_application(db, borrower.id)
+    application = _latest_application(db, borrower.id)
     if not application:
         return {"stage": "No active application"}
     return {
         "application_id": application.arn,
-        "borrower_name": application.borrower_name,
-        "loan_type": application.loan_type,
-        "employment_type": application.employment_type,
-        "loan_amount": int(application.loan_amount),
         "stage": application.stage,
     }
 

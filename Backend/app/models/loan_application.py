@@ -32,22 +32,3 @@ class LoanApplication(Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    education_details = relationship(
-        "EducationLoanDetails",
-        back_populates="application",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    gold_details = relationship(
-        "GoldLoanDetails",
-        back_populates="application",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    home_details = relationship(
-        "HomeLoanDetails",
-        back_populates="application",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )

@@ -183,7 +183,6 @@ class BorrowerDocumentUploadDto {
   final String status;
   final int? confidence;
   final String? storageUrl;
-  final String? accessUrl;
   final String applicationStage;
 
   const BorrowerDocumentUploadDto({
@@ -193,7 +192,6 @@ class BorrowerDocumentUploadDto {
     required this.status,
     required this.confidence,
     required this.storageUrl,
-    required this.accessUrl,
     required this.applicationStage,
   });
 
@@ -205,7 +203,6 @@ class BorrowerDocumentUploadDto {
       status: (json['status'] as String?) ?? 'Pending OCR',
       confidence: (json['confidence'] as num?)?.toInt(),
       storageUrl: json['storage_url'] as String?,
-      accessUrl: json['access_url'] as String?,
       applicationStage:
           (json['application_stage'] as String?) ?? 'Documents Pending',
     );
@@ -242,11 +239,7 @@ class AuthApiService {
     : baseUrl = (baseUrl == null || baseUrl.trim().isEmpty)
           ? _defaultApiBaseUrl
           : baseUrl,
-      _client = client ?? http.Client() {
-    if (kDebugMode) {
-      debugPrint('AuthApiService baseUrl resolved to: ${this.baseUrl}');
-    }
-  }
+      _client = client ?? http.Client();
 
   Uri _uri(String path) =>
       Uri.parse('${baseUrl.replaceAll(RegExp(r"/$"), '')}$path');
@@ -278,7 +271,7 @@ class AuthApiService {
 
     if (error is http.ClientException) {
       throw Exception(
-        'Could not reach backend at $baseUrl. Verify server health at $baseUrl/health, ensure phone and laptop are on the same network/hotspot, and run app with --dart-define=API_BASE_URL=http://<laptop-ip>:8000 for real devices.',
+        'Could not reach backend at $baseUrl. Check the API host, network, and server status.',
       );
     }
 
@@ -370,6 +363,53 @@ class AuthApiService {
       requestUri,
     );
 
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractError(response));
+    }
+  }
+
+  /// Sends OTP to the email linked to the given Aadhaar in the registry.
+  /// Returns the masked email string on success.
+  Future<String> sendKycOtp({
+    required String accessToken,
+    required String aadhaarNumber,
+  }) async {
+    final requestUri = _uri('/api/v1/borrower/kyc/aadhaar/send-otp');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({'aadhaar_number': aadhaarNumber}),
+      ),
+      requestUri,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return (body['masked_email'] as String?) ?? '***';
+    }
+    throw Exception(_extractError(response));
+  }
+
+  /// Verifies the OTP and marks KYC as verified.
+  Future<void> verifyKycOtp({
+    required String accessToken,
+    required String otp,
+  }) async {
+    final requestUri = _uri('/api/v1/borrower/kyc/aadhaar/verify-otp');
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({'otp': otp}),
+      ),
+      requestUri,
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_extractError(response));
     }
@@ -527,13 +567,12 @@ class AuthApiService {
     required String accessToken,
     required String applicationId,
     required String docType,
-    required String fileName,
-    required Uint8List fileBytes,
     String status = 'Pending OCR',
     int? confidence,
+    String? storageUrl,
   }) async {
     final requestUri = _uri(
-      '/api/v1/borrower/applications/$applicationId/documents/upload',
+      '/api/v1/borrower/applications/$applicationId/documents',
     );
     final request = http.MultipartRequest('POST', requestUri)
       ..headers['Authorization'] = 'Bearer $accessToken'
@@ -547,21 +586,6 @@ class AuthApiService {
     request.files.add(
       http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
     );
-
-    http.Response response;
-    try {
-      final streamed = await request.send().timeout(
-        _requestTimeout,
-        onTimeout: () {
-          throw TimeoutException(
-            'Request timed out after ${_requestTimeout.inSeconds} seconds',
-          );
-        },
-      );
-      response = await http.Response.fromStream(streamed);
-    } catch (error) {
-      _throwNetworkError(requestUri, error);
-    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return BorrowerDocumentUploadDto.fromJson(
