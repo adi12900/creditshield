@@ -57,6 +57,44 @@ export function DocumentReviewPage() {
     }
   };
 
+  const resolveFreshDocumentUrl = async () => {
+    if (!selectedDoc) return null;
+
+    if (!user || user.role !== 'loan_officer') {
+      return selectedDoc.storage_url || null;
+    }
+
+    try {
+      const refreshed = await workflowApi.getDocuments(selectedApplication.arn, user.role);
+      setDocuments(refreshed);
+      const latest = refreshed.find((doc) => doc.id === selectedDoc.id) ?? selectedDoc;
+      setSelectedDoc(latest);
+      return latest.storage_url || null;
+    } catch {
+      return selectedDoc.storage_url || null;
+    }
+  };
+
+  const handleOpenDocument = async (download: boolean) => {
+    const url = await resolveFreshDocumentUrl();
+    if (!url) {
+      window.alert('Document URL is unavailable.');
+      return;
+    }
+
+    if (download) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = '';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const verifiedDocs = documents.filter(doc => doc.status === 'Verified').length;
   const totalDocs = documents.length;
   const avgConfidence = Math.round(
@@ -195,23 +233,20 @@ export function DocumentReviewPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-900">{selectedDoc?.type ?? 'No Document'}</h3>
               <div className="flex gap-2">
-                <a
-                  href={selectedDoc?.storage_url || '#'}
-                  download
+                <button
+                  onClick={() => void handleOpenDocument(true)}
                   className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   <Download className="w-4 h-4" />
                   Download
-                </a>
-                <a
-                  href={selectedDoc?.storage_url || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                </button>
+                <button
+                  onClick={() => void handleOpenDocument(false)}
                   className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   <Eye className="w-4 h-4" />
                   View Full
-                </a>
+                </button>
               </div>
             </div>
 

@@ -28,6 +28,7 @@ from app.schemas.workflow import (
     UnderwriterDecisionEngineResponse,
     UnderwriterDecisionSubmitRequest,
 )
+from app.services.s3 import extract_object_key_from_url, generate_presigned_url
 from app.services.workflow_service import WorkflowServiceError, workflow_service
 
 router = APIRouter(prefix="/workflow", tags=["workflow-role-apis"])
@@ -307,7 +308,11 @@ def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
                         "company_switch_signal": income_metrics.get("company_switch_signal"),
                     },
                     "rulebook_top_insights": metrics.get("rulebook_top_insights", []),
-                    "report_pdf_access_url": record.report_pdf_access_url,
+                    "report_pdf_access_url": (
+                        generate_presigned_url(extract_object_key_from_url(record.report_pdf_storage_url))
+                        if record.report_pdf_storage_url
+                        else None
+                    ),
                     "report_text": record.report_text,
                     "month_count": month_count,
                 }
