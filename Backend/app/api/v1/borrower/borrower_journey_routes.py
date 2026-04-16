@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
+from typing import Any
 import copy
 import logging
 from random import randint
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,6 +14,8 @@ from app.core.security import AuthenticatedUser, get_current_user, require_auth_
 from app.models.borrower import Borrower
 from app.models.borrower_kyc_profile import BorrowerKycProfile
 from app.models.loan_application import LoanApplication
+from app.models.loan_appraisal_record import LoanAppraisalRecord
+from app.models.document import Document
 
 router = APIRouter(
     prefix="/borrower",
