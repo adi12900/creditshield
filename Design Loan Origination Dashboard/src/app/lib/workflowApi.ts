@@ -131,6 +131,10 @@ export interface WorkflowAiScore {
     loan_analysis?: Record<string, unknown>;
     behavioral_risk?: Record<string, unknown>;
     salary_diagnostics?: Record<string, unknown>;
+    borrower_kpis?: Record<string, unknown>;
+    co_applicant_kpis?: Record<string, unknown>;
+    borrower_salary_diagnostics?: Record<string, unknown>;
+    co_applicant_salary_diagnostics?: Record<string, unknown>;
     kpi_metrics?: Record<string, unknown>;
     rulebook_top_insights?: string[];
     report_pdf_access_url?: string | null;

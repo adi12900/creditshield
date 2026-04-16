@@ -68,6 +68,9 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
 
   final _coNameCtrl = TextEditingController();
   final _coRelationCtrl = TextEditingController();
+  final _coMobileCtrl = TextEditingController();
+  final _coAadhaarCtrl = TextEditingController();
+  final _coPanCtrl = TextEditingController();
 
   final _goldWeightCtrl = TextEditingController();
   final _goldTypeCtrl = TextEditingController(text: 'Jewellery');
@@ -135,6 +138,9 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
     _monthlyObligationCtrl.dispose();
     _coNameCtrl.dispose();
     _coRelationCtrl.dispose();
+    _coMobileCtrl.dispose();
+    _coAadhaarCtrl.dispose();
+    _coPanCtrl.dispose();
     _goldWeightCtrl.dispose();
     _propertyValueCtrl.dispose();
     _propertyLocationCtrl.dispose();
@@ -288,6 +294,18 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
     }
   }
 
+  Map<String, dynamic>? _coApplicantPayload() {
+    if (!_hasCoApplicant) return null;
+    return {
+      'full_name': _coNameCtrl.text.trim(),
+      'relationship': _coRelationCtrl.text.trim(),
+      'mobile_number': _coMobileCtrl.text.trim(),
+      'aadhaar_number': _coAadhaarCtrl.text.trim(),
+      'pan_number': _coPanCtrl.text.trim().toUpperCase(),
+      'otp_verified': false,
+    };
+  }
+
   bool _validateStep() {
     final e = <String, String>{};
 
@@ -357,6 +375,26 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
       if (_hasCoApplicant) {
         required('coName', 'Co-Applicant Name', _coNameCtrl);
         required('coRel', 'Co-Applicant Relationship', _coRelationCtrl);
+        required('coMobile', 'Co-Applicant Mobile Number', _coMobileCtrl);
+        required('coAadhaar', 'Co-Applicant Aadhaar Number', _coAadhaarCtrl);
+        required('coPan', 'Co-Applicant PAN', _coPanCtrl);
+        required('coMobile', 'Co-Applicant Mobile Number', _coMobileCtrl);
+        required('coAadhaar', 'Co-Applicant Aadhaar Number', _coAadhaarCtrl);
+        required('coPan', 'Co-Applicant PAN', _coPanCtrl);
+      }
+
+      if (_hasCoApplicant) {
+        if (_coMobileCtrl.text.replaceAll(RegExp(r'\D'), '').length != 10) {
+          e['coMobile'] = 'Enter a valid 10-digit co-applicant mobile number';
+        }
+        if (_coAadhaarCtrl.text.replaceAll(RegExp(r'\D'), '').length != 12) {
+          e['coAadhaar'] = 'Enter a valid 12-digit co-applicant Aadhaar number';
+        }
+        if (!RegExp(
+          r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$',
+        ).hasMatch(_coPanCtrl.text.trim().toUpperCase())) {
+          e['coPan'] = 'Enter a valid co-applicant PAN (e.g. ABCDE1234F)';
+        }
       }
     }
 
@@ -481,6 +519,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
           employmentType: _employmentType,
           purpose: _loanTitle,
           loanDetails: _loanDetailsPayload(),
+          coApplicant: _coApplicantPayload(),
         );
 
         if (!mounted) return;
@@ -735,6 +774,26 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
             label: 'Co-Applicant Relationship*',
             controller: _coRelationCtrl,
             errorText: _fieldError('coRel'),
+          ),
+          const SizedBox(height: 10),
+          CsInputField(
+            label: 'Co-Applicant Mobile Number*',
+            controller: _coMobileCtrl,
+            keyboardType: TextInputType.phone,
+            errorText: _fieldError('coMobile'),
+          ),
+          const SizedBox(height: 10),
+          CsInputField(
+            label: 'Co-Applicant Aadhaar Number*',
+            controller: _coAadhaarCtrl,
+            keyboardType: TextInputType.number,
+            errorText: _fieldError('coAadhaar'),
+          ),
+          const SizedBox(height: 10),
+          CsInputField(
+            label: 'Co-Applicant PAN*',
+            controller: _coPanCtrl,
+            errorText: _fieldError('coPan'),
           ),
         ],
       ],

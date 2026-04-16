@@ -2,9 +2,10 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { ScoreGauge } from '../../components/ui/ScoreGauge';
 import { AIExplanationPanel } from '../../components/ui/AIExplanationPanel';
 import { useEffect, useMemo, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Download, ExternalLink, FileText, Sparkles } from 'lucide-react';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { buildAIRiskProfile } from '../../lib/aiRiskModel';
 import { useStore } from '../../store';
@@ -31,6 +32,31 @@ function readNumber(value: unknown): number {
   if (typeof value === 'number') return value;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function extractSalarySignals(
+  incomeAnalysis: Record<string, unknown>,
+  salaryDiagnostics: Record<string, unknown>,
+) {
+  const salaryMonthsDetected = readNumber(incomeAnalysis.salary_months_detected ?? salaryDiagnostics.salary_months_detected ?? 0);
+  const salaryTrendPct = readNumber(incomeAnalysis.salary_trend_pct ?? salaryDiagnostics.salary_trend_pct ?? 0);
+  const salaryVarianceRatio = readNumber(incomeAnalysis.salary_variance_ratio ?? salaryDiagnostics.salary_variance_ratio ?? 0);
+  const salaryDelayStdDays = readNumber(incomeAnalysis.salary_delay_std_days ?? salaryDiagnostics.salary_delay_std_days ?? 0);
+  const employerSwitchCount = readNumber(incomeAnalysis.employer_switch_count ?? salaryDiagnostics.employer_switch_count ?? 0);
+  const employersDetected = Array.isArray(incomeAnalysis.employers_detected)
+    ? incomeAnalysis.employers_detected.filter((value): value is string => typeof value === 'string')
+    : Array.isArray(salaryDiagnostics.employers_detected)
+      ? salaryDiagnostics.employers_detected.filter((value): value is string => typeof value === 'string')
+      : [];
+
+  return {
+    salaryMonthsDetected,
+    salaryTrendPct,
+    salaryVarianceRatio,
+    salaryDelayStdDays,
+    employerSwitchCount,
+    employersDetected,
+  };
 }
 
 export function AIScorePage() {
@@ -67,6 +93,8 @@ export function AIScorePage() {
   const scoreMax = appraisalAvailable ? 100 : 900;
   const scoreLabel = appraisalAvailable ? 'Loan Appraisal Score' : 'Credit Score Proxy';
   const sourceLabel = apiScore?.model_source === 'loan_appraisal_record' ? 'Actual loan appraisal record' : 'Workflow proxy score';
+  const reportPdfUrl = actualAppraisal?.report_pdf_access_url ?? '';
+  const hasReportPdf = Boolean(reportPdfUrl);
 
   const analysisPeriod = actualAppraisal?.analysis_period;
   const monthCount = readNumber(analysisPeriod?.month_count ?? actualAppraisal?.month_count ?? actualAppraisal?.monthly_balance_table?.length ?? 0);
@@ -82,18 +110,37 @@ export function AIScorePage() {
   const cashflowAnalysis = (actualAppraisal?.cashflow_analysis ?? rawKpiMetrics.cashflow_analysis ?? {}) as Record<string, unknown>;
   const liabilityAnalysis = (actualAppraisal?.liability_analysis ?? rawKpiMetrics.liability_analysis ?? {}) as Record<string, unknown>;
   const salaryDiagnostics = (actualAppraisal?.salary_diagnostics ?? rawKpiMetrics.salary_diagnostics ?? {}) as Record<string, unknown>;
+  const borrowerKpis = (actualAppraisal?.borrower_kpis ?? rawKpiMetrics.borrower_kpis ?? {}) as Record<string, unknown>;
+  const coApplicantKpis = (actualAppraisal?.co_applicant_kpis ?? rawKpiMetrics.co_applicant_kpis ?? {}) as Record<string, unknown>;
+  const coApplicantAppraisal = (rawKpiMetrics.co_applicant_appraisal ?? {}) as Record<string, unknown>;
+  const borrowerIncomeAnalysis = (borrowerKpis.income_analysis ?? incomeAnalysis) as Record<string, unknown>;
+  const coApplicantIncomeAnalysis = (coApplicantKpis.income_analysis ?? coApplicantAppraisal.income_analysis ?? {}) as Record<string, unknown>;
+  const borrowerSalaryDiagnostics = (
+    actualAppraisal?.borrower_salary_diagnostics
+    ?? borrowerKpis.salary_diagnostics
+    ?? (salaryDiagnostics.borrower as Record<string, unknown> | undefined)
+    ?? salaryDiagnostics
+    ?? {}
+  ) as Record<string, unknown>;
+  const coApplicantSalaryDiagnostics = (
+    actualAppraisal?.co_applicant_salary_diagnostics
+    ?? coApplicantKpis.salary_diagnostics
+    ?? rawKpiMetrics.co_applicant_salary_diagnostics
+    ?? (salaryDiagnostics.co_applicant as Record<string, unknown> | undefined)
+    ?? {}
+  ) as Record<string, unknown>;
+  const coApplicantMonthlyRows = (
+    coApplicantKpis.monthly_balance_table
+    ?? coApplicantAppraisal.monthly_balance_table
+    ?? []
+  ) as Array<{ month: string; credit: number; debit: number; savings: number; balance_remaining: number; opening_balance?: number }>;
+  const hasCoApplicantSection = Object.keys(coApplicantIncomeAnalysis).length > 0
+    || Object.keys(coApplicantSalaryDiagnostics).length > 0
+    || coApplicantMonthlyRows.length > 0;
   const ruleInsights = actualAppraisal?.rulebook_top_insights ?? [];
 
-  const salaryMonthsDetected = readNumber(incomeAnalysis.salary_months_detected ?? salaryDiagnostics.salary_months_detected ?? 0);
-  const salaryTrendPct = readNumber(incomeAnalysis.salary_trend_pct ?? salaryDiagnostics.salary_trend_pct ?? 0);
-  const salaryVarianceRatio = readNumber(incomeAnalysis.salary_variance_ratio ?? salaryDiagnostics.salary_variance_ratio ?? 0);
-  const salaryDelayStdDays = readNumber(incomeAnalysis.salary_delay_std_days ?? salaryDiagnostics.salary_delay_std_days ?? 0);
-  const employerSwitchCount = readNumber(incomeAnalysis.employer_switch_count ?? salaryDiagnostics.employer_switch_count ?? 0);
-  const employersDetected = Array.isArray(incomeAnalysis.employers_detected)
-    ? incomeAnalysis.employers_detected.filter((value): value is string => typeof value === 'string')
-    : Array.isArray(salaryDiagnostics.employers_detected)
-      ? salaryDiagnostics.employers_detected.filter((value): value is string => typeof value === 'string')
-      : [];
+  const borrowerSalary = extractSalarySignals(borrowerIncomeAnalysis, borrowerSalaryDiagnostics);
+  const coApplicantSalary = extractSalarySignals(coApplicantIncomeAnalysis, coApplicantSalaryDiagnostics);
 
   const explanationFactors = useMemo(() => {
     if (appraisalAvailable && ruleInsights.length > 0) {
@@ -146,6 +193,30 @@ export function AIScorePage() {
                 Coverage: {monthCount || selectedApplication.tenureMonths} months
               </Badge>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {hasReportPdf ? (
+              <>
+                <Button asChild variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                  <a href={reportPdfUrl} target="_blank" rel="noreferrer">
+                    <FileText className="w-4 h-4" />
+                    View PDF
+                  </a>
+                </Button>
+                <Button asChild className="bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+                  <a href={reportPdfUrl} download>
+                    <Download className="w-4 h-4" />
+                    Download PDF
+                  </a>
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-slate-300">
+                <ExternalLink className="w-4 h-4" />
+                PDF not available yet for this appraisal record
+              </div>
+            )}
           </div>
 
           <ApplicationSelector
@@ -265,22 +336,22 @@ export function AIScorePage() {
         <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Salary Months</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{salaryMonthsDetected || '-'}</p>
-            <p className="text-sm text-slate-600 mt-1">Salary account activity</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{borrowerSalary.salaryMonthsDetected || '-'}</p>
+            <p className="text-sm text-slate-600 mt-1">Borrower salary activity</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Late Salary Signal</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{salaryDelayStdDays > 3 ? 'Yes' : 'No'}</p>
-            <p className="text-sm text-slate-600 mt-1">Std dev: {salaryDelayStdDays.toFixed(2)} days</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{borrowerSalary.salaryDelayStdDays > 3 ? 'Yes' : 'No'}</p>
+            <p className="text-sm text-slate-600 mt-1">Borrower std dev: {borrowerSalary.salaryDelayStdDays.toFixed(2)} days</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Employer Switches</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{employerSwitchCount || 0}</p>
-            <p className="text-sm text-slate-600 mt-1">Detected from salary patterns</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{borrowerSalary.employerSwitchCount || 0}</p>
+            <p className="text-sm text-slate-600 mt-1">Borrower salary patterns</p>
           </CardContent>
         </Card>
       </div>
@@ -288,27 +359,27 @@ export function AIScorePage() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-6">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-slate-900">Salary Diagnostics</CardTitle>
-            <CardDescription>Detailed salary behavior extracted from the appraisal record.</CardDescription>
+            <CardTitle className="text-slate-900">Borrower Salary Diagnostics</CardTitle>
+            <CardDescription>Borrower-specific salary behavior extracted from the appraisal record.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {salaryMonthsDetected > 0 ? (
+            {borrowerSalary.salaryMonthsDetected > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Salary Trend</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(salaryTrendPct)}</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(borrowerSalary.salaryTrendPct)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Salary Variability</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(salaryVarianceRatio)}</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(borrowerSalary.salaryVarianceRatio)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Salary Reduction Signal</p>
-                  <p className={`mt-2 text-2xl font-semibold ${salaryTrendPct < -0.05 ? 'text-rose-600' : 'text-emerald-600'}`}>{salaryTrendPct < -0.05 ? 'Detected' : 'No'}</p>
+                  <p className={`mt-2 text-2xl font-semibold ${borrowerSalary.salaryTrendPct < -0.05 ? 'text-rose-600' : 'text-emerald-600'}`}>{borrowerSalary.salaryTrendPct < -0.05 ? 'Detected' : 'No'}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Late Salary Signal</p>
-                  <p className={`mt-2 text-2xl font-semibold ${salaryDelayStdDays > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>{salaryDelayStdDays > 3 ? 'Likely' : 'Stable'}</p>
+                  <p className={`mt-2 text-2xl font-semibold ${borrowerSalary.salaryDelayStdDays > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>{borrowerSalary.salaryDelayStdDays > 3 ? 'Likely' : 'Stable'}</p>
                 </div>
               </div>
             ) : actualAppraisal ? (
@@ -324,12 +395,62 @@ export function AIScorePage() {
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 mb-2">Detected salary sources</p>
               <div className="flex flex-wrap gap-2">
-                {employersDetected.length > 0 ? employersDetected.map((employer) => (
+                {borrowerSalary.employersDetected.length > 0 ? borrowerSalary.employersDetected.map((employer) => (
                   <Badge key={employer} variant="secondary" className="bg-slate-100 text-slate-700">
                     {employer}
                   </Badge>
                 )) : (
                   <span className="text-sm text-slate-500">No specific employer source detected.</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-slate-900">Co-Applicant Salary Diagnostics</CardTitle>
+            <CardDescription>Co-applicant-specific salary behavior and indicators.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hasCoApplicantSection && coApplicantSalary.salaryMonthsDetected > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Salary Trend</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(coApplicantSalary.salaryTrendPct)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Salary Variability</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{formatPercent(coApplicantSalary.salaryVarianceRatio)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Late Salary Signal</p>
+                  <p className={`mt-2 text-2xl font-semibold ${coApplicantSalary.salaryDelayStdDays > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {coApplicantSalary.salaryDelayStdDays > 3 ? 'Likely' : 'Stable'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Employer Switches</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{coApplicantSalary.employerSwitchCount || 0}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                {hasCoApplicantSection
+                  ? 'Co-applicant salary diagnostics are not available in this record.'
+                  : 'No co-applicant analytics were attached to this appraisal record.'}
+              </div>
+            )}
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 mb-2">Detected co-applicant salary sources</p>
+              <div className="flex flex-wrap gap-2">
+                {coApplicantSalary.employersDetected.length > 0 ? coApplicantSalary.employersDetected.map((employer) => (
+                  <Badge key={employer} variant="secondary" className="bg-slate-100 text-slate-700">
+                    {employer}
+                  </Badge>
+                )) : (
+                  <span className="text-sm text-slate-500">No specific co-applicant employer source detected.</span>
                 )}
               </div>
             </div>
@@ -426,6 +547,49 @@ export function AIScorePage() {
           )}
         </CardContent>
       </Card>
+
+      {hasCoApplicantSection && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-slate-900">Co-Applicant Month-wise Income, Expense & Outstanding</CardTitle>
+            <CardDescription>Separate month-wise evidence for co-applicant statement analysis.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {coApplicantMonthlyRows.length > 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Month</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Income (Credit)</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Expenses (Debit)</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Savings</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Outstanding</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {coApplicantMonthlyRows.map((row) => (
+                      <tr key={row.month} className="hover:bg-slate-50/80">
+                        <td className="px-4 py-3 font-medium text-slate-900">{row.month}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatMoney(readNumber(row.credit))}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatMoney(readNumber(row.debit))}</td>
+                        <td className={`px-4 py-3 font-medium ${readNumber(row.savings) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {formatMoney(readNumber(row.savings))}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{formatMoney(readNumber(row.balance_remaining))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                Co-applicant month-wise table is not available in this appraisal record.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
         <Card className="border-slate-200 shadow-sm">

@@ -21,7 +21,9 @@ String get _defaultApiBaseUrl {
 
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
-      return 'http://192.168.1.8:8000';
+      // Android emulator reaches host machine via 10.0.2.2.
+      // For real devices, pass --dart-define=API_BASE_URL=http://<laptop-ip>:8000.
+      return 'http://10.0.2.2:8000';
     case TargetPlatform.iOS:
     case TargetPlatform.linux:
     case TargetPlatform.macOS:
@@ -149,6 +151,7 @@ class BorrowerApplicationDto {
   final String employmentType;
   final int loanAmount;
   final String stage;
+  final Map<String, dynamic>? coApplicantDetails;
 
   const BorrowerApplicationDto({
     required this.applicationId,
@@ -156,6 +159,7 @@ class BorrowerApplicationDto {
     required this.employmentType,
     required this.loanAmount,
     required this.stage,
+    this.coApplicantDetails,
   });
 
   factory BorrowerApplicationDto.fromJson(Map<String, dynamic> json) {
@@ -165,6 +169,9 @@ class BorrowerApplicationDto {
       employmentType: (json['employment_type'] as String?) ?? 'Salaried',
       loanAmount: (json['loan_amount'] as num?)?.toInt() ?? 0,
       stage: (json['stage'] as String?) ?? 'Submitted',
+      coApplicantDetails: json['co_applicant_details'] is Map<String, dynamic>
+          ? (json['co_applicant_details'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -271,7 +278,7 @@ class AuthApiService {
 
     if (error is http.ClientException) {
       throw Exception(
-        'Could not reach backend at $baseUrl. Verify server health at $baseUrl/health, ensure same Wi-Fi network, and if needed run app with --dart-define=API_BASE_URL=http://192.168.1.8:8000.',
+        'Could not reach backend at $baseUrl. Verify server health at $baseUrl/health, ensure phone and laptop are on the same network/hotspot, and run app with --dart-define=API_BASE_URL=http://<laptop-ip>:8000 for real devices.',
       );
     }
 
@@ -414,6 +421,7 @@ class AuthApiService {
     required String employmentType,
     required String purpose,
     Map<String, dynamic>? loanDetails,
+    Map<String, dynamic>? coApplicant,
   }) async {
     final requestUri = _uri('/api/v1/borrower/applications');
     final response = await _request(
@@ -430,6 +438,8 @@ class AuthApiService {
           'purpose': purpose,
           if (loanDetails != null && loanDetails.isNotEmpty)
             'loan_details': loanDetails,
+          if (coApplicant != null && coApplicant.isNotEmpty)
+            'co_applicant': coApplicant,
         }),
       ),
       requestUri,
@@ -450,6 +460,7 @@ class AuthApiService {
     required String employmentType,
     required String purpose,
     required Map<String, dynamic> loanDetails,
+    Map<String, dynamic>? coApplicant,
   }) {
     return createApplication(
       accessToken: accessToken,
@@ -458,7 +469,58 @@ class AuthApiService {
       employmentType: employmentType,
       purpose: purpose,
       loanDetails: loanDetails,
+      coApplicant: coApplicant,
     );
+  }
+
+  Future<Map<String, dynamic>> sendCoApplicantOtp({
+    required String accessToken,
+    required String applicationId,
+  }) async {
+    final requestUri = _uri(
+      '/api/v1/borrower/applications/$applicationId/co-applicant/otp/send',
+    );
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      ),
+      requestUri,
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_extractError(response));
+  }
+
+  Future<Map<String, dynamic>> verifyCoApplicantOtp({
+    required String accessToken,
+    required String applicationId,
+    required String otpCode,
+  }) async {
+    final requestUri = _uri(
+      '/api/v1/borrower/applications/$applicationId/co-applicant/otp/verify',
+    );
+    final response = await _request(
+      () => _client.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({'otp_code': otpCode}),
+      ),
+      requestUri,
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_extractError(response));
   }
 
   Future<BorrowerDocumentUploadDto> uploadApplicationDocument({
@@ -483,11 +545,7 @@ class AuthApiService {
     }
 
     request.files.add(
-      http.MultipartFile.fromBytes(
-        'file',
-        fileBytes,
-        filename: fileName,
-      ),
+      http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
     );
 
     http.Response response;

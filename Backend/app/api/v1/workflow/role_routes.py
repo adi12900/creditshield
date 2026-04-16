@@ -316,6 +316,13 @@ def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
                 liability_metrics = metrics.get("liability_analysis") if isinstance(metrics.get("liability_analysis"), dict) else {}
                 loan_metrics = metrics.get("loan_analysis") if isinstance(metrics.get("loan_analysis"), dict) else {}
                 behavior_metrics = metrics.get("behavioral_risk") if isinstance(metrics.get("behavioral_risk"), dict) else {}
+                borrower_kpis = metrics.get("borrower_kpis") if isinstance(metrics.get("borrower_kpis"), dict) else {}
+                co_applicant_kpis = metrics.get("co_applicant_kpis") if isinstance(metrics.get("co_applicant_kpis"), dict) else {}
+                borrower_salary = metrics.get("salary_diagnostics") if isinstance(metrics.get("salary_diagnostics"), dict) else {}
+                co_applicant_salary = metrics.get("co_applicant_salary_diagnostics") if isinstance(metrics.get("co_applicant_salary_diagnostics"), dict) else {}
+                if isinstance(record.salary_diagnostics, dict):
+                    borrower_salary = record.salary_diagnostics.get("borrower") if isinstance(record.salary_diagnostics.get("borrower"), dict) else borrower_salary
+                    co_applicant_salary = record.salary_diagnostics.get("co_applicant") if isinstance(record.salary_diagnostics.get("co_applicant"), dict) else co_applicant_salary
 
                 monthly_balance_table = metrics.get("monthly_balance_table") if isinstance(metrics.get("monthly_balance_table"), list) else []
                 month_count = len(monthly_balance_table)
@@ -341,6 +348,10 @@ def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
                     "loan_analysis": loan_metrics,
                     "behavioral_risk": behavior_metrics,
                     "kpi_metrics": metrics,
+                    "borrower_kpis": borrower_kpis,
+                    "co_applicant_kpis": co_applicant_kpis,
+                    "borrower_salary_diagnostics": borrower_salary,
+                    "co_applicant_salary_diagnostics": co_applicant_salary,
                     "salary_diagnostics": record.salary_diagnostics or {
                         "salary_months_detected": income_metrics.get("salary_months_detected"),
                         "salary_variance_ratio": income_metrics.get("salary_variance_ratio"),

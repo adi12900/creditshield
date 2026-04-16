@@ -35,6 +35,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   List<Map<String, dynamic>> _requiredDocs = const [];
   bool _loadingRequiredDocs = true;
+  final TextEditingController _coApplicantOtpCtrl = TextEditingController();
+  bool _sendingCoApplicantOtp = false;
+  bool _verifyingCoApplicantOtp = false;
 
   bool get _hasApplicationId =>
       widget.applicationId != null && widget.applicationId!.trim().isNotEmpty;
@@ -46,6 +49,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
   List<Map<String, dynamic>> get _docs =>
       _requiredDocs.isNotEmpty ? _requiredDocs : _fallbackRequiredDocs();
+
+  @override
+  void dispose() {
+    _coApplicantOtpCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -267,11 +276,25 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   itemBuilder: (context, i) {
                     final doc = _docs[i];
                     final key = doc['key'] as String;
+                    final isOtpDoc = key == 'co_applicant_otp_verification';
                     final label = (doc['label'] as String).toLowerCase();
                     final allowCsv =
                         key == 'bank_statement_12m' ||
+                        key == 'co_applicant_bank_statement_12m' ||
                         label.contains('bank statement');
                     final uploaded = _uploaded[key] == true;
+                    if (isOtpDoc) {
+                      return _CoApplicantOtpCard(
+                        verified: uploaded,
+                        secondary: secondary,
+                        isDark: isDark,
+                        otpController: _coApplicantOtpCtrl,
+                        sending: _sendingCoApplicantOtp,
+                        verifying: _verifyingCoApplicantOtp,
+                        onSendOtp: _sendCoApplicantOtp,
+                        onVerifyOtp: _verifyCoApplicantOtp,
+                      );
+                    }
                     return _DocCard(
                       label: doc['label'] as String,
                       mandatory: doc['mandatory'] as bool,
@@ -489,9 +512,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       );
     }
 
-    final isCsvAllowedDoc = docKey == 'bank_statement_12m';
+    final isCsvAllowedDoc =
+        docKey == 'bank_statement_12m' ||
+        docKey == 'co_applicant_bank_statement_12m';
     final allowedExtensions = isCsvAllowedDoc
-      ? const ['csv', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png']
+        ? const ['csv', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png']
         : const ['pdf', 'jpg', 'jpeg', 'png'];
 
     final result = await FilePicker.platform.pickFiles(
@@ -505,7 +530,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final fileName = picked.name.trim().isEmpty ? 'document' : picked.name;
     final bytes = picked.bytes;
     if (bytes == null || bytes.isEmpty) {
-      throw Exception('Unable to read selected file bytes. Please pick another file.');
+      throw Exception(
+        'Unable to read selected file bytes. Please pick another file.',
+      );
     }
     return _SelectedDocument(
       fileName: fileName,
@@ -520,6 +547,247 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final segments = normalized.split('/');
     if (segments.isEmpty) return 'document';
     return segments.last.trim().isEmpty ? 'document' : segments.last;
+  }
+
+  Future<void> _sendCoApplicantOtp() async {
+    if (!_hasApplicationId) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Missing application ID.')));
+      return;
+    }
+
+    final accessToken = context.read<AppState>().authToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    setState(() => _sendingCoApplicantOtp = true);
+    try {
+      final response = await _authApi.sendCoApplicantOtp(
+        accessToken: accessToken,
+        applicationId: widget.applicationId!.trim(),
+      );
+      if (!mounted) return;
+      final otpCode = response['otp_code'];
+      setState(() {
+        _sendingCoApplicantOtp = false;
+        if (otpCode is String && otpCode.trim().isNotEmpty) {
+          _coApplicantOtpCtrl.text = otpCode.trim();
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Co-applicant OTP sent successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingCoApplicantOtp = false);
+      final errorText = e.toString();
+      if (errorText.contains('401') ||
+          errorText.contains('Unauthorized') ||
+          errorText.contains('Missing or invalid Authorization header') ||
+          errorText.contains('Invalid or expired token')) {
+        context.go('/session-reauth');
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _verifyCoApplicantOtp() async {
+    if (!_hasApplicationId) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Missing application ID.')));
+      return;
+    }
+
+    final otp = _coApplicantOtpCtrl.text.trim();
+    if (otp.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid OTP.')),
+      );
+      return;
+    }
+
+    final accessToken = context.read<AppState>().authToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    setState(() => _verifyingCoApplicantOtp = true);
+    try {
+      final response = await _authApi.verifyCoApplicantOtp(
+        accessToken: accessToken,
+        applicationId: widget.applicationId!.trim(),
+        otpCode: otp,
+      );
+
+      if (!mounted) return;
+      final appraisal = response['loan_appraisal'];
+      final appraisalTriggered = appraisal is Map && appraisal.isNotEmpty;
+      setState(() {
+        _verifyingCoApplicantOtp = false;
+        _uploaded['co_applicant_otp_verification'] = true;
+      });
+      _coApplicantOtpCtrl.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            appraisalTriggered
+                ? 'Co-applicant OTP verified successfully. Loan appraisal started.'
+                : 'Co-applicant OTP verified successfully.',
+          ),
+        ),
+      );
+      await _loadRequiredDocs();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _verifyingCoApplicantOtp = false);
+      final errorText = e.toString();
+      if (errorText.contains('401') ||
+          errorText.contains('Unauthorized') ||
+          errorText.contains('Missing or invalid Authorization header') ||
+          errorText.contains('Invalid or expired token')) {
+        context.go('/session-reauth');
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+}
+
+class _CoApplicantOtpCard extends StatelessWidget {
+  final bool verified;
+  final Color secondary;
+  final bool isDark;
+  final TextEditingController otpController;
+  final bool sending;
+  final bool verifying;
+  final VoidCallback onSendOtp;
+  final VoidCallback onVerifyOtp;
+
+  const _CoApplicantOtpCard({
+    required this.verified,
+    required this.secondary,
+    required this.isDark,
+    required this.otpController,
+    required this.sending,
+    required this.verifying,
+    required this.onSendOtp,
+    required this.onVerifyOtp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: verified
+            ? AppColors.success.withValues(alpha: 0.06)
+            : (isDark ? AppColors.cardDark : AppColors.cardLight),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: verified
+              ? AppColors.success.withValues(alpha: 0.4)
+              : (isDark ? AppColors.borderDark : AppColors.borderLight),
+          width: verified ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                verified ? Icons.verified_user : Icons.password_outlined,
+                color: verified ? AppColors.success : secondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Co-Applicant OTP Verification',
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (verified)
+                Text(
+                  'Verified',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (!verified) ...[
+            Text(
+              'Send OTP to co-applicant and verify before moving ahead.',
+              style: AppTypography.caption.copyWith(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'OTP',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: sending ? null : onSendOtp,
+                  child: sending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Send OTP'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: verifying ? null : onVerifyOtp,
+                style: ElevatedButton.styleFrom(backgroundColor: secondary),
+                child: verifying
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Verify OTP'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

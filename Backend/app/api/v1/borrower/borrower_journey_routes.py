@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
+import copy
 import logging
 from random import randint
 import re
@@ -48,6 +49,8 @@ ALLOWED_EMPLOYMENT_TYPES = {
 APPRAISAL_RULES_PATH = "dataset/behavioral_rules_realistic.yaml"
 APPRAISAL_MODEL_PATH = "loan_appraisal_model/loan_appraisal_trained_model.pkl"
 UNIVERSAL_REQUIRED_DOCS = {"aadhaar_card", "pan_card", "bank_statement_12m"}
+CO_APPLICANT_DUMMY_OTP = "123456"
+CO_APPLICANT_ACCEPTED_DUMMY_OTPS = {"123456", "000000", "111111"}
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -90,7 +93,11 @@ def _normalize_employment_type(raw_value: str) -> str:
     return mapping.get(value, "")
 
 
-def _application_required_docs(loan_type: str, employment_type: str | None = None) -> list[str]:
+def _application_required_docs(
+    loan_type: str,
+    employment_type: str | None = None,
+    application: LoanApplication | None = None,
+) -> list[str]:
     normalized_loan_type = loan_type.strip().lower()
     normalized_employment = _normalize_employment_type(employment_type or "") or "Salaried"
 
@@ -117,6 +124,9 @@ def _application_required_docs(loan_type: str, employment_type: str | None = Non
             required_docs.update(["student_id_card", "co_applicant_income_proof", "guardian_bank_statement"])
         else:
             required_docs.update(["co_applicant_income_proof", "bank_statement_6m"])
+
+    if application is not None and _application_has_co_applicant(application):
+        required_docs.update(_co_applicant_required_docs(application))
 
     return sorted(required_docs)
 
@@ -264,6 +274,11 @@ def _build_report_pdf(analysis_result: dict[str, Any], report_text: str, arn: st
     loan_amount_analysis = _safe_dict(professional_appraisal.get("loan_amount_analysis"))
     top_cashflow = _safe_dict(result_block.get("cashflow_analysis"))
     top_income = _safe_dict(result_block.get("income_analysis"))
+    co_appraisal = _safe_dict(result_block.get("co_applicant_appraisal"))
+    co_income = _safe_dict(co_appraisal.get("income_analysis"))
+    co_cashflow = _safe_dict(co_appraisal.get("cashflow_analysis"))
+    co_liability = _safe_dict(co_appraisal.get("liability_analysis"))
+    co_salary_diag = _safe_dict(result_block.get("co_applicant_salary_diagnostics"))
 
     # Expense breakdown should prefer Bedrock diagnostics when available.
     expense_breakdown = _safe_dict(cashflow.get("expense_breakdown"))
@@ -328,6 +343,12 @@ def _build_report_pdf(analysis_result: dict[str, Any], report_text: str, arn: st
     salary_reduction_signal = "Detected" if salary_trend_pct < -0.05 else "Not detected"
     late_salary_signal = "Likely delayed/irregular" if salary_delay_std_days > 3.0 else "Mostly on-time"
     switching_signal = "Detected" if employer_switch_count > 0 else "Not detected"
+    co_salary_months = int(_safe_float(co_income.get("salary_months_detected") or co_salary_diag.get("salary_months_detected"), 0.0))
+    co_salary_trend_pct = _safe_float(co_income.get("salary_trend_pct") or co_salary_diag.get("salary_trend_pct"), 0.0)
+    co_salary_variance_ratio = _safe_float(co_income.get("salary_variance_ratio") or co_salary_diag.get("salary_variance_ratio"), 0.0)
+    co_salary_delay_std_days = _safe_float(co_income.get("salary_delay_std_days") or co_salary_diag.get("salary_delay_std_days"), 0.0)
+    co_employer_switch_count = int(_safe_float(co_income.get("employer_switch_count") or co_salary_diag.get("employer_switch_count"), 0.0))
+    co_monthly_balance_table = co_appraisal.get("monthly_balance_table") if isinstance(co_appraisal.get("monthly_balance_table"), list) else []
 
     story: list[Any] = []
 
@@ -505,6 +526,76 @@ def _build_report_pdf(analysis_result: dict[str, Any], report_text: str, arn: st
     else:
         story.append(Paragraph("No month-wise table available.", body_style))
 
+    if co_appraisal:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Co-Applicant KPI Snapshot", section_style))
+        story.append(
+            _table_from_pairs(
+                [
+                    ("Co-Applicant Final Score", _safe_text(co_appraisal.get("final_score") or "N/A")),
+                    ("Co-Applicant Confidence", _safe_text(co_appraisal.get("confidence_score") or "N/A")),
+                    ("Co-Applicant Avg Monthly Inflow", _money(_safe_float(co_cashflow.get("total_inflow"), 0.0) / float(max(1, len(co_monthly_balance_table))))),
+                    ("Co-Applicant Avg Monthly Outflow", _money(_safe_float(co_cashflow.get("total_outflow"), 0.0) / float(max(1, len(co_monthly_balance_table))))),
+                    ("Co-Applicant Debt-to-Income", _pct(_safe_float(co_liability.get("debt_to_income_ratio"), 0.0))),
+                ],
+                col_widths=[58 * mm, 114 * mm],
+            )
+        )
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("Co-Applicant Salary Diagnostics", section_style))
+        story.append(
+            _table_from_pairs(
+                [
+                    ("Salary Months Detected", co_salary_months),
+                    ("Salary Trend", f"{co_salary_trend_pct * 100:.2f}%"),
+                    ("Salary Variability", _pct(co_salary_variance_ratio)),
+                    ("Salary Delay Variability", f"{co_salary_delay_std_days:.2f} days"),
+                    ("Employer Switching", f"{co_employer_switch_count} switch events"),
+                ],
+                col_widths=[58 * mm, 114 * mm],
+            )
+        )
+        if co_monthly_balance_table:
+            story.append(Spacer(1, 4))
+            story.append(Paragraph("Co-Applicant Month-wise Income, Expense & Outstanding", section_style))
+            co_rows = [
+                [
+                    Paragraph("Month", label_style),
+                    Paragraph("Income (Credit)", label_style),
+                    Paragraph("Expenses (Debit)", label_style),
+                    Paragraph("Outstanding", label_style),
+                ]
+            ]
+            for row in co_monthly_balance_table:
+                if not isinstance(row, dict):
+                    continue
+                co_rows.append(
+                    [
+                        Paragraph(_safe_text(row.get("month")), body_style),
+                        Paragraph(_money(row.get("credit", 0)), body_style),
+                        Paragraph(_money(row.get("debit", 0)), body_style),
+                        Paragraph(_money(row.get("balance_remaining", 0)), body_style),
+                    ]
+                )
+            co_monthly_table = Table(co_rows, colWidths=[28 * mm, 46 * mm, 46 * mm, 52 * mm], repeatRows=1)
+            co_monthly_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+                        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E8F0")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
+            story.append(co_monthly_table)
+
     story.append(PageBreak())
 
     # Page 3: expense + liability + behavioral.
@@ -676,10 +767,12 @@ def _upsert_appraisal_record(
 
 async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> dict[str, Any] | None:
     LoanAppraisalRecord.__table__.create(bind=db.get_bind(), checkfirst=True)
-    required_docs = set(_application_required_docs(application.loan_type, application.employment_type))
+    required_docs = set(_application_required_docs(application.loan_type, application.employment_type, application))
     docs = db.query(Document).filter(Document.application_id == application.id).all()
     docs_by_type = {_canonical_doc_type(d.doc_type): d for d in docs}
     if not required_docs.issubset(set(docs_by_type.keys())):
+        missing_docs = sorted(required_docs.difference(set(docs_by_type.keys())))
+        logger.info("Loan appraisal waiting for missing docs for ARN=%s: %s", application.arn, missing_docs)
         return None
 
     existing = (
@@ -700,6 +793,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
         }
 
     statement_doc = docs_by_type.get("bank_statement_12m")
+    co_applicant_statement_doc = docs_by_type.get("co_applicant_bank_statement_12m") if _application_has_co_applicant(application) else None
     if not statement_doc or not statement_doc.storage_url:
         _upsert_appraisal_record(
             db,
@@ -711,23 +805,22 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
 
     try:
         logger.info("Loan appraisal started for ARN=%s", application.arn)
-        statement_bytes = download_bytes_from_s3(statement_doc.storage_url)
-        statement_name = statement_doc.storage_url.rsplit("/", 1)[-1] or "bank_statement_12m.pdf"
-        statement_format = _statement_format_from_name(statement_doc.storage_url)
-        if statement_format == "unknown":
-            statement_format = _statement_format_from_bytes(statement_bytes)
-        if statement_format == "unknown":
-            raise LoanAppraisalServiceError("bank_statement_12m file must be .csv, .xlsx, or .pdf", 422)
-        analysis_result = await run_in_threadpool(
-            loan_appraisal_service.analyze_uploaded_statement,
-            application.loan_type,
-            float(application.loan_amount),
-            statement_name,
-            statement_bytes,
-            APPRAISAL_RULES_PATH,
-            APPRAISAL_MODEL_PATH,
-            True,
+        analysis_result, statement_format = await run_in_threadpool(
+            _run_statement_appraisal,
+            loan_type=application.loan_type,
+            loan_amount=float(application.loan_amount),
+            statement_doc=statement_doc,
         )
+        co_analysis_result: dict[str, Any] | None = None
+        co_statement_format: str | None = None
+        if co_applicant_statement_doc and co_applicant_statement_doc.storage_url:
+            co_analysis_result, co_statement_format = await run_in_threadpool(
+                _run_statement_appraisal,
+                loan_type=application.loan_type,
+                loan_amount=float(application.loan_amount),
+                statement_doc=co_applicant_statement_doc,
+            )
+        analysis_result = _merge_appraisal_results(analysis_result, co_analysis_result, application)
         report_text = await run_in_threadpool(
             loan_appraisal_service.generate_professional_report,
             analysis_result,
@@ -758,6 +851,8 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "liability_analysis": result_block.get("liability_analysis", {}),
             "loan_analysis": result_block.get("loan_analysis", {}),
             "behavioral_risk": result_block.get("behavioral_risk", {}),
+            "combined_appraisal": result_block.get("combined_appraisal", {}),
+            "co_applicant_appraisal": result_block.get("co_applicant_appraisal", {}),
             "income_diagnostics": professional_block.get("income_diagnostics", {}),
             "cashflow_diagnostics": professional_block.get("cashflow_diagnostics", {}),
             "liability_diagnostics": professional_block.get("liability_diagnostics", {}),
@@ -766,7 +861,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "monthly_balance_table": monthly_balance_table,
             "opening_outstanding_before_first_month": opening_outstanding,
         }
-        salary_diagnostics = {
+        borrower_salary_diagnostics = {
             "salary_months_detected": result_block.get("income_analysis", {}).get("salary_months_detected"),
             "salary_variance_ratio": result_block.get("income_analysis", {}).get("salary_variance_ratio"),
             "salary_trend_pct": result_block.get("income_analysis", {}).get("salary_trend_pct"),
@@ -776,6 +871,34 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "salary_reduction_signal": result_block.get("income_analysis", {}).get("salary_reduction_signal"),
             "salary_delay_signal": result_block.get("income_analysis", {}).get("salary_delay_signal"),
             "company_switch_signal": result_block.get("income_analysis", {}).get("company_switch_signal"),
+        }
+        co_applicant_block = result_block.get("co_applicant_appraisal", {}) if isinstance(result_block.get("co_applicant_appraisal"), dict) else {}
+        co_applicant_salary_diagnostics = result_block.get("co_applicant_salary_diagnostics", {}) if isinstance(result_block.get("co_applicant_salary_diagnostics"), dict) else {}
+
+        kpi_metrics["borrower_kpis"] = {
+            "income_analysis": result_block.get("income_analysis", {}),
+            "cashflow_analysis": result_block.get("cashflow_analysis", {}),
+            "liquidity_analysis": result_block.get("liquidity_analysis", {}),
+            "liability_analysis": result_block.get("liability_analysis", {}),
+            "loan_analysis": result_block.get("loan_analysis", {}),
+            "behavioral_risk": result_block.get("behavioral_risk", {}),
+            "monthly_balance_table": monthly_balance_table,
+            "salary_diagnostics": borrower_salary_diagnostics,
+        }
+        if _application_has_co_applicant(application):
+            kpi_metrics["co_applicant_salary_diagnostics"] = co_applicant_salary_diagnostics
+            kpi_metrics["co_applicant_kpis"] = {
+                "income_analysis": co_applicant_block.get("income_analysis", {}),
+                "cashflow_analysis": co_applicant_block.get("cashflow_analysis", {}),
+                "liability_analysis": co_applicant_block.get("liability_analysis", {}),
+                "monthly_balance_table": co_applicant_block.get("monthly_balance_table", []),
+                "salary_diagnostics": co_applicant_salary_diagnostics,
+            }
+
+        salary_diagnostics = {
+            **borrower_salary_diagnostics,
+            "borrower": borrower_salary_diagnostics,
+            "co_applicant": co_applicant_salary_diagnostics,
         }
 
         record = _upsert_appraisal_record(
@@ -807,6 +930,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "confidence_score": float(record.confidence_score) if record.confidence_score is not None else None,
             "rows_analyzed": record.rows_analyzed,
             "statement_format": statement_format,
+            "co_applicant_statement_format": co_statement_format,
             "report_pdf_storage_url": record.report_pdf_storage_url,
             "report_pdf_access_url": record.report_pdf_access_url,
         }
@@ -865,6 +989,20 @@ def _payload_dict(value: object) -> dict:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _payload_bool(payload: dict, key: str, default: bool = False) -> bool:
+    raw = payload.get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+    return default
 
 
 def _payload_str(payload: dict, key: str, default: str = "") -> str:
@@ -956,12 +1094,177 @@ def _canonical_doc_type(raw_doc_type: str) -> str:
         "aadhaar": "aadhaar_card",
         "aadhar": "aadhaar_card",
         "pan": "pan_card",
+        "co_applicant_aadhar_card": "co_applicant_aadhaar_card",
+        "co_applicant_aadhaar": "co_applicant_aadhaar_card",
+        "co_applicant_aadhar": "co_applicant_aadhaar_card",
+        "coapplicant_aadhaar_card": "co_applicant_aadhaar_card",
+        "coapplicant_pan_card": "co_applicant_pan_card",
+        "co_applicant_pan": "co_applicant_pan_card",
+        "co_applicant_bank_statement": "co_applicant_bank_statement_12m",
+        "co_applicant_bank_statement_12m": "co_applicant_bank_statement_12m",
+        "coapplicant_bank_statement": "co_applicant_bank_statement_12m",
+        "coapplicant_bank_statement_12m": "co_applicant_bank_statement_12m",
         "bank_statement_1y": "bank_statement_12m",
         "bank_statement_1yr": "bank_statement_12m",
         "bank_statement_one_year": "bank_statement_12m",
         "bank_transaction_1_year": "bank_statement_12m",
     }
     return aliases.get(normalized, normalized)
+
+
+def _normalize_co_applicant_details(payload: dict) -> dict[str, Any] | None:
+    raw_details = payload.get("co_applicant_details")
+    if raw_details is None:
+        raw_details = payload.get("co_applicant")
+    details = _payload_dict(raw_details)
+    if not details:
+        return None
+
+    full_name = _payload_str(details, "full_name") or _payload_str(details, "name")
+    mobile_number = _payload_str(details, "mobile_number") or _payload_str(details, "phone")
+    aadhaar_number = _payload_str(details, "aadhaar_number") or _payload_str(details, "aadhar_number")
+    pan_number = _payload_str(details, "pan_number")
+
+    if not full_name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="co_applicant.full_name is required")
+    if not mobile_number:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="co_applicant.mobile_number is required")
+    if not aadhaar_number:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="co_applicant.aadhaar_number is required")
+    if not pan_number:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="co_applicant.pan_number is required")
+
+    return {
+        "full_name": full_name,
+        "mobile_number": mobile_number,
+        "relationship": _payload_str(details, "relationship") or None,
+        "aadhaar_number": aadhaar_number,
+        "pan_number": pan_number,
+        "otp_verified": _payload_bool(details, "otp_verified", False),
+        "otp_verified_at": details.get("otp_verified_at"),
+        "otp_sent_at": details.get("otp_sent_at"),
+        "otp_code": details.get("otp_code"),
+    }
+
+
+def _application_has_co_applicant(application: LoanApplication) -> bool:
+    return bool(application.co_applicant_details)
+
+
+def _co_applicant_is_verified(application: LoanApplication) -> bool:
+    details = application.co_applicant_details or {}
+    return bool(details.get("otp_verified"))
+
+
+def _co_applicant_required_docs(application: LoanApplication) -> list[str]:
+    if not _application_has_co_applicant(application):
+        return []
+    return ["co_applicant_aadhaar_card", "co_applicant_bank_statement_12m"]
+
+
+def _statement_doc_types_for_application(application: LoanApplication) -> list[str]:
+    doc_types = ["bank_statement_12m"]
+    if _application_has_co_applicant(application):
+        doc_types.append("co_applicant_bank_statement_12m")
+    return doc_types
+
+
+def _run_statement_appraisal(
+    *,
+    loan_type: str,
+    loan_amount: float,
+    statement_doc: Document,
+) -> tuple[dict[str, Any], str]:
+    statement_bytes = download_bytes_from_s3(statement_doc.storage_url)
+    statement_name = statement_doc.storage_url.rsplit("/", 1)[-1] or "bank_statement_12m.pdf"
+    statement_format = _statement_format_from_name(statement_doc.storage_url)
+    if statement_format == "unknown":
+        statement_format = _statement_format_from_bytes(statement_bytes)
+    if statement_format == "unknown":
+        raise LoanAppraisalServiceError("statement file must be .csv, .xlsx, or .pdf", 422)
+
+    analysis_result = loan_appraisal_service.analyze_uploaded_statement(
+        loan_type,
+        float(loan_amount),
+        statement_name,
+        statement_bytes,
+        APPRAISAL_RULES_PATH,
+        APPRAISAL_MODEL_PATH,
+        True,
+    )
+    return analysis_result, statement_format
+
+
+def _merge_appraisal_results(primary_result: dict[str, Any], co_result: dict[str, Any] | None, application: LoanApplication) -> dict[str, Any]:
+    if not co_result:
+        return primary_result
+
+    merged = copy.deepcopy(primary_result)
+    primary_block = _payload_dict(merged.get("result"))
+    co_block = _payload_dict(co_result.get("result"))
+    primary_score = float(primary_block.get("final_score") or 0.0)
+    co_score = float(co_block.get("final_score") or 0.0)
+    primary_conf = float(primary_block.get("confidence_score") or 0.0)
+    co_conf = float(co_block.get("confidence_score") or 0.0)
+    combined_score = round((primary_score + co_score) / 2.0, 2)
+    combined_confidence = round((primary_conf + co_conf) / 2.0, 2)
+
+    if combined_score >= 75:
+        combined_risk = "Low Risk"
+        combined_recommendation = "Approve"
+    elif combined_score >= 60:
+        combined_risk = "Moderate Risk"
+        combined_recommendation = "Approve with caution"
+    else:
+        combined_risk = "High Risk"
+        combined_recommendation = "Reject"
+
+    merged_result = primary_block
+    merged_result["combined_appraisal"] = {
+        "borrower": {
+            "final_score": primary_score,
+            "confidence_score": primary_conf,
+            "monthly_balance_table": primary_block.get("monthly_balance_table", []),
+        },
+        "co_applicant": {
+            "final_score": co_score,
+            "confidence_score": co_conf,
+            "monthly_balance_table": co_block.get("monthly_balance_table", []),
+        },
+        "combined_final_score": combined_score,
+        "combined_confidence_score": combined_confidence,
+        "decision_basis": "Average of borrower and co-applicant appraisal results",
+        "co_applicant_present": True,
+    }
+    merged_result["co_applicant_appraisal"] = {
+        "analysis_period": co_result.get("analysis_period", {}),
+        "rows_analyzed": co_result.get("rows_analyzed"),
+        "income_analysis": co_block.get("income_analysis", {}),
+        "cashflow_analysis": co_block.get("cashflow_analysis", {}),
+        "liability_analysis": co_block.get("liability_analysis", {}),
+        "salary_diagnostics": co_result.get("salary_diagnostics") or {},
+        "rulebook_top_insights": co_block.get("rulebook_top_insights", []),
+        "monthly_balance_table": co_block.get("monthly_balance_table", []),
+        "final_score": co_score,
+        "confidence_score": co_conf,
+    }
+    merged_result["co_applicant_salary_diagnostics"] = co_result.get("salary_diagnostics") or {}
+    merged_result["final_score"] = combined_score
+    merged_result["risk_level"] = combined_risk
+    merged_result["recommendation"] = combined_recommendation
+    merged_result["confidence_score"] = combined_confidence
+    merged_result["summary"] = (
+        f"Combined borrower and co-applicant appraisal completed for {application.arn}. "
+        f"Borrower score {primary_score:.2f}, co-applicant score {co_score:.2f}, combined score {combined_score:.2f}. "
+        f"Final recommendation: {combined_recommendation}."
+    )
+    merged_result["professional_appraisal"] = copy.deepcopy(_payload_dict(primary_block.get("professional_appraisal")))
+    merged_result["professional_appraisal"]["executive_summary"] = merged_result["summary"]
+    merged["result"] = merged_result
+    merged["co_applicant_analysis_result"] = co_result
+    merged["rows_analyzed"] = int(primary_result.get("rows_analyzed") or 0) + int(co_result.get("rows_analyzed") or 0)
+    merged["analysis_period"] = primary_result.get("analysis_period", {})
+    return merged
 
 
 def _statement_format_from_name(file_name: str = "", content_type: str | None = None) -> str:
@@ -998,12 +1301,15 @@ def _statement_format_from_name(file_name: str = "", content_type: str | None = 
 
 
 def _missing_required_docs_for_application(db: Session, application: LoanApplication) -> list[str]:
-    required_docs = set(_application_required_docs(application.loan_type, application.employment_type))
+    required_docs = set(_application_required_docs(application.loan_type, application.employment_type, application))
     uploaded_docs = {
         _canonical_doc_type(row.doc_type)
         for row in db.query(Document).filter(Document.application_id == application.id).all()
     }
-    return sorted(required_docs.difference(uploaded_docs))
+    if _application_has_co_applicant(application):
+        required_docs.update(_co_applicant_required_docs(application))
+    missing_docs = sorted(required_docs.difference(uploaded_docs))
+    return missing_docs
 
 
 def _create_loan_type_details(db: Session, application: LoanApplication, loan_type: str, loan_details: dict) -> None:
@@ -1180,6 +1486,7 @@ def create_application(
         kyc_status="Verified",
         employment_type=employment_type,
         purpose=str(payload.get("purpose", "General")),
+        co_applicant_details=_normalize_co_applicant_details(payload),
     )
     db.add(application)
     db.flush()
@@ -1195,6 +1502,7 @@ def create_application(
         "employment_type": application.employment_type,
         "loan_amount": int(application.loan_amount),
         "stage": application.stage,
+        "co_applicant_details": application.co_applicant_details,
         "created_at": application.created_at.isoformat(),
     }
 
@@ -1223,8 +1531,15 @@ def get_current_application(
 
 
 @router.get("/documents/required")
-def required_documents(loan_type: str = "personal", employment_type: str = "Salaried") -> list[dict]:
+def required_documents(
+    loan_type: str = "personal",
+    employment_type: str = "Salaried",
+    has_co_applicant: bool = False,
+    co_applicant_verified: bool = False,
+) -> list[dict]:
     docs = _application_required_docs(loan_type, employment_type)
+    if has_co_applicant:
+        docs.extend(["co_applicant_aadhaar_card", "co_applicant_bank_statement_12m"])
     return [
         {"code": code, "name": code.replace("_", " ").title(), "required": True}
         for code in docs
@@ -1239,11 +1554,93 @@ def required_documents_for_application(
 ) -> list[dict]:
     borrower = _get_borrower_or_404(db, current_user)
     application = _get_application_for_borrower_or_404(db, borrower.id, application_id)
-    docs = _application_required_docs(application.loan_type, application.employment_type)
+    docs = _application_required_docs(application.loan_type, application.employment_type, application)
     return [
         {"code": code, "name": code.replace("_", " ").title(), "required": True}
         for code in docs
     ]
+
+
+@router.post("/applications/{application_id}/co-applicant/otp/send")
+def send_co_applicant_otp(
+    application_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    borrower = _get_borrower_or_404(db, current_user)
+    application = _get_application_for_borrower_or_404(db, borrower.id, application_id)
+    details = _payload_dict(application.co_applicant_details)
+    if not details:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Co-applicant details are required before OTP can be sent")
+
+    otp_code = CO_APPLICANT_DUMMY_OTP
+    details["otp_code"] = otp_code
+    details["otp_verified"] = False
+    details["otp_sent_at"] = datetime.now(tz=timezone.utc).isoformat()
+    details["otp_verified_at"] = None
+    application.co_applicant_details = details
+    db.commit()
+    db.refresh(application)
+
+    return {
+        "application_id": application.arn,
+        "status": "otp_sent",
+        "delivery": "simulated",
+        "mobile_number": details.get("mobile_number"),
+        "otp_code": otp_code,
+    }
+
+
+@router.post("/applications/{application_id}/co-applicant/otp/verify")
+async def verify_co_applicant_otp(
+    application_id: str,
+    payload: dict,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    borrower = _get_borrower_or_404(db, current_user)
+    application = _get_application_for_borrower_or_404(db, borrower.id, application_id)
+    details = _payload_dict(application.co_applicant_details)
+    if not details:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Co-applicant details are required before OTP can be verified")
+
+    submitted_otp = str(payload.get("otp_code", "")).strip()
+    expected_otp = str(details.get("otp_code", "")).strip()
+    if not submitted_otp:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="otp_code is required")
+    otp_matches = submitted_otp in CO_APPLICANT_ACCEPTED_DUMMY_OTPS or (expected_otp and submitted_otp == expected_otp)
+    if not otp_matches:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid OTP")
+
+    details["otp_verified"] = True
+    details["otp_verified_at"] = datetime.now(tz=timezone.utc).isoformat()
+    details.pop("otp_code", None)
+    application.co_applicant_details = details
+    db.commit()
+    db.refresh(application)
+
+    missing_docs = _missing_required_docs_for_application(db, application)
+    if not missing_docs:
+        application.stage = "Underwriting"
+        db.commit()
+        db.refresh(application)
+
+    appraisal_payload = await _run_appraisal_if_ready(db, application)
+
+    logger.info(
+        "Co-applicant OTP verified for ARN=%s stage=%s missing=%s",
+        application.arn,
+        application.stage,
+        missing_docs,
+    )
+
+    return {
+        "application_id": application.arn,
+        "status": "otp_verified",
+        "application_stage": application.stage,
+        "missing_required_docs": missing_docs,
+        "loan_appraisal": appraisal_payload,
+    }
 
 
 @router.get("/applications/{application_id}/documents")
@@ -1433,7 +1830,7 @@ async def upload_application_document(
         )
         db.add(doc)
 
-    required_docs = set(_application_required_docs(application.loan_type, application.employment_type))
+    required_docs = set(_application_required_docs(application.loan_type, application.employment_type, application))
     uploaded_required_docs = {
         _canonical_doc_type(row.doc_type)
         for row in db.query(Document)
@@ -1455,6 +1852,15 @@ async def upload_application_document(
     if application.stage == "Underwriting":
         appraisal_payload = await _run_appraisal_if_ready(db, application)
 
+    missing_docs = _missing_required_docs_for_application(db, application)
+    logger.info(
+        "Document upload processed for ARN=%s doc=%s stage=%s missing=%s",
+        application.arn,
+        doc.doc_type,
+        application.stage,
+        missing_docs,
+    )
+
     return {
         "document_id": doc.id,
         "application_id": application.arn,
@@ -1464,6 +1870,7 @@ async def upload_application_document(
         "storage_url": doc.storage_url,
         "uploaded_at": doc.uploaded_at.isoformat(),
         "application_stage": application.stage,
+        "missing_required_docs": missing_docs,
         "loan_appraisal": appraisal_payload,
     }
 
@@ -1539,7 +1946,7 @@ async def upload_application_document_file(
         )
         db.add(doc)
 
-    required_docs = set(_application_required_docs(application.loan_type, application.employment_type))
+    required_docs = set(_application_required_docs(application.loan_type, application.employment_type, application))
     uploaded_required_docs = {
         _canonical_doc_type(row.doc_type)
         for row in db.query(Document)
@@ -1561,6 +1968,15 @@ async def upload_application_document_file(
     if application.stage == "Underwriting":
         appraisal_payload = await _run_appraisal_if_ready(db, application)
 
+    missing_docs = _missing_required_docs_for_application(db, application)
+    logger.info(
+        "File upload processed for ARN=%s doc=%s stage=%s missing=%s",
+        application.arn,
+        doc.doc_type,
+        application.stage,
+        missing_docs,
+    )
+
     access_url: str | None = None
     try:
         access_url = generate_presigned_url(object_key)
@@ -1577,6 +1993,7 @@ async def upload_application_document_file(
         "access_url": access_url,
         "uploaded_at": doc.uploaded_at.isoformat(),
         "application_stage": application.stage,
+        "missing_required_docs": missing_docs,
         "loan_appraisal": appraisal_payload,
     }
 
