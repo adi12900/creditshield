@@ -1,0 +1,21 @@
+.git/
+.gitignore
+.kiro/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.DS_Store
+
+Mobile-Application/
+document/
+
+Design Loan Origination Dashboard/node_modules/
+Design Loan Origination Dashboard/dist/
+
+Backend/.venv/
+Backend/reports/
+Backend/*.log
+
+**/node_modules/
+**/dist/
