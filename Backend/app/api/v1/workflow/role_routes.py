@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -29,6 +29,7 @@ from app.schemas.workflow import (
     UnderwriterDecisionSubmitRequest,
 )
 from app.services.s3 import extract_object_key_from_url, generate_presigned_url
+from app.services.document_ai_verification_service import run_document_verification_task, schedule_reverification_for_arn
 from app.services.workflow_service import WorkflowServiceError, workflow_service
 
 router = APIRouter(prefix="/workflow", tags=["workflow-role-apis"])
@@ -79,8 +80,17 @@ def loan_officer_dashboard() -> DashboardResponse:
     response_model=list[DocumentItem],
     dependencies=[Depends(require_roles({"loan_officer"}))],
 )
-def loan_officer_documents(arn: str, db: Session = Depends(get_db)) -> list[DocumentItem]:
+def loan_officer_documents(
+    arn: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> list[DocumentItem]:
     try:
+        schedule_reverification_for_arn(
+            arn=arn,
+            db=db,
+            schedule_fn=lambda doc_id, force: background_tasks.add_task(run_document_verification_task, doc_id, force),
+        )
         docs = workflow_service.get_documents(arn, db=db)
         return [DocumentItem(
             id=d["id"],

@@ -17,6 +17,7 @@ from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
 from app.api.v1.workflow.document_proxy_routes import router as document_proxy_router
+from app.api.v1.document_verification_routes import router as document_verification_router
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.models import borrower as _borrower_models  # noqa: F401
@@ -95,3 +96,4 @@ app.include_router(kyc_otp_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")
 app.include_router(document_proxy_router)  # Uses /api/v1/documents from router
+app.include_router(document_verification_router)
