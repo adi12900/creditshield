@@ -158,7 +158,7 @@ export const LOAN_TYPE_CONFIG: Record<LoanTypeCategory, LoanTypeConfig> = {
         title: 'Loan-Specific Proof',
         items: [
           { label: 'Gold Items Photo', evidenceType: 'gold_items_photo', mandatory: true, accept: 'image', captureCamera: true, multiple: true },
-          { label: 'Close-up Image (Purity View)', evidenceType: 'gold_purity_closeup', mandatory: true, accept: 'image', captureCamera: true },
+          { label: 'Close-up Image (Purity View)', evidenceType: 'gold_closeup_image', mandatory: true, accept: 'image', captureCamera: true },
           { label: 'Storage Location Photo', evidenceType: 'gold_storage_location_photo', mandatory: true, accept: 'image', captureCamera: true },
         ],
       },
@@ -216,7 +216,7 @@ export const LOAN_TYPE_CONFIG: Record<LoanTypeCategory, LoanTypeConfig> = {
         items: [
           { label: 'Shop Front Photo', evidenceType: 'shop_front_photo', mandatory: true, accept: 'image', captureCamera: true },
           { label: 'Inside Shop Photo', evidenceType: 'inside_shop_photo', mandatory: true, accept: 'image', captureCamera: true },
-          { label: 'Business Activity Photo', evidenceType: 'business_activity_photo', mandatory: true, accept: 'image', captureCamera: true },
+          { label: 'Business Activity Photo', evidenceType: 'shop_activity_photo', mandatory: true, accept: 'image', captureCamera: true },
         ],
       },
       {

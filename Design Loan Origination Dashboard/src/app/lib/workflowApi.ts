@@ -54,6 +54,35 @@ async function request<T>(path: string, options: RequestInit = {}, role?: string
   return response.json() as Promise<T>;
 }
 
+async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
+  const headers = new Headers();
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let detail = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === 'string') {
+        detail = body.detail;
+      }
+    } catch {
+      // Keep generic message.
+    }
+    throw new Error(detail);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export function setAuthToken(token: string): void {
   localStorage.setItem(AUTH_TOKEN_KEY, token);
 }
@@ -163,6 +192,33 @@ export interface FieldVisitReportPayload {
     final_recommendation: 'Recommend Approval' | 'Recommend Rejection' | 'Needs Further Review';
     detailed_remarks: string;
   };
+}
+
+export type VerificationSection = 'residence' | 'business' | 'education' | 'loan_specific';
+
+export interface FieldEvidenceItem {
+  id: number;
+  arn: string;
+  loan_type: string;
+  verification_section: VerificationSection;
+  evidence_type: string;
+  storage_url: string;
+  access_url: string;
+  uploaded_by_role: string;
+  latitude: number;
+  longitude: number;
+  captured_at: string;
+  created_at: string;
+}
+
+export interface FieldEvidenceUploadResponse {
+  evidence: FieldEvidenceItem;
+}
+
+export interface FieldEvidenceGroupedResponse {
+  arn: string;
+  loan_type: string;
+  grouped_evidence: Record<string, Record<string, FieldEvidenceItem[]>>;
 }
 
 export interface WorkflowBureauReport {
@@ -384,6 +440,36 @@ export const workflowApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }, role),
+  uploadFieldEvidence: async (
+    arn: string,
+    payload: {
+      loanType: string;
+      verificationSection: VerificationSection;
+      evidenceType: string;
+      latitude: number;
+      longitude: number;
+      capturedAt?: string;
+      file: File;
+    },
+  ) => {
+    const formData = new FormData();
+    formData.append('loan_type', payload.loanType);
+    formData.append('verification_section', payload.verificationSection);
+    formData.append('evidence_type', payload.evidenceType);
+    formData.append('latitude', String(payload.latitude));
+    formData.append('longitude', String(payload.longitude));
+    if (payload.capturedAt) {
+      formData.append('captured_at', payload.capturedAt);
+    }
+    formData.append('file', payload.file);
+
+    return requestFormData<FieldEvidenceUploadResponse>(
+      `/api/v1/workflow/field-officer/cases/${encodeURIComponent(arn)}/evidence/upload`,
+      formData,
+    );
+  },
+  getFieldEvidence: (arn: string, signedUrlExpiresIn = 3600) =>
+    request<FieldEvidenceGroupedResponse>(`/api/v1/workflow/field-officer/cases/${encodeURIComponent(arn)}/evidence?signed_url_expires_in=${signedUrlExpiresIn}`),
   getBureauReport: (arn: string, role: WorkflowRole) => request<WorkflowBureauReport>(`/api/v1/workflow/credit-analyst/bureau/${arn}`, {}, role),
   getAiScore: (arn: string, role: WorkflowRole) => request<WorkflowAiScore>(`/api/v1/workflow/credit-analyst/ai-score/${arn}`, {}, role),
   getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) =>
