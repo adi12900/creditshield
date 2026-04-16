@@ -10,27 +10,19 @@ from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.schemas.workflow import (
     AuditLogItem,
     CommunicationMessageRequest,
-    CommunicationTemplateItem,
     ComplianceActionRequest,
     CreditMemoDraftRequest,
     DashboardResponse,
-    DocumentOcrResponse,
     DocumentItem,
     DocumentReviewRequest,
     GenerateReportRequest,
-    IntakeSubmitRequest,
     LoanApplicationOut,
     LoanOfferResponse,
-    LoanOfficerApplicationSummary,
-    LoanOfficerChecklistItem,
     LoanStructuringRequest,
     PolicyOverrideRequest,
     RatioRecalculateRequest,
     RatioRecalculateResponse,
     RegulatoryReport,
-    RuleEngineResponse,
-    SystemAdminDashboardResponse,
-    WorkflowDesignerResponse,
 )
 from app.services.workflow_service import WorkflowServiceError, workflow_service
 
@@ -74,54 +66,9 @@ def loan_officer_dashboard() -> DashboardResponse:
 
 
 @router.get(
-    "/loan-officer/pre-qualification/{arn}",
-    response_model=list[LoanOfficerChecklistItem],
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_prequalification_checklist(arn: str) -> list[LoanOfficerChecklistItem]:
-    try:
-        return [LoanOfficerChecklistItem(**item) for item in workflow_service.get_lead_prequalification_checklist(arn)]
-    except WorkflowServiceError as exc:
-        raise _to_http_exception(exc) from exc
-
-
-@router.get(
-    "/loan-officer/esign-checklist/{arn}",
-    response_model=list[LoanOfficerChecklistItem],
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_esign_checklist(arn: str) -> list[LoanOfficerChecklistItem]:
-    try:
-        return [LoanOfficerChecklistItem(**item) for item in workflow_service.get_esign_checklist(arn)]
-    except WorkflowServiceError as exc:
-        raise _to_http_exception(exc) from exc
-
-
-@router.get(
-    "/loan-officer/communication-templates",
-    response_model=list[CommunicationTemplateItem],
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_communication_templates() -> list[CommunicationTemplateItem]:
-    return [CommunicationTemplateItem(**item) for item in workflow_service.get_communication_templates()]
-
-
-@router.get(
-    "/loan-officer/application-summary/{arn}",
-    response_model=LoanOfficerApplicationSummary,
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_application_summary(arn: str) -> LoanOfficerApplicationSummary:
-    try:
-        return LoanOfficerApplicationSummary(**workflow_service.get_loan_officer_application_summary(arn))
-    except WorkflowServiceError as exc:
-        raise _to_http_exception(exc) from exc
-
-
-@router.get(
     "/loan-officer/documents/{arn}",
     response_model=list[DocumentItem],
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
+    dependencies=[Depends(require_roles({"loan_officer"}))],
 )
 def loan_officer_documents(arn: str) -> list[DocumentItem]:
     try:
@@ -132,35 +79,11 @@ def loan_officer_documents(arn: str) -> list[DocumentItem]:
 
 @router.post(
     "/loan-officer/documents/{arn}/review",
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
+    dependencies=[Depends(require_roles({"loan_officer"}))],
 )
 def loan_officer_review_document(arn: str, payload: DocumentReviewRequest) -> dict:
     try:
         return workflow_service.review_document(arn, payload.document_id, payload.decision, payload.reason)
-    except WorkflowServiceError as exc:
-        raise _to_http_exception(exc) from exc
-
-
-@router.get(
-    "/loan-officer/documents/{arn}/{document_id}/ocr",
-    response_model=DocumentOcrResponse,
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_document_ocr(arn: str, document_id: str) -> DocumentOcrResponse:
-    try:
-        return DocumentOcrResponse(**workflow_service.get_document_ocr(arn, document_id))
-    except WorkflowServiceError as exc:
-        raise _to_http_exception(exc) from exc
-
-
-@router.post(
-    "/loan-officer/documents/{arn}/{document_id}/ocr/extract",
-    response_model=DocumentOcrResponse,
-    dependencies=[Depends(require_roles({"loan_officer", "system_admin"}))],
-)
-def loan_officer_extract_document_ocr(arn: str, document_id: str) -> DocumentOcrResponse:
-    try:
-        return DocumentOcrResponse(**workflow_service.extract_document_ocr(arn, document_id))
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 
@@ -203,13 +126,9 @@ def loan_officer_move_to_intake(arn: str) -> LoanApplicationOut:
     "/loan-officer/intake/{arn}/submit",
     dependencies=[Depends(require_roles({"loan_officer"}))],
 )
-def loan_officer_submit_intake(arn: str, payload: IntakeSubmitRequest) -> LoanApplicationOut:
+def loan_officer_submit_intake(arn: str) -> LoanApplicationOut:
     try:
-        updated = workflow_service.submit_to_credit_analyst(
-            arn,
-            file_complete=payload.file_complete,
-            actor="Loan Officer",
-        )
+        updated = workflow_service.move_stage(arn, "Documents Pending", "Intake submitted", "Loan Officer")
         return LoanApplicationOut(**updated)
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
@@ -291,7 +210,7 @@ def credit_analyst_recalculate_ratios(arn: str, payload: RatioRecalculateRequest
 
 @router.get(
     "/credit-analyst/ai-score/{arn}",
-    dependencies=[Depends(require_roles({"credit_analyst", "loan_officer", "system_admin"}))],
+    dependencies=[Depends(require_roles({"credit_analyst"}))],
 )
 def credit_analyst_ai_score(arn: str, db: Session = Depends(get_db)) -> dict:
     try:
@@ -542,7 +461,7 @@ def compliance_generate_report(payload: GenerateReportRequest) -> RegulatoryRepo
 
 @router.get(
     "/compliance/rbi-compliance/{arn}",
-    dependencies=[Depends(require_roles({"compliance_officer", "loan_officer", "system_admin"}))],
+    dependencies=[Depends(require_roles({"compliance_officer"}))],
 )
 def compliance_rbi_compliance(arn: str) -> dict:
     try:
@@ -560,30 +479,3 @@ def compliance_rbi_audit_export(arn: str) -> dict:
         return workflow_service.get_rbi_audit_export(arn)
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
-
-
-@router.get(
-    "/system-admin/dashboard",
-    response_model=SystemAdminDashboardResponse,
-    dependencies=[Depends(require_roles({"system_admin"}))],
-)
-def system_admin_dashboard() -> SystemAdminDashboardResponse:
-    return SystemAdminDashboardResponse(**workflow_service.system_admin_dashboard())
-
-
-@router.get(
-    "/system-admin/workflow-designer",
-    response_model=WorkflowDesignerResponse,
-    dependencies=[Depends(require_roles({"system_admin"}))],
-)
-def system_admin_workflow_designer() -> WorkflowDesignerResponse:
-    return WorkflowDesignerResponse(**workflow_service.workflow_designer_data())
-
-
-@router.get(
-    "/system-admin/rule-engine",
-    response_model=RuleEngineResponse,
-    dependencies=[Depends(require_roles({"system_admin"}))],
-)
-def system_admin_rule_engine() -> RuleEngineResponse:
-    return RuleEngineResponse(**workflow_service.rule_engine_data())

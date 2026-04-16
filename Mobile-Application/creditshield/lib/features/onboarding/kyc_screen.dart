@@ -22,6 +22,7 @@ class _KycScreenState extends State<KycScreen> {
   bool _usePanFallback = false;
   String? _aadhaarError;
   String? _apiError;
+  String _maskedEmail = '';
 
   final AuthApiService _authApi = AuthApiService();
 
@@ -34,40 +35,57 @@ class _KycScreenState extends State<KycScreen> {
 
   void _nextStep() {
     if (_step == 2) {
-      if (_aadhaarCtrl.text.length != 12) {
-        setState(
-          () => _aadhaarError = 'Please enter a valid 12-digit Aadhaar number',
-        );
+      final aadhaar = _aadhaarCtrl.text.replaceAll(' ', '');
+      if (aadhaar.length != 12 || !RegExp(r'^\d{12}$').hasMatch(aadhaar)) {
+        setState(() => _aadhaarError = 'Please enter a valid 12-digit Aadhaar number');
         return;
       }
-      setState(() {
-        _aadhaarError = null;
-        _loading = true;
-      });
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _loading = false;
-            _step = 3;
-          });
-        }
-      });
+      setState(() { _aadhaarError = null; _loading = true; _apiError = null; });
+      _sendOtp(aadhaar);
       return;
     }
     if (_step == 3) {
       if (_otpCtrl.text.length != 6) return;
-      setState(() => _loading = true);
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _loading = false;
-            _step = 4;
-          });
-        }
-      });
+      setState(() { _loading = true; _apiError = null; });
+      _verifyOtp();
       return;
     }
     setState(() => _step++);
+  }
+
+  Future<void> _sendOtp(String aadhaar) async {
+    final token = context.read<AppState>().authToken;
+    if (token == null || token.isEmpty) {
+      setState(() { _loading = false; _apiError = 'Session expired. Please login again.'; });
+      return;
+    }
+    try {
+      final masked = await _authApi.sendKycOtp(accessToken: token, aadhaarNumber: aadhaar);
+      if (!mounted) return;
+      setState(() { _loading = false; _maskedEmail = masked; _step = 3; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _aadhaarError = e.toString().replaceFirst('Exception: ', ''); });
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final token = context.read<AppState>().authToken;
+    if (token == null || token.isEmpty) {
+      setState(() { _loading = false; _apiError = 'Session expired. Please login again.'; });
+      return;
+    }
+    try {
+      await _authApi.verifyKycOtp(accessToken: token, otp: _otpCtrl.text.trim());
+      if (!mounted) return;
+      await context.read<AppState>().setKycCompleted(true);
+      if (!mounted) return;
+      setState(() { _loading = false; });
+      context.go('/home');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _apiError = e.toString().replaceFirst('Exception: ', ''); });
+    }
   }
 
   @override
@@ -191,8 +209,7 @@ class _KycScreenState extends State<KycScreen> {
             controller: _aadhaarCtrl,
             keyboardType: TextInputType.number,
             errorText: _aadhaarError,
-          ),
-          const SizedBox(height: 12),
+          ),          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -306,7 +323,9 @@ class _KycScreenState extends State<KycScreen> {
           Text('Enter OTP', style: AppTypography.heading),
           const SizedBox(height: 8),
           Text(
-            'A 6-digit OTP has been sent to your Aadhaar-linked mobile number.',
+            _maskedEmail.isNotEmpty
+                ? 'A 6-digit OTP has been sent to $_maskedEmail'
+                : 'A 6-digit OTP has been sent to your registered email.',
             style: AppTypography.body.copyWith(
               color: isDark
                   ? AppColors.textSecondaryDark
@@ -320,9 +339,22 @@ class _KycScreenState extends State<KycScreen> {
             controller: _otpCtrl,
             keyboardType: TextInputType.number,
           ),
+          if (_apiError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _apiError!,
+              style: AppTypography.caption.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           TextButton(
-            onPressed: () {},
+            onPressed: _loading ? null : () {
+              final aadhaar = _aadhaarCtrl.text.replaceAll(' ', '');
+              setState(() { _apiError = null; _loading = true; });
+              _sendOtp(aadhaar);
+            },
             child: Text(
               'Resend OTP',
               style: AppTypography.body.copyWith(color: secondary),

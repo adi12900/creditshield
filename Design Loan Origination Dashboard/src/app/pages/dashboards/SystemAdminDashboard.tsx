@@ -1,45 +1,9 @@
 import { Settings, Users, Activity, Workflow } from 'lucide-react';
 import { StatCard } from '../../components/ui/StatCard';
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
-import { workflowApi, type SystemAdminDashboardResponse } from '../../lib/workflowApi';
 
 export function SystemAdminDashboard() {
   const navigate = useNavigate();
-  const [dashboard, setDashboard] = useState<SystemAdminDashboardResponse | null>(null);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const data = await workflowApi.systemAdminDashboard();
-        if (mounted) {
-          setDashboard(data);
-        }
-      } catch (error) {
-        if (mounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to load dashboard data');
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const metricMap = useMemo(() => {
-    const metrics = dashboard?.metrics ?? [];
-    return new Map(metrics.map((metric) => [metric.key, metric]));
-  }, [dashboard]);
-
-  const integrations = dashboard?.integrations ?? [];
-  const roleActivity = dashboard?.role_activity ?? [];
-  const recentEvents = dashboard?.recent_events ?? [];
 
   return (
     <div className="space-y-6">
@@ -51,54 +15,53 @@ export function SystemAdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Users"
-          value={metricMap.get('total_users')?.value ?? '-'}
+          value={147}
           icon={Users}
         />
         <StatCard
           title="Active Sessions"
-          value={metricMap.get('active_sessions')?.value ?? '-'}
+          value={42}
           icon={Activity}
         />
         <StatCard
           title="Workflows"
-          value={metricMap.get('workflows')?.value ?? '-'}
+          value={8}
           icon={Workflow}
         />
         <StatCard
           title="Integrations"
-          value={metricMap.get('integrations')?.value ?? '-'}
+          value={12}
           icon={Settings}
-          subtitle={metricMap.get('integrations')?.subtitle ?? undefined}
+          subtitle="All healthy"
         />
       </div>
-
-      {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Integration Health</h3>
           <div className="space-y-3">
-            {integrations.map((integration, idx) => (
+            {[
+              { name: 'CIBIL Bureau', status: 'Healthy', latency: '120ms' },
+              { name: 'Experian Bureau', status: 'Healthy', latency: '150ms' },
+              { name: 'eSign Provider', status: 'Healthy', latency: '200ms' },
+              { name: 'Payment Rails (NEFT/RTGS)', status: 'Healthy', latency: '180ms' },
+              { name: 'KYC Provider', status: 'Degraded', latency: '450ms' },
+              { name: 'Core Banking API', status: 'Healthy', latency: '90ms' },
+            ].map((integration, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${
-                    integration.status === 'Healthy' ? 'bg-green-500' : integration.status === 'Degraded' ? 'bg-amber-500' : 'bg-red-500'
+                    integration.status === 'Healthy' ? 'bg-green-500' : 'bg-amber-500'
                   }`}></div>
                   <div>
                     <p className="text-sm font-medium text-slate-900">{integration.name}</p>
-                    <p className="text-xs text-slate-500">Latency: {integration.latency_ms}ms</p>
+                    <p className="text-xs text-slate-500">Latency: {integration.latency}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-1 text-xs rounded-full ${
                   integration.status === 'Healthy'
                     ? 'bg-green-50 text-green-700'
-                    : integration.status === 'Degraded'
-                    ? 'bg-amber-50 text-orange-600'
-                    : 'bg-red-50 text-red-700'
+                    : 'bg-amber-50 text-orange-600'
                 }`}>
                   {integration.status}
                 </span>
@@ -110,18 +73,24 @@ export function SystemAdminDashboard() {
         <div className="bg-white border border-slate-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">User Activity</h3>
           <div className="space-y-3">
-            {roleActivity.map((role, idx) => (
+            {[
+              { role: 'Loan Officers', activeUsers: 24, totalUsers: 45 },
+              { role: 'Credit Analysts', activeUsers: 12, totalUsers: 20 },
+              { role: 'Underwriters', activeUsers: 8, totalUsers: 15 },
+              { role: 'Compliance Officers', activeUsers: 3, totalUsers: 8 },
+              { role: 'Operations Team', activeUsers: 15, totalUsers: 35 },
+            ].map((role, idx) => (
               <div key={idx} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-medium text-slate-900">{role.role}</p>
                   <p className="text-xs text-slate-600">
-                    {role.active_users}/{role.total_users} active
+                    {role.activeUsers}/{role.totalUsers} active
                   </p>
                 </div>
                 <div className="bg-slate-200 rounded-full h-2 overflow-hidden">
                   <div
                     className="bg-green-600 h-full"
-                    style={{ width: `${role.total_users > 0 ? (role.active_users / role.total_users) * 100 : 0}%` }}
+                    style={{ width: `${(role.activeUsers / role.totalUsers) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -164,14 +133,18 @@ export function SystemAdminDashboard() {
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent System Events</h3>
           <div className="space-y-3">
-            {recentEvents.map((event, idx) => (
+            {[
+              { time: '11:30 AM', event: 'New workflow version published: Loan Application v2.1', user: 'Admin' },
+              { time: '10:15 AM', event: 'Rule engine updated: Credit score threshold changed to 650', user: 'Admin' },
+              { time: '09:45 AM', event: 'New user created: Anita Desai (Credit Analyst)', user: 'Admin' },
+              { time: '09:20 AM', event: 'Integration health check completed: All systems operational', user: 'System' },
+              { time: '08:30 AM', event: 'User role updated: Rahul Sharma promoted to Senior Underwriter', user: 'Admin' },
+            ].map((event, idx) => (
               <div key={idx} className="flex items-start gap-4 p-3 bg-slate-50 rounded-lg">
                 <div className="w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
                 <div className="flex-1">
                   <p className="text-sm text-slate-900">{event.event}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {event.user} • {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{event.user} • {event.time}</p>
                 </div>
               </div>
             ))}

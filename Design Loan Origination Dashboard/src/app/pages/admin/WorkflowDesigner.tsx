@@ -1,42 +1,15 @@
 import { GitBranch, Plus, Save, Play } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { workflowApi, type WorkflowDesignerResponse } from '../../lib/workflowApi';
+
+const workflowStages = [
+  { id: 1, name: 'Application Submission', assignedRole: 'Loan Officer', avgDuration: '5 mins', status: 'Active' },
+  { id: 2, name: 'Document Upload & OCR', assignedRole: 'System', avgDuration: '2 mins', status: 'Active' },
+  { id: 3, name: 'Bureau Check', assignedRole: 'System', avgDuration: '30 secs', status: 'Active' },
+  { id: 4, name: 'Credit Analysis', assignedRole: 'Credit Analyst', avgDuration: '1 hour', status: 'Active' },
+  { id: 5, name: 'Underwriting', assignedRole: 'Underwriter', avgDuration: '2 hours', status: 'Active' },
+  { id: 6, name: 'Compliance Review', assignedRole: 'Compliance Officer', avgDuration: '30 mins', status: 'Active' },
+];
 
 export function WorkflowDesignerPage() {
-  const [data, setData] = useState<WorkflowDesignerResponse | null>(null);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const payload = await workflowApi.systemAdminWorkflowDesigner();
-        if (mounted) {
-          setData(payload);
-        }
-      } catch (error) {
-        if (mounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to load workflow designer data');
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const metricMap = useMemo(() => {
-    const metrics = data?.metrics ?? [];
-    return new Map(metrics.map((metric) => [metric.key, metric]));
-  }, [data]);
-
-  const workflowStages = data?.stages ?? [];
-  const conditions = data?.conditions ?? [];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -59,31 +32,25 @@ export function WorkflowDesignerPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Active Stages</p>
-          <p className="text-2xl font-bold text-slate-900">{metricMap.get('active_stages')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-slate-900">6</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Avg. Completion Time</p>
-          <p className="text-2xl font-bold text-green-600">{metricMap.get('avg_completion_time')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-green-600">4.2h</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">SLA Compliance</p>
-          <p className="text-2xl font-bold text-green-600">{metricMap.get('sla_compliance')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-green-600">94.5%</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Active Workflows</p>
-          <p className="text-2xl font-bold text-slate-900">{metricMap.get('active_workflows')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-slate-900">3</p>
         </div>
       </div>
 
-      {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
-
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900">{data?.workflow_name ?? 'Workflow'}</h3>
+          <h3 className="font-semibold text-slate-900">Standard Loan Workflow</h3>
           <button className="px-3 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium flex items-center gap-2">
             <Plus className="w-4 h-4" />
             Add Stage
@@ -109,10 +76,10 @@ export function WorkflowDesignerPage() {
                   </div>
                   <div className="flex gap-6 text-sm text-slate-600">
                     <div>
-                      <span className="font-medium">Role:</span> {stage.assigned_role}
+                      <span className="font-medium">Role:</span> {stage.assignedRole}
                     </div>
                     <div>
-                        <span className="font-medium">Avg Duration:</span> {stage.avg_duration_minutes} mins
+                      <span className="font-medium">Avg Duration:</span> {stage.avgDuration}
                     </div>
                   </div>
                 </div>
@@ -185,15 +152,27 @@ export function WorkflowDesignerPage() {
             <h3 className="font-semibold text-slate-900">Conditional Branching</h3>
           </div>
           <div className="space-y-4">
-            {conditions.map((condition) => (
-              <div key={condition.id} className="p-4 bg-slate-50 rounded-lg">
-                <p className="text-sm font-medium text-slate-900 mb-2">{condition.condition}</p>
-                <p className="text-xs text-slate-600 mb-3">→ {condition.outcome}</p>
-                <button className="text-sm text-green-600 hover:text-green-700 font-medium">
-                  Edit Condition
-                </button>
-              </div>
-            ))}
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-900 mb-2">If Credit Score &lt; 650</p>
+              <p className="text-xs text-slate-600 mb-3">→ Route to Senior Underwriter for manual review</p>
+              <button className="text-sm text-green-600 hover:text-green-700 font-medium">
+                Edit Condition
+              </button>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-900 mb-2">If DTI &gt; 45%</p>
+              <p className="text-xs text-slate-600 mb-3">→ Require policy override approval</p>
+              <button className="text-sm text-green-600 hover:text-green-700 font-medium">
+                Edit Condition
+              </button>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-900 mb-2">If Loan Amount &gt; ₹20L</p>
+              <p className="text-xs text-slate-600 mb-3">→ Add additional compliance checks</p>
+              <button className="text-sm text-green-600 hover:text-green-700 font-medium">
+                Edit Condition
+              </button>
+            </div>
             <button className="w-full px-4 py-3 border border-green-300 text-green-700 rounded-lg hover:bg-green-50 font-medium flex items-center justify-center gap-2">
               <Plus className="w-4 h-4" />
               Add New Condition
