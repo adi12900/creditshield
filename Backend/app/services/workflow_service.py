@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import text
 from app.core.database import SessionLocal
 from app.models.loan_application import LoanApplication
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
@@ -283,8 +284,168 @@ class WorkflowService:
         self._get_application(arn)
         return self._communications.get(arn, [])
 
-    def send_communication(self, arn: str, channel: str, subject: str, message: str) -> dict[str, Any]:
-        self._get_application(arn)
+    def send_communication(self, arn: str, channel: str, subject: str, message: str, db=None) -> dict[str, Any]:
+        """
+        Send communication to borrower with document upload link.
+        
+        Enhanced to:
+        1. Generate secure upload token for email/sms channels
+        2. Store communication in database (not just in-memory)
+        3. Send actual email/SMS via CommunicationService
+        4. Update status based on delivery result
+        5. Create audit log
+        
+        Args:
+            arn: Application Reference Number
+            channel: Communication channel (email, sms, call)
+            subject: Subject line
+            message: Message content
+            db: Database session (optional, for database storage)
+            
+        Returns:
+            dict: Communication details including upload_token and upload_link
+        """
+        import os
+        from app.services.token_service import TokenService
+        from app.services.communication_service import CommunicationService
+        
+        # Get application details
+        app = self._get_application(arn)
+        
+        # Get backend base URL from environment
+        backend_url = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+        
+        # Initialize response
+        upload_token = None
+        upload_link = None
+        token_expires_at = None
+        status = "Pending"
+        delivery_error = None
+        
+        # Generate upload token for email/sms channels
+        if channel in ["email", "sms"]:
+            upload_token = TokenService.generate_upload_token()
+            token_expires_at = TokenService.get_token_expiry()
+            upload_link = f"{backend_url}/borrower/upload/{upload_token}"
+        
+        # If database session provided, store in database
+        if db:
+            try:
+                from app.models.loan_application import LoanApplication
+                
+                # Get application_id from database
+                application = db.query(LoanApplication).filter(
+                    LoanApplication.arn == arn
+                ).first()
+                
+                if not application:
+                    raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
+                
+                # Get borrower contact info
+                borrower_email = application.borrower_email
+                borrower_phone = application.borrower_phone
+                
+                # Validate contact info based on channel
+                if channel == "email" and not borrower_email:
+                    raise WorkflowServiceError(
+                        "Borrower email not found. Please update the application with borrower's email address.",
+                        400
+                    )
+                
+                if channel == "sms" and not borrower_phone:
+                    raise WorkflowServiceError(
+                        "Borrower phone number not found. Please update the application with borrower's phone number.",
+                        400
+                    )
+                
+                # Send actual email/SMS
+                if channel == "email" and upload_link:
+                    success, error = CommunicationService.send_email(
+                        to_email=borrower_email,
+                        subject=subject,
+                        message=message,
+                        upload_link=upload_link,
+                        arn=arn,
+                        expiry_hours=72
+                    )
+                    status = "Delivered" if success else "Failed"
+                    delivery_error = error
+                
+                elif channel == "sms" and upload_link:
+                    success, error = CommunicationService.send_sms(
+                        to_phone=borrower_phone,
+                        message=message,
+                        upload_link=upload_link,
+                        arn=arn
+                    )
+                    status = "Delivered" if success else "Failed"
+                    delivery_error = error
+                
+                elif channel == "call":
+                    # Call logs don't send anything, just record
+                    status = "Delivered"
+                
+                # Insert communication record into database
+                result = db.execute(
+                    text("""
+                    INSERT INTO communications (
+                        application_id, channel, subject, message,
+                        status, upload_token, token_expires_at, delivery_error, sent_at
+                    )
+                    VALUES (
+                        :application_id, :channel, :subject, :message,
+                        :status, :upload_token, :token_expires_at, :delivery_error, NOW()
+                    )
+                    RETURNING id, sent_at
+                    """),
+                    {
+                        "application_id": application.id,
+                        "channel": channel,
+                        "subject": subject,
+                        "message": message,
+                        "status": status,
+                        "upload_token": upload_token,
+                        "token_expires_at": token_expires_at,
+                        "delivery_error": delivery_error
+                    }
+                )
+                # Must fetch BEFORE commit in SQLAlchemy 2.x
+                row = result.fetchone()
+                communication_id = row[0]
+                sent_at = row[1]
+                db.commit()
+                
+                # Create audit log
+                self.add_audit_log(
+                    user="Loan Officer",
+                    action="Communication Sent",
+                    resource=arn,
+                    details=f"{channel.upper()} - {subject}",
+                    risk="Low",
+                )
+                
+                # Return communication details
+                return {
+                    "id": str(communication_id),
+                    "channel": channel,
+                    "subject": subject,
+                    "message": message,
+                    "sent_at": sent_at.isoformat() if sent_at else datetime.now(tz=timezone.utc).isoformat(),
+                    "status": status,
+                    "upload_token": upload_token,
+                    "upload_link": upload_link,
+                    "expires_at": token_expires_at.isoformat() if token_expires_at else None,
+                    "delivery_error": delivery_error
+                }
+                
+            except WorkflowServiceError:
+                raise
+            except Exception as e:
+                db.rollback()
+                print(f"Database communication storage failed: {e}")
+                # Fall through to in-memory storage
+        
+        # Fallback to in-memory storage (for backward compatibility)
         history = self._communications.setdefault(arn, [])
         item = {
             "id": f"c{len(history) + 1}",
@@ -292,8 +453,14 @@ class WorkflowService:
             "subject": subject,
             "message": message,
             "sent_at": datetime.now(tz=timezone.utc).isoformat(),
+            "status": status,
+            "upload_token": upload_token,
+            "upload_link": upload_link,
+            "expires_at": token_expires_at.isoformat() if token_expires_at else None,
+            "delivery_error": delivery_error
         }
         history.insert(0, item)
+        
         self.add_audit_log(
             user="Loan Officer",
             action="Communication Sent",
@@ -301,6 +468,7 @@ class WorkflowService:
             details=f"{channel.upper()} - {subject}",
             risk="Low",
         )
+        
         return item
 
     def move_stage(self, arn: str, new_stage: str, action: str, actor: str) -> dict[str, Any]:

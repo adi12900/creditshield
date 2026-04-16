@@ -54,7 +54,29 @@ export function CommunicationPage() {
     }
 
     try {
-      await workflowApi.sendCommunication(selectedApplication.arn, user.role, 'email', subject, message);
+      const response = await workflowApi.sendCommunication(selectedApplication.arn, user.role, 'email', subject, message);
+      
+      // Show upload link if available
+      if (response.upload_link) {
+        const uploadInfo = `
+✅ Communication sent successfully!
+
+📧 Email delivered to: ${selectedApplication.email}
+🔗 Upload Link: ${response.upload_link}
+⏰ Link expires: ${new Date(response.expires_at).toLocaleString()}
+
+The borrower can use this link to upload documents without logging in.
+Link is valid for 72 hours and can be used multiple times.
+        `.trim();
+        window.alert(uploadInfo);
+        
+        // Copy link to clipboard
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(response.upload_link);
+          console.log('Upload link copied to clipboard');
+        }
+      }
+      
       const rows = await workflowApi.getCommunications(selectedApplication.arn, user.role);
       setHistory(mapCommunicationHistory(rows));
       setMessage('');
