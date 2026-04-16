@@ -69,33 +69,28 @@ export function clearAuthToken(): void {
 export interface LoginResponse {
   access_token: string;
   token_type: string;
-  role: string;
+  role: WorkflowRole;
   full_name: string;
-  expires_in_seconds: number;
+  username?: string;
 }
 
-export interface WorkflowApplication {
-  arn: string;
-  borrower_name: string;
-  loan_amount: number;
-  stage: string;
-  risk_grade: 'A+' | 'A' | 'B' | 'C';
-  credit_score: number;
-  kyc_status: 'Verified' | 'Pending';
-  employment_type: 'Salaried' | 'Self Employed';
-  purpose: string;
+export interface WorkflowStat {
+  key: string;
+  value: number | string;
 }
 
 export interface WorkflowDashboardResponse {
   role: WorkflowRole;
-  stats: Array<{ key: string; value: number | string }>;
+  stats: WorkflowStat[];
 }
+
+export type FieldVisitStatus = 'Pending Visit' | 'In Progress' | 'Completed';
 
 export interface FieldOfficerCaseItem {
   arn: string;
   borrower_name: string;
   loan_amount: number;
-  status: 'Pending Visit' | 'In Progress' | 'Completed';
+  status: FieldVisitStatus;
 }
 
 export interface FieldOfficerCaseDetail {
@@ -106,18 +101,68 @@ export interface FieldOfficerCaseDetail {
   loan_amount: number;
   loan_type: string;
   stage: string;
-  status: 'Pending Visit' | 'In Progress' | 'Completed';
+  status: FieldVisitStatus;
   map_link: string;
   report_submitted: boolean;
 }
 
+export type LoanTypeCategory =
+  | 'Personal Loan'
+  | 'Car Loan'
+  | 'Home Loan'
+  | 'Gold Loan'
+  | 'Education Loan'
+  | 'Business Loan';
+
 export interface FieldVisitReportPayload {
-  address_verified: boolean;
-  business_verified: boolean;
-  income_estimate: number;
-  risk_level: 'Low' | 'Medium' | 'High';
-  remarks: string;
-  evidence_urls: string[];
+  loan_type: LoanTypeCategory;
+  residence_verification: {
+    house_type: 'Owned' | 'Rented';
+    address_verified: boolean;
+    staying_since_years: number;
+    locality_type: 'Urban' | 'Rural' | 'Semi-Urban';
+    house_condition: 'Good' | 'Average' | 'Poor';
+    landmark_notes: string;
+    neighbor_feedback?: string;
+  };
+  employment_business_verification: {
+    employment_category: 'Salaried' | 'Self-Employed';
+    business_verified: boolean;
+    company_name?: string;
+    job_role?: string;
+    employment_type?: 'Permanent' | 'Contract';
+    years_in_job?: number;
+    office_verified?: boolean;
+    salary_estimated?: number;
+    business_name?: string;
+    business_type?: string;
+    shop_office_exists?: boolean;
+    years_in_business?: number;
+    daily_customer_flow?: 'Low' | 'Medium' | 'High';
+    estimated_monthly_income?: number;
+  };
+  financial_assessment: {
+    declared_income: number;
+    estimated_actual_income: number;
+    monthly_expenses: number;
+    existing_loans: boolean;
+    repayment_capacity: 'Low' | 'Medium' | 'High';
+  };
+  education_details?: {
+    highest_qualification: string;
+    tenth_percentage?: number;
+    twelfth_or_diploma_percentage?: number;
+    graduation_details?: string;
+    professional_stability_indicator: 'Low' | 'Medium' | 'High';
+  };
+  loan_specific_details: Record<string, unknown>;
+  uploaded_documents: Array<{ doc_type: string; files: string[] }>;
+  risk_remarks: {
+    risk_level: 'Low' | 'Medium' | 'High';
+    fraud_suspicion: boolean;
+    final_recommendation: 'Recommend Approval' | 'Recommend Rejection' | 'Needs Further Review';
+    detailed_remarks: string;
+  };
 }
 
 export interface WorkflowBureauReport {
@@ -267,6 +312,18 @@ export interface WorkflowCommunicationItem {
   upload_link?: string;
   expires_at?: string;
   status?: string;
+}
+
+export interface WorkflowApplication {
+  arn: string;
+  borrower_name: string;
+  loan_amount: number;
+  stage: string;
+  risk_grade: string;
+  credit_score: number;
+  kyc_status: string;
+  employment_type: string;
+  purpose: string;
 }
 
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
