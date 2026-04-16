@@ -5,7 +5,8 @@ export type WorkflowRole =
   | 'loan_officer'
   | 'credit_analyst'
   | 'underwriter'
-  | 'compliance_officer';
+  | 'compliance_officer'
+  | 'field_officer';
 
 async function request<T>(path: string, options: RequestInit = {}, role?: string): Promise<T> {
   const headers = new Headers(options.headers || {});
@@ -88,6 +89,35 @@ export interface WorkflowApplication {
 export interface WorkflowDashboardResponse {
   role: WorkflowRole;
   stats: Array<{ key: string; value: number | string }>;
+}
+
+export interface FieldOfficerCaseItem {
+  arn: string;
+  borrower_name: string;
+  loan_amount: number;
+  status: 'Pending Visit' | 'In Progress' | 'Completed';
+}
+
+export interface FieldOfficerCaseDetail {
+  arn: string;
+  borrower_name: string;
+  borrower_phone?: string | null;
+  borrower_address: string;
+  loan_amount: number;
+  loan_type: string;
+  stage: string;
+  status: 'Pending Visit' | 'In Progress' | 'Completed';
+  map_link: string;
+  report_submitted: boolean;
+}
+
+export interface FieldVisitReportPayload {
+  address_verified: boolean;
+  business_verified: boolean;
+  income_estimate: number;
+  risk_level: 'Low' | 'Medium' | 'High';
+  remarks: string;
+  evidence_urls: string[];
 }
 
 export interface WorkflowBureauReport {
@@ -279,6 +309,24 @@ export const workflowApi = {
   creditAnalystDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/credit-analyst/dashboard', {}, role),
   underwriterDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/underwriter/dashboard', {}, role),
   complianceDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/compliance/dashboard', {}, role),
+  fieldOfficerDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/field-officer/dashboard', {}, role),
+  getFieldOfficerCases: (role: WorkflowRole, status?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (search?.trim()) params.set('search', search.trim());
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<FieldOfficerCaseItem[]>(`/api/v1/workflow/field-officer/cases${suffix}`, {}, role);
+  },
+  getFieldOfficerCaseDetail: (arn: string, role: WorkflowRole) => request<FieldOfficerCaseDetail>(`/api/v1/workflow/field-officer/cases/${encodeURIComponent(arn)}`, {}, role),
+  startFieldVisit: (arn: string, role: WorkflowRole) =>
+    request<{ arn: string; status: string }>(`/api/v1/workflow/field-officer/cases/${encodeURIComponent(arn)}/start-visit`, {
+      method: 'POST',
+    }, role),
+  submitFieldVisitReport: (arn: string, role: WorkflowRole, payload: FieldVisitReportPayload) =>
+    request<{ arn: string; status: string; next_stage: string; submitted_at: string }>(`/api/v1/workflow/field-officer/cases/${encodeURIComponent(arn)}/submit-report`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, role),
   getBureauReport: (arn: string, role: WorkflowRole) => request<WorkflowBureauReport>(`/api/v1/workflow/credit-analyst/bureau/${arn}`, {}, role),
   getAiScore: (arn: string, role: WorkflowRole) => request<WorkflowAiScore>(`/api/v1/workflow/credit-analyst/ai-score/${arn}`, {}, role),
   getUnderwriterDecisionEngine: (arn: string, role: WorkflowRole) =>

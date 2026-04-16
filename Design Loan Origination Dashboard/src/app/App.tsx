@@ -11,6 +11,7 @@ import { UnderwriterDashboard } from './pages/dashboards/UnderwriterDashboard';
 import { ComplianceDashboard } from './pages/dashboards/ComplianceDashboard';
 import { OperationsDashboard } from './pages/dashboards/OperationsDashboard';
 import { SystemAdminDashboard } from './pages/dashboards/SystemAdminDashboard';
+import { FieldOfficerDashboard } from './pages/dashboards/FieldOfficerDashboard';
 
 // Loan Officer Pages
 import { ApplicationDetailPage } from './pages/ApplicationDetail';
@@ -20,6 +21,7 @@ import { CommunicationPage } from './pages/loan-officer/Communication';
 import { LeadWorkbenchPage } from './pages/loan-officer/LeadWorkbench';
 import { ApplicationIntakePage } from './pages/loan-officer/ApplicationIntake';
 import { ESignAgreementPage } from './pages/loan-officer/ESignAgreement';
+import { FieldVisitCasePage } from './pages/field-officer/FieldVisitCasePage';
 
 // Credit Analyst Pages
 import { FinancialRatiosPage } from './pages/credit-analyst/FinancialRatios';
@@ -97,6 +99,8 @@ export default function App() {
     if (!user) return <Navigate to="/login" replace />;
 
     switch (user.role) {
+      case 'field_officer':
+        return <FieldOfficerDashboard />;
       case 'loan_officer':
         return <LoanOfficerDashboard />;
       case 'credit_analyst':
@@ -147,6 +151,10 @@ export default function App() {
           <Route path="document-review/:arn" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentDetailPage /></RoleProtectedRoute>} />
           <Route path="communication" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><CommunicationPage /></RoleProtectedRoute>} />
           <Route path="e-sign-agreement" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ESignAgreementPage /></RoleProtectedRoute>} />
+
+          {/* Field Officer Routes */}
+          <Route path="field-visits" element={<RoleProtectedRoute allowedRoles={['field_officer']}><FieldOfficerDashboard /></RoleProtectedRoute>} />
+          <Route path="field-visit/:arn" element={<RoleProtectedRoute allowedRoles={['field_officer']}><FieldVisitCasePage /></RoleProtectedRoute>} />
 
           {/* Credit Analyst Routes */}
           <Route path="financial-ratios" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><FinancialRatiosPage /></RoleProtectedRoute>} />

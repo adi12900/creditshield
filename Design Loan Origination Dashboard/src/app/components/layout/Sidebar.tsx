@@ -35,6 +35,18 @@ interface NavItem {
 }
 
 const navigationMap: Record<UserRole, NavItem[]> = {
+  field_officer: [
+    {
+      label: 'Field Dashboard',
+      icon: LayoutDashboard,
+      href: '/dashboard',
+    },
+    {
+      label: 'Assigned Visits',
+      icon: FileSearch,
+      href: '/dashboard/field-visits',
+    },
+  ],
   loan_officer: [
     {
       label: 'Dashboard',
@@ -408,7 +420,8 @@ export function Sidebar({ role }: SidebarProps) {
           {navItems.map((item) => {
             const isCibilPath = item.href === '/dashboard/cibil-reports' && location.pathname.startsWith('/dashboard/cibil-report/');
             const isDocumentReviewPath = item.href === '/dashboard/document-review' && location.pathname.startsWith('/dashboard/document-review/');
-            const isActive = location.pathname === item.href || isCibilPath || isDocumentReviewPath;
+            const isFieldVisitPath = item.href === '/dashboard/field-visits' && location.pathname.startsWith('/dashboard/field-visit/');
+            const isActive = location.pathname === item.href || isCibilPath || isDocumentReviewPath || isFieldVisitPath;
             return (
               <Link
                 key={item.href}
