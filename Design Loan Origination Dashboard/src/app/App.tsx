@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useStore, UserRole } from './store';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/Login';
@@ -25,6 +25,8 @@ import { BureauReportPage } from './pages/credit-analyst/BureauReport';
 import { FinancialRatiosPage } from './pages/credit-analyst/FinancialRatios';
 import { AIScorePage } from './pages/credit-analyst/AIScore';
 import { CreditMemoPage } from './pages/credit-analyst/CreditMemo';
+import { CibilReportsPage } from './pages/cibil/CibilReports';
+import { CibilReportViewerPage } from './pages/cibil/CibilReportViewer';
 
 // Underwriter Pages
 import { PolicyOverridePage } from './pages/underwriter/PolicyOverride';
@@ -83,6 +85,11 @@ function RoleProtectedRoute({
   return <>{children}</>;
 }
 
+function CibilReportRedirectRoute() {
+  const { id } = useParams();
+  return <Navigate to={`/dashboard/cibil-report/${id ?? ''}`} replace />;
+}
+
 export default function App() {
   const user = useStore((state) => state.user);
 
@@ -121,6 +128,8 @@ export default function App() {
         {/* Public Routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cibil-reports" element={<Navigate to="/dashboard/cibil-reports" replace />} />
+        <Route path="/cibil-report/:id" element={<CibilReportRedirectRoute />} />
 
         {/* Protected Dashboard Routes */}
         <Route path="/dashboard" element={
@@ -143,6 +152,8 @@ export default function App() {
           <Route path="financial-ratios" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><FinancialRatiosPage /></RoleProtectedRoute>} />
           <Route path="ai-score" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><AIScorePage /></RoleProtectedRoute>} />
           <Route path="credit-memo" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><CreditMemoPage /></RoleProtectedRoute>} />
+          <Route path="cibil-reports" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportsPage /></RoleProtectedRoute>} />
+          <Route path="cibil-report/:id" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportViewerPage /></RoleProtectedRoute>} />
 
           {/* Underwriter Routes */}
           <Route path="decision-engine" element={<RoleProtectedRoute allowedRoles={['underwriter', 'system_admin']}><DecisionEnginePage /></RoleProtectedRoute>} />
