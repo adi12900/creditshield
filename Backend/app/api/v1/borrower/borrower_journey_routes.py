@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 from typing import Any
+import os
 import copy
 import logging
 from random import randint
@@ -16,8 +17,17 @@ from app.core.database import get_db
 from app.core.security import AuthenticatedUser, get_current_user, require_auth_roles
 from app.models.borrower import Borrower
 from app.models.borrower_kyc_profile import BorrowerKycProfile
+from app.models.document import Document
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
+from app.services.loan_appraisal_service import LoanAppraisalServiceError, loan_appraisal_service
+from app.services.s3 import (
+    download_bytes_from_s3,
+    extract_object_key_from_url,
+    generate_presigned_url,
+    upload_file_to_s3,
+)
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(
     prefix="/borrower",
@@ -42,6 +52,28 @@ CO_APPLICANT_DUMMY_OTP = "123456"
 CO_APPLICANT_ACCEPTED_DUMMY_OTPS = {"123456", "000000", "111111"}
 
 logger = logging.getLogger("uvicorn.error")
+
+
+def _fresh_access_url(storage_url: str | None, expires_in: int = 3600) -> str | None:
+    if not storage_url:
+        return None
+    try:
+        object_key = extract_object_key_from_url(storage_url)
+        return generate_presigned_url(object_key, expires_in=expires_in)
+    except Exception:
+        return storage_url
+
+
+def _normalize_storage_url_for_persistence(storage_url: str | None) -> str | None:
+    if not storage_url:
+        return storage_url
+    try:
+        object_key = extract_object_key_from_url(storage_url)
+        bucket = os.getenv("AWS_BUCKET_NAME", "credit-shield-document")
+        region = os.getenv("AWS_REGIONS3") or os.getenv("AWS_REGION") or "ap-south-1"
+        return f"https://{bucket}.s3.{region}.amazonaws.com/{object_key}"
+    except Exception:
+        return storage_url
 
 def _get_borrower_or_404(db: Session, current_user: AuthenticatedUser) -> Borrower:
     borrower = db.query(Borrower).filter(Borrower.email == current_user.username).first()
@@ -778,7 +810,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "confidence_score": float(existing.confidence_score) if existing.confidence_score is not None else None,
             "rows_analyzed": existing.rows_analyzed,
             "report_pdf_storage_url": existing.report_pdf_storage_url,
-            "report_pdf_access_url": existing.report_pdf_access_url,
+            "report_pdf_access_url": _fresh_access_url(existing.report_pdf_storage_url),
         }
 
     statement_doc = docs_by_type.get("bank_statement_12m")
@@ -822,7 +854,6 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             f"loan_appraisal_report_{int(datetime.now(tz=timezone.utc).timestamp())}.pdf"
         )
         report_storage_url = upload_file_to_s3(BytesIO(pdf_bytes), report_object_key, "application/pdf")
-        report_access_url = generate_presigned_url(report_object_key)
 
         result_block = analysis_result.get("result", {})
         professional_block = result_block.get("professional_appraisal", {})
@@ -906,7 +937,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             kpi_metrics=kpi_metrics,
             salary_diagnostics=salary_diagnostics,
             report_pdf_storage_url=report_storage_url,
-            report_pdf_access_url=report_access_url,
+            report_pdf_access_url=None,
             report_text=report_text,
             error_message=None,
         )
@@ -921,7 +952,7 @@ async def _run_appraisal_if_ready(db: Session, application: LoanApplication) -> 
             "statement_format": statement_format,
             "co_applicant_statement_format": co_statement_format,
             "report_pdf_storage_url": record.report_pdf_storage_url,
-            "report_pdf_access_url": record.report_pdf_access_url,
+            "report_pdf_access_url": _fresh_access_url(record.report_pdf_storage_url),
         }
     except LoanAppraisalServiceError as exc:
         _upsert_appraisal_record(
@@ -1717,7 +1748,7 @@ def get_application_loan_appraisal(
         "kpi_metrics": record.kpi_metrics,
         "statement_format": statement_format,
         "report_pdf_storage_url": record.report_pdf_storage_url,
-        "report_pdf_access_url": record.report_pdf_access_url,
+        "report_pdf_access_url": _fresh_access_url(record.report_pdf_storage_url),
         "error_message": record.error_message,
         "missing_required_docs": missing_docs,
         "updated_at": record.updated_at.isoformat() if record.updated_at else None,
@@ -1791,6 +1822,7 @@ async def upload_application_document(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="storage_url must be a valid http(s) URL. Use /documents/upload for S3-backed uploads.",
         )
+    storage_url = _normalize_storage_url_for_persistence(storage_url)
     if doc_type == "bank_statement_12m" and storage_url:
         statement_format = _statement_format_from_name(storage_url)
         if statement_format == "unknown":

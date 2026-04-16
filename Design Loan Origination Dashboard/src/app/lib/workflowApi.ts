@@ -147,6 +147,7 @@ export interface WorkflowAiScore {
     kpi_metrics?: Record<string, unknown>;
     rulebook_top_insights?: string[];
     report_pdf_access_url?: string | null;
+    report_pdf_download_url?: string | null;
     report_text?: string | null;
     month_count?: number;
   } | null;

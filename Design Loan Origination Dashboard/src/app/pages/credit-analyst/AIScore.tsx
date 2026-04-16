@@ -2,7 +2,7 @@ import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { ScoreGauge } from '../../components/ui/ScoreGauge';
 import { AIExplanationPanel } from '../../components/ui/AIExplanationPanel';
 import { useEffect, useMemo, useState } from 'react';
-import { Download, ExternalLink, FileText, Sparkles } from 'lucide-react';
+import { Download, ExternalLink, FileText, Sparkles, X } from 'lucide-react';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -32,6 +32,12 @@ function readNumber(value: unknown): number {
   if (typeof value === 'number') return value;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildEmbeddedPdfUrl(url: string): string {
+  if (!url) return url;
+  const [base] = url.split('#');
+  return `${base}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
 }
 
 function extractSalarySignals(
@@ -80,6 +86,7 @@ export function AIScorePage() {
   const canAccessAiPage = user?.role === 'credit_analyst' || user?.role === 'underwriter' || user?.role === 'system_admin';
   const localProfile = buildAIRiskProfile(selectedApplication);
   const [apiScore, setApiScore] = useState<WorkflowAiScore | null>(null);
+  const [isPdfViewerOpen, setIsPdfViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!canAccessAiPage || !user) {
@@ -125,8 +132,9 @@ export function AIScorePage() {
   const scoreMax = appraisalAvailable ? 100 : 900;
   const scoreLabel = appraisalAvailable ? 'Loan Appraisal Score' : 'Credit Score Proxy';
   const sourceLabel = apiScore?.model_source === 'loan_appraisal_record' ? 'Actual loan appraisal record' : 'Workflow proxy score';
-  const reportPdfUrl = actualAppraisal?.report_pdf_access_url ?? '';
-  const hasReportPdf = Boolean(reportPdfUrl);
+  const reportPdfViewUrl = actualAppraisal?.report_pdf_access_url ?? '';
+  const reportPdfDownloadUrl = actualAppraisal?.report_pdf_download_url ?? reportPdfViewUrl;
+  const hasReportPdf = Boolean(reportPdfViewUrl);
 
   const analysisPeriod = actualAppraisal?.analysis_period;
   const monthCount = readNumber(analysisPeriod?.month_count ?? actualAppraisal?.month_count ?? actualAppraisal?.monthly_balance_table?.length ?? 0);
@@ -250,14 +258,16 @@ export function AIScorePage() {
           <div className="flex flex-wrap gap-3">
             {hasReportPdf ? (
               <>
-                <Button asChild variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
-                  <a href={reportPdfUrl} target="_blank" rel="noreferrer">
+                <Button
+                  variant="outline"
+                  className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                  onClick={() => setIsPdfViewerOpen(true)}
+                >
                     <FileText className="w-4 h-4" />
                     View PDF
-                  </a>
                 </Button>
                 <Button asChild className="bg-emerald-500 text-slate-950 hover:bg-emerald-400">
-                  <a href={reportPdfUrl} download>
+                  <a href={reportPdfDownloadUrl} download>
                     <Download className="w-4 h-4" />
                     Download PDF
                   </a>
@@ -317,6 +327,30 @@ export function AIScorePage() {
           </div>
         </div>
       </div>
+
+      {isPdfViewerOpen && hasReportPdf && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm p-4 md:p-8">
+          <div className="h-full w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm md:text-base font-semibold text-slate-900">Loan Appraisal PDF Viewer</h2>
+              <button
+                onClick={() => setIsPdfViewerOpen(false)}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-2.5 py-2 hover:bg-slate-50"
+                aria-label="Close PDF viewer"
+              >
+                <X className="w-4 h-4 text-slate-700" />
+              </button>
+            </div>
+            <div className="flex-1 bg-slate-100">
+              <iframe
+                src={buildEmbeddedPdfUrl(reportPdfViewUrl)}
+                title="Loan Appraisal PDF"
+                className="w-full h-full border-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-6">
         <Card className="overflow-hidden border-slate-200 shadow-sm">

@@ -4,9 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import httpx
 from sqlalchemy import text
-from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.loan_application import LoanApplication
@@ -14,6 +12,7 @@ from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.models.credit_memo import CreditMemo
 from app.models.user import User, UserRole
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
+from app.services.s3 import extract_object_key_from_url, generate_presigned_url
 
 
 class WorkflowServiceError(Exception):
@@ -320,7 +319,11 @@ class WorkflowService:
                     "status": row[2],
                     "confidence": row[3] or 0,
                     "agent_verdict": row[4],
-                    "storage_url": row[5],
+                    "storage_url": (
+                        generate_presigned_url(extract_object_key_from_url(row[5]))
+                        if row[5]
+                        else None
+                    ),
                     "uploaded_at": row[6].isoformat() if row[6] else None,
                 }
                 for row in rows
