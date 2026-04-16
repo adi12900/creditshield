@@ -54,16 +54,6 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       href: '/dashboard',
     },
     {
-      label: 'Lead Workbench',
-      icon: Users,
-      href: '/dashboard/lead-workbench',
-    },
-    {
-      label: 'Application Intake',
-      icon: FileInput,
-      href: '/dashboard/application-intake',
-    },
-    {
       label: 'Application Detail',
       icon: FileText,
       href: '/dashboard/application-detail',

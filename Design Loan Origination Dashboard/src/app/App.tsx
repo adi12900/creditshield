@@ -144,8 +144,8 @@ export default function App() {
           <Route index element={getDashboard()} />
 
           {/* Loan Officer Routes */}
-          <Route path="lead-workbench" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><LeadWorkbenchPage /></RoleProtectedRoute>} />
-          <Route path="application-intake" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationIntakePage /></RoleProtectedRoute>} />
+          <Route path="lead-workbench" element={<RoleProtectedRoute allowedRoles={['system_admin']}><LeadWorkbenchPage /></RoleProtectedRoute>} />
+          <Route path="application-intake" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ApplicationIntakePage /></RoleProtectedRoute>} />
           <Route path="application-detail" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationDetailPage /></RoleProtectedRoute>} />
           <Route path="document-review" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentQueuePage /></RoleProtectedRoute>} />
           <Route path="document-review/:arn" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentDetailPage /></RoleProtectedRoute>} />

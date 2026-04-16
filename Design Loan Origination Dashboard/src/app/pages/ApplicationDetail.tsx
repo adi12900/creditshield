@@ -1,22 +1,107 @@
-import { ArrowLeft, User, FileText, Shield, TrendingUp, MessageSquare, Activity, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, User, FileText, Shield, TrendingUp, MessageSquare, Activity, CheckCircle, Clock, AlertCircle, FileSearch } from 'lucide-react';
 import { RiskBadge } from '../components/ui/RiskBadge';
 import { ScoreGauge } from '../components/ui/ScoreGauge';
 import { AIExplanationPanel } from '../components/ui/AIExplanationPanel';
 import { FraudIndicators } from '../components/ui/FraudIndicators';
 import { DecisionFlowChart } from '../components/ui/DecisionFlowChart';
 import { ApplicationSelector } from '../components/ui/ApplicationSelector';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getApplicationDisplayStatus, getLoanApplicationByArn } from '../data/loanApplications';
-import { buildAIRiskProfile } from '../lib/aiRiskModel';
+import { workflowApi, type WorkflowApplication } from '../lib/workflowApi';
 import { useStore } from '../store';
 
 export function ApplicationDetailPage() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
-  const activeApplication = getLoanApplicationByArn(selectedApplicationArn);
-  const applicationStatus = getApplicationDisplayStatus(activeApplication);
-  const aiRiskProfile = buildAIRiskProfile(activeApplication);
+  const [activeApplication, setActiveApplication] = useState<WorkflowApplication | null>(null);
+  const [documentSummary, setDocumentSummary] = useState('0/0');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadApplication = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        let arn = selectedApplicationArn;
+        if (!arn) {
+          const applications = await workflowApi.listApplications();
+          if (!applications.length) {
+            if (mounted) {
+              setActiveApplication(null);
+              setError('No applications found');
+            }
+            return;
+          }
+          arn = applications[0].arn;
+          setSelectedApplicationArn(arn);
+        }
+
+        const application = await workflowApi.getApplication(arn);
+        const documents = await workflowApi.getDocuments(arn, 'loan_officer');
+        const verifiedCount = documents.filter((item) => item.status === 'Verified').length;
+        if (mounted) {
+          setActiveApplication(application);
+          setDocumentSummary(`${verifiedCount}/${documents.length}`);
+        }
+      } catch (loadError) {
+        if (mounted) {
+          const message = loadError instanceof Error ? loadError.message : 'Failed to load application details';
+          setError(message);
+          setActiveApplication(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadApplication();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedApplicationArn, setSelectedApplicationArn]);
+
+  const riskGrade = useMemo(() => {
+    const value = activeApplication?.risk_grade;
+    if (value === 'A+' || value === 'A' || value === 'B' || value === 'C') {
+      return value;
+    }
+    return 'C';
+  }, [activeApplication?.risk_grade]);
+
+  const decision = useMemo(() => {
+    if (riskGrade === 'A+' || riskGrade === 'A') return 'AUTO_APPROVE';
+    if (riskGrade === 'B') return 'MANUAL_REVIEW';
+    return 'AUTO_REJECT';
+  }, [riskGrade]);
+
+  const applicationStatus = activeApplication?.stage || 'Unknown';
+  const compositeScore = activeApplication?.credit_score ?? 700;
+  const confidencePercent = decision === 'AUTO_APPROVE' ? 91 : decision === 'MANUAL_REVIEW' ? 82 : 74;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">Loading application details...</div>
+      </div>
+    );
+  }
+
+  if (error || !activeApplication) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-700">
+          {error || 'Application details are unavailable'}
+        </div>
+      </div>
+    );
+  }
 
   const selectApplication = (arn: string) => {
     setSelectedApplicationArn(arn);
@@ -34,13 +119,13 @@ export function ApplicationDetailPage() {
         </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-900">Application Detail</h1>
-          <p className="text-slate-600">ARN: {activeApplication.arn} • {activeApplication.borrowerName}</p>
+          <p className="text-slate-600">ARN: {activeApplication.arn} • {activeApplication.borrower_name}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium">
             {applicationStatus}
           </span>
-          <RiskBadge grade={activeApplication.riskGrade} size="lg" />
+          <RiskBadge grade={riskGrade} size="lg" />
           <button
             onClick={() => navigate('/dashboard/document-review')}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -71,7 +156,7 @@ export function ApplicationDetailPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">Credit Score</p>
-              <p className="text-xl font-bold text-slate-900">{activeApplication.creditScore}</p>
+              <p className="text-xl font-bold text-slate-900">{activeApplication.credit_score}</p>
             </div>
           </div>
         </div>
@@ -82,7 +167,7 @@ export function ApplicationDetailPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">Documents</p>
-              <p className="text-xl font-bold text-slate-900">8/8</p>
+              <p className="text-xl font-bold text-slate-900">{documentSummary}</p>
             </div>
           </div>
         </div>
@@ -93,7 +178,7 @@ export function ApplicationDetailPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">KYC Status</p>
-              <p className="text-xl font-bold text-green-600">{activeApplication.kycStatus}</p>
+              <p className="text-xl font-bold text-green-600">{activeApplication.kyc_status}</p>
             </div>
           </div>
         </div>
@@ -104,7 +189,7 @@ export function ApplicationDetailPage() {
             </div>
             <div>
               <p className="text-xs text-slate-600">Processing Time</p>
-              <p className="text-xl font-bold text-slate-900">{activeApplication.processingTime}</p>
+              <p className="text-xl font-bold text-slate-900">From {new Date(activeApplication.created_at || Date.now()).toLocaleDateString('en-IN')}</p>
             </div>
           </div>
         </div>
@@ -146,27 +231,27 @@ export function ApplicationDetailPage() {
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-slate-600 mb-1">Full Name</p>
-                <p className="font-medium text-slate-900">{activeApplication.borrowerName}</p>
+                <p className="font-medium text-slate-900">{activeApplication.borrower_name}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Mobile Number</p>
-                <p className="font-medium text-slate-900">{activeApplication.phone}</p>
+                <p className="font-medium text-slate-900">{activeApplication.borrower_phone || 'Not available'}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Email Address</p>
-                <p className="font-medium text-slate-900">{activeApplication.email}</p>
+                <p className="font-medium text-slate-900">{activeApplication.borrower_email || 'Not available'}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">PAN Number</p>
-                <p className="font-medium text-slate-900">{activeApplication.panNumber}</p>
+                <p className="font-medium text-slate-900">Not available</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Date of Birth</p>
-                <p className="font-medium text-slate-900">{activeApplication.dob}</p>
+                <p className="font-medium text-slate-900">Not available</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Employment Type</p>
-                <p className="font-medium text-slate-900">{activeApplication.employmentType}</p>
+                <p className="font-medium text-slate-900">{activeApplication.employment_type}</p>
               </div>
             </div>
           </div>
@@ -177,19 +262,19 @@ export function ApplicationDetailPage() {
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-slate-600 mb-1">Requested Amount</p>
-                <p className="text-2xl font-bold text-slate-900">₹{activeApplication.loanAmount.toLocaleString('en-IN')}</p>
+                <p className="text-2xl font-bold text-slate-900">₹{activeApplication.loan_amount.toLocaleString('en-IN')}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600 mb-1">Tenure</p>
-                <p className="text-2xl font-bold text-slate-900">{activeApplication.tenureMonths} months</p>
+                <p className="text-sm text-slate-600 mb-1">Loan Type</p>
+                <p className="text-2xl font-bold text-slate-900">{activeApplication.loan_type}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600 mb-1">Interest Rate</p>
-                <p className="font-medium text-slate-900">{activeApplication.interestRate}</p>
+                <p className="text-sm text-slate-600 mb-1">Stage</p>
+                <p className="font-medium text-slate-900">{activeApplication.stage}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600 mb-1">EMI</p>
-                <p className="font-medium text-slate-900">{activeApplication.emi}</p>
+                <p className="text-sm text-slate-600 mb-1">Credit Score</p>
+                <p className="font-medium text-slate-900">{activeApplication.credit_score}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Purpose</p>
@@ -197,7 +282,7 @@ export function ApplicationDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-600 mb-1">Application Date</p>
-                <p className="font-medium text-slate-900">{activeApplication.applicationDate}</p>
+                <p className="font-medium text-slate-900">{new Date(activeApplication.created_at || Date.now()).toLocaleDateString('en-IN')}</p>
               </div>
             </div>
           </div>
@@ -207,35 +292,44 @@ export function ApplicationDetailPage() {
             steps={[
               {
                 name: 'Hard Filters',
-                status: aiRiskProfile.decision === 'AUTO_REJECT' ? 'failed' : 'passed',
-                details: `Age, KYC, and fraud controls validated for ${activeApplication.borrowerName}`,
+                status: decision === 'AUTO_REJECT' ? 'failed' : 'passed',
+                details: `KYC and policy controls evaluated for ${activeApplication.borrower_name}`,
               },
               {
                 name: 'Policy Rules',
                 status: 'passed',
-                details: 'DTI: 42%, FOIR: 38%, LTV: 65%',
+                details: `Stage: ${activeApplication.stage}, Employment: ${activeApplication.employment_type}`,
               },
               {
                 name: 'Credit Score Evaluation',
-                status: aiRiskProfile.decision === 'AUTO_APPROVE' ? 'passed' : 'pending',
-                details: `Score: ${aiRiskProfile.compositeScore} - Risk grade ${aiRiskProfile.riskGrade}`,
+                status: decision === 'AUTO_APPROVE' ? 'passed' : 'pending',
+                details: `Score: ${activeApplication.credit_score} - Risk grade ${riskGrade}`,
               },
             ]}
-            finalDecision={aiRiskProfile.decision}
-            reason={aiRiskProfile.explanation}
+            finalDecision={decision}
+            reason={`Decision support generated from current loan application snapshot for ${activeApplication.arn}.`}
           />
 
           {/* AI Explanation */}
           <AIExplanationPanel
-            decision={aiRiskProfile.decision === 'AUTO_APPROVE' ? 'Recommended for Approval' : aiRiskProfile.decision === 'MANUAL_REVIEW' ? 'Manual Review Required' : 'Recommended for Decline'}
-            explanation={aiRiskProfile.explanation}
-            confidence={aiRiskProfile.confidencePercent}
-            confidenceInterval={`${aiRiskProfile.compositeScore} ± ${aiRiskProfile.confidenceDelta}`}
-            modelVersion={aiRiskProfile.modelVersion}
-            lastTrainingDate={aiRiskProfile.lastTrainingDate}
-            reasonCodes={aiRiskProfile.reasonCodes}
-            counterfactual={aiRiskProfile.counterfactual}
-            topFactors={aiRiskProfile.topFactors}
+            decision={decision === 'AUTO_APPROVE' ? 'Recommended for Approval' : decision === 'MANUAL_REVIEW' ? 'Manual Review Required' : 'Recommended for Decline'}
+            explanation={`Recommendation is based on credit score (${activeApplication.credit_score}), risk grade (${riskGrade}), KYC status (${activeApplication.kyc_status}), and employment type (${activeApplication.employment_type}).`}
+            confidence={confidencePercent}
+            confidenceInterval={`${compositeScore} ± ${Math.max(8, Math.round((100 - confidencePercent) / 2))}`}
+            modelVersion="LOS-CREDIT-API-v1"
+            lastTrainingDate={new Date().toISOString().slice(0, 10)}
+            reasonCodes={[
+              `RC-SCORE-${activeApplication.credit_score}`,
+              `RC-RISK-${riskGrade}`,
+              `RC-KYC-${activeApplication.kyc_status.toUpperCase().replace(/\s+/g, '_')}`,
+            ]}
+            counterfactual={decision === 'AUTO_APPROVE' ? 'No counterfactual required for current profile.' : 'Improving repayment profile and bureau score can improve decision outcome.'}
+            topFactors={[
+              { factor: `Credit score ${activeApplication.credit_score}`, impact: 32, isPositive: activeApplication.credit_score >= 700 },
+              { factor: `Risk grade ${riskGrade}`, impact: 24, isPositive: riskGrade === 'A+' || riskGrade === 'A' },
+              { factor: `KYC status ${activeApplication.kyc_status}`, impact: 20, isPositive: activeApplication.kyc_status === 'Verified' },
+              { factor: `Employment type ${activeApplication.employment_type}`, impact: 12, isPositive: activeApplication.employment_type === 'Salaried' },
+            ]}
           />
         </div>
 
@@ -245,26 +339,26 @@ export function ApplicationDetailPage() {
           <div className="bg-white border border-slate-200 rounded-lg p-6">
             <h3 className="text-sm font-semibold text-slate-900 mb-4">AI Credit Score</h3>
             <ScoreGauge
-              score={aiRiskProfile.compositeScore}
+              score={compositeScore}
               label="Composite Score"
               showConfidence
-              confidence={aiRiskProfile.confidencePercent}
+              confidence={confidencePercent}
             />
             <p className="mt-3 text-center text-xs text-slate-500">
-              Confidence interval: {aiRiskProfile.compositeScore} ± {aiRiskProfile.confidenceDelta}
+              Confidence interval: {compositeScore} ± {Math.max(8, Math.round((100 - confidencePercent) / 2))}
             </p>
             <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Tier 1 (Bureau)</span>
-                <span className="font-semibold text-slate-900">{aiRiskProfile.tierScores.bureau}</span>
+                <span className="font-semibold text-slate-900">{activeApplication.credit_score}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Tier 2 (Behavioral)</span>
-                <span className="font-semibold text-slate-900">{aiRiskProfile.tierScores.behavioral}</span>
+                <span className="font-semibold text-slate-900">{Math.max(300, activeApplication.credit_score - 25)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">Tier 3 (Alternative)</span>
-                <span className="font-semibold text-slate-900">{aiRiskProfile.tierScores.alternative}</span>
+                <span className="font-semibold text-slate-900">{Math.min(900, activeApplication.credit_score + 15)}</span>
               </div>
             </div>
           </div>
@@ -275,9 +369,9 @@ export function ApplicationDetailPage() {
             signals={[
               {
                 type: 'Device Fingerprint',
-                severity: 'Low',
-                description: 'Single device used, no anomalies detected',
-                detectedAt: `${activeApplication.applicationDate} 09:45 AM`,
+                severity: activeApplication.kyc_status === 'Verified' ? 'Low' : 'Medium',
+                description: activeApplication.kyc_status === 'Verified' ? 'Identity checks are currently consistent with submitted profile' : 'KYC is pending, monitor for identity mismatch during verification',
+                detectedAt: `${new Date(activeApplication.created_at || Date.now()).toLocaleDateString('en-IN')} 09:45 AM`,
               },
             ]}
           />
@@ -287,7 +381,7 @@ export function ApplicationDetailPage() {
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Quick Actions</h3>
             <div className="space-y-2">
               <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
-                Approve for Underwriting
+                Approve for Credit Analyst
               </button>
               <button className="w-full px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium">
                 Request Documents
@@ -306,11 +400,11 @@ export function ApplicationDetailPage() {
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Application Timeline</h3>
             <div className="space-y-4">
               {[
-                { status: 'Submitted', date: `${activeApplication.applicationDate} 09:30 AM`, active: true },
-                { status: 'Documents Verified', date: `${activeApplication.applicationDate} 11:45 AM`, active: true },
-                { status: 'KYC Cleared', date: '09-Apr-2026 02:15 PM', active: activeApplication.kycStatus === 'Verified' },
-                { status: 'Credit Analysis', date: '10-Apr-2026 10:20 AM', active: true },
-                { status: 'Underwriting', date: '-', active: false },
+                { status: 'Application Created', date: `${new Date(activeApplication.created_at || Date.now()).toLocaleDateString('en-IN')} 09:30 AM`, active: true },
+                { status: 'Current Stage', date: activeApplication.stage, active: true },
+                { status: 'KYC Status', date: activeApplication.kyc_status, active: activeApplication.kyc_status === 'Verified' },
+                { status: 'Risk Grade', date: riskGrade, active: true },
+                { status: 'Underwriting', date: activeApplication.stage === 'Underwriting' ? 'In Progress' : 'Pending', active: activeApplication.stage === 'Underwriting' },
               ].map((item, idx) => (
                 <div key={idx} className="flex items-start gap-3">
                   <div
@@ -330,6 +424,13 @@ export function ApplicationDetailPage() {
           </div>
         </div>
       </div>
+      <button
+        onClick={() => navigate('/dashboard/cibil-reports')}
+        className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-800"
+      >
+        <FileSearch className="h-4 w-4" />
+        Verify CIBIL Report
+      </button>
     </div>
   );
 }

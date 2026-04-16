@@ -27,13 +27,17 @@ LoanStage = Literal[
 class LoanApplicationOut(BaseModel):
     arn: str
     borrower_name: str
+    borrower_email: str | None = None
+    borrower_phone: str | None = None
     loan_amount: float
+    loan_type: str
     stage: LoanStage
     risk_grade: Literal["A+", "A", "B", "C"]
     credit_score: int
     kyc_status: Literal["Verified", "Pending"]
     employment_type: Literal["Salaried", "Self Employed"]
     purpose: str
+    created_at: datetime | None = None
 
 
 class DashboardStat(BaseModel):
