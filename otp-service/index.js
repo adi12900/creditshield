@@ -87,6 +87,30 @@ app.post('/verify-otp', (req, res) => {
   return res.json({ valid: true, message: 'OTP verified successfully' });
 });
 
+// POST /send-email
+// Body: { to, subject, html }
+app.post('/send-email', async (req, res) => {
+  const { to, subject, html } = req.body;
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: 'to, subject, and html are required' });
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"CreditShield" <${process.env.GMAIL_USER}>`,
+      to: to,
+      subject: subject,
+      html: html,
+    });
+
+    console.log(`Email sent to ${to}: ${subject}`);
+    return res.json({ success: true, message: 'Email sent successfully' });
+  } catch (err) {
+    console.error('Failed to send email:', err.message);
+    return res.status(500).json({ error: 'Failed to send email', detail: err.message });
+  }
+});
+
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 

@@ -103,9 +103,20 @@ def loan_officer_get_communications(arn: str) -> list[dict]:
     "/loan-officer/communications/{arn}/send",
     dependencies=[Depends(require_roles({"loan_officer"}))],
 )
-def loan_officer_send_communication(arn: str, payload: CommunicationMessageRequest) -> dict:
+def loan_officer_send_communication(arn: str, payload: CommunicationMessageRequest, db: Session = Depends(get_db)) -> dict:
+    """
+    Send communication to borrower with document upload link.
+    
+    Enhanced to generate secure upload tokens and send actual emails/SMS.
+    """
     try:
-        return workflow_service.send_communication(arn, payload.channel, payload.subject, payload.message)
+        return workflow_service.send_communication(
+            arn=arn,
+            channel=payload.channel,
+            subject=payload.subject,
+            message=payload.message,
+            db=db  # Pass database session for token storage and email/SMS sending
+        )
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
 

@@ -11,6 +11,7 @@ from app.api.v1.risk.loan_appraisal_routes import router as loan_appraisal_route
 from app.api.v1.auth.auth_routes import router as auth_router
 from app.api.v1.borrower.borrower_auth_routes import router as borrower_auth_router
 from app.api.v1.borrower.borrower_journey_routes import router as borrower_journey_router
+from app.api.v1.borrower.document_upload_routes import router as document_upload_router
 from app.api.v1.borrower.kyc_otp_routes import router as kyc_otp_router
 from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
@@ -86,6 +87,7 @@ app.include_router(loan_appraisal_router, prefix="/api/v1/loan-appraisal")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(borrower_auth_router, prefix="/api/v1")
 app.include_router(borrower_journey_router, prefix="/api/v1")
+app.include_router(document_upload_router)  # No prefix - uses /borrower from router
 app.include_router(kyc_otp_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")

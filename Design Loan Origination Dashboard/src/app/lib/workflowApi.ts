@@ -158,6 +158,10 @@ export interface WorkflowCommunicationItem {
   subject: string;
   message: string;
   sent_at: string;
+  upload_token?: string;
+  upload_link?: string;
+  expires_at?: string;
+  status?: string;
 }
 
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
