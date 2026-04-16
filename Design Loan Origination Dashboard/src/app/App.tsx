@@ -14,7 +14,8 @@ import { SystemAdminDashboard } from './pages/dashboards/SystemAdminDashboard';
 
 // Loan Officer Pages
 import { ApplicationDetailPage } from './pages/ApplicationDetail';
-import { DocumentReviewPage } from './pages/loan-officer/DocumentReview';
+import { DocumentQueuePage } from './pages/loan-officer/DocumentQueuePage';
+import { DocumentDetailPage } from './pages/loan-officer/DocumentDetailPage';
 import { CommunicationPage } from './pages/loan-officer/Communication';
 import { LeadWorkbenchPage } from './pages/loan-officer/LeadWorkbench';
 import { ApplicationIntakePage } from './pages/loan-officer/ApplicationIntake';
@@ -142,7 +143,8 @@ export default function App() {
           <Route path="lead-workbench" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><LeadWorkbenchPage /></RoleProtectedRoute>} />
           <Route path="application-intake" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationIntakePage /></RoleProtectedRoute>} />
           <Route path="application-detail" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationDetailPage /></RoleProtectedRoute>} />
-          <Route path="document-review" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentReviewPage /></RoleProtectedRoute>} />
+          <Route path="document-review" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentQueuePage /></RoleProtectedRoute>} />
+          <Route path="document-review/:arn" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentDetailPage /></RoleProtectedRoute>} />
           <Route path="communication" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><CommunicationPage /></RoleProtectedRoute>} />
           <Route path="e-sign-agreement" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ESignAgreementPage /></RoleProtectedRoute>} />
 

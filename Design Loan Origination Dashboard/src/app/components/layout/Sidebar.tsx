@@ -407,7 +407,8 @@ export function Sidebar({ role }: SidebarProps) {
         <div className="space-y-1">
           {navItems.map((item) => {
             const isCibilPath = item.href === '/dashboard/cibil-reports' && location.pathname.startsWith('/dashboard/cibil-report/');
-            const isActive = location.pathname === item.href || isCibilPath;
+            const isDocumentReviewPath = item.href === '/dashboard/document-review' && location.pathname.startsWith('/dashboard/document-review/');
+            const isActive = location.pathname === item.href || isCibilPath || isDocumentReviewPath;
             return (
               <Link
                 key={item.href}
