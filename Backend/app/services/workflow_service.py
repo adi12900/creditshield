@@ -119,6 +119,19 @@ class WorkflowService:
         self._underwriter_decisions: dict[str, list[dict[str, Any]]] = {}
         self._field_visit_status: dict[str, str] = {}
         self._field_visit_reports: dict[str, dict[str, Any]] = {}
+        self._required_documents_by_loan_type: dict[str, list[str]] = {
+            "Personal Loan": ["house_front_photo", "landmark_photo"],
+            "Car Loan": ["applicant_house_photo", "parking_space_photo", "dealer_location_photo", "proforma_invoice"],
+            "Home Loan": [
+                "property_exterior_photo",
+                "property_interior_photo",
+                "nearby_landmark_photo",
+                "builder_project_board_photo",
+            ],
+            "Gold Loan": ["gold_items_photo", "gold_purity_closeup", "gold_storage_location_photo"],
+            "Education Loan": ["student_photo", "college_building_photo", "admission_letter", "marksheet_upload"],
+            "Business Loan": ["shop_front_photo", "inside_shop_photo", "business_activity_photo", "gst_registration_proof"],
+        }
 
         self._reports: list[RegulatoryReport] = [
             RegulatoryReport(
@@ -175,6 +188,7 @@ class WorkflowService:
             "arn": row.arn,
             "borrower_name": row.borrower_name,
             "loan_amount": loan_amount,
+            "loan_type": row.loan_type,
             "stage": stage,
             "risk_grade": risk_grade,
             "credit_score": int(row.credit_score or 700),
@@ -396,7 +410,7 @@ class WorkflowService:
             "borrower_phone": borrower_phone,
             "borrower_address": borrower_address,
             "loan_amount": app["loan_amount"],
-            "loan_type": app.get("purpose") or "General Loan",
+            "loan_type": app.get("loan_type") or "personal_loan",
             "stage": app["stage"],
             "status": self._field_visit_status.get(arn, "Pending Visit"),
             "map_link": map_link,
@@ -422,6 +436,21 @@ class WorkflowService:
         self._ensure_field_assignment(username, arn)
         app = self._get_application(arn)
 
+        loan_type = str(payload.get("loan_type") or "").strip()
+        required_docs = self._required_documents_by_loan_type.get(loan_type, [])
+        uploaded_docs = payload.get("uploaded_documents") or []
+        uploaded_doc_types = {
+            str(item.get("doc_type", "")).strip().lower()
+            for item in uploaded_docs
+            if isinstance(item, dict)
+        }
+        missing_docs = [doc for doc in required_docs if doc.lower() not in uploaded_doc_types]
+        if missing_docs:
+            raise WorkflowServiceError(
+                f"Missing required documents for {loan_type}: {', '.join(missing_docs)}",
+                422,
+            )
+
         self._field_visit_reports[arn] = {
             **payload,
             "arn": arn,
@@ -445,8 +474,8 @@ class WorkflowService:
             user="Field Officer",
             action="Field Report Submitted",
             resource=arn,
-            details=f"Risk={payload.get('risk_level')}; next_stage={next_stage}",
-            risk="Medium" if payload.get("risk_level") == "High" else "Low",
+            details=f"Risk={((payload.get('risk_remarks') or {}).get('risk_level'))}; loan_type={loan_type}; next_stage={next_stage}",
+            risk="Medium" if ((payload.get("risk_remarks") or {}).get("risk_level") == "High") else "Low",
         )
 
         return {

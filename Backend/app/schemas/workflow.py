@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,14 @@ class DashboardResponse(BaseModel):
 
 
 FieldVisitStatus = Literal["Pending Visit", "In Progress", "Completed"]
+LoanTypeCategory = Literal[
+    "Personal Loan",
+    "Car Loan",
+    "Home Loan",
+    "Gold Loan",
+    "Education Loan",
+    "Business Loan",
+]
 
 
 class FieldOfficerCaseItem(BaseModel):
@@ -69,13 +77,72 @@ class FieldOfficerCaseDetail(BaseModel):
     report_submitted: bool = False
 
 
-class FieldVisitReportRequest(BaseModel):
+class FieldUploadedDocument(BaseModel):
+    doc_type: str = Field(min_length=2, max_length=120)
+    files: list[str] = Field(min_length=1)
+
+
+class ResidenceVerification(BaseModel):
+    house_type: Literal["Owned", "Rented"]
     address_verified: bool
+    staying_since_years: float = Field(ge=0)
+    locality_type: Literal["Urban", "Rural", "Semi-Urban"]
+    house_condition: Literal["Good", "Average", "Poor"]
+    landmark_notes: str = Field(min_length=1, max_length=500)
+    neighbor_feedback: str | None = Field(default=None, max_length=1000)
+
+
+class EmploymentBusinessVerification(BaseModel):
+    employment_category: Literal["Salaried", "Self-Employed"]
     business_verified: bool
-    income_estimate: float = Field(ge=0)
+
+    company_name: str | None = Field(default=None, max_length=150)
+    job_role: str | None = Field(default=None, max_length=100)
+    employment_type: Literal["Permanent", "Contract"] | None = None
+    years_in_job: float | None = Field(default=None, ge=0)
+    office_verified: bool | None = None
+    salary_estimated: float | None = Field(default=None, ge=0)
+
+    business_name: str | None = Field(default=None, max_length=150)
+    business_type: str | None = Field(default=None, max_length=120)
+    shop_office_exists: bool | None = None
+    years_in_business: float | None = Field(default=None, ge=0)
+    daily_customer_flow: Literal["Low", "Medium", "High"] | None = None
+    estimated_monthly_income: float | None = Field(default=None, ge=0)
+
+
+class FinancialAssessment(BaseModel):
+    declared_income: float = Field(ge=0)
+    estimated_actual_income: float = Field(ge=0)
+    monthly_expenses: float = Field(ge=0)
+    existing_loans: bool
+    repayment_capacity: Literal["Low", "Medium", "High"]
+
+
+class EducationDetails(BaseModel):
+    highest_qualification: str = Field(min_length=1, max_length=100)
+    tenth_percentage: float | None = Field(default=None, ge=0, le=100)
+    twelfth_or_diploma_percentage: float | None = Field(default=None, ge=0, le=100)
+    graduation_details: str | None = Field(default=None, max_length=200)
+    professional_stability_indicator: Literal["Low", "Medium", "High"]
+
+
+class RiskRemarks(BaseModel):
     risk_level: Literal["Low", "Medium", "High"]
-    remarks: str = Field(min_length=3, max_length=2000)
-    evidence_urls: list[str] = Field(default_factory=list)
+    fraud_suspicion: bool
+    final_recommendation: Literal["Recommend Approval", "Recommend Rejection", "Needs Further Review"]
+    detailed_remarks: str = Field(min_length=5, max_length=3000)
+
+
+class FieldVisitReportRequest(BaseModel):
+    loan_type: LoanTypeCategory
+    residence_verification: ResidenceVerification
+    employment_business_verification: EmploymentBusinessVerification
+    financial_assessment: FinancialAssessment
+    education_details: EducationDetails | None = None
+    loan_specific_details: dict[str, Any] = Field(default_factory=dict)
+    uploaded_documents: list[FieldUploadedDocument] = Field(default_factory=list)
+    risk_remarks: RiskRemarks
 
 
 class DocumentItem(BaseModel):
