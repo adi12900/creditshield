@@ -11,17 +11,15 @@ from app.api.v1.risk.loan_appraisal_routes import router as loan_appraisal_route
 from app.api.v1.auth.auth_routes import router as auth_router
 from app.api.v1.borrower.borrower_auth_routes import router as borrower_auth_router
 from app.api.v1.borrower.borrower_journey_routes import router as borrower_journey_router
+from app.api.v1.borrower.kyc_otp_routes import router as kyc_otp_router
 from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models import education_loan_details as _education_loan_details_models  # noqa: F401
-from app.models import gold_loan_details as _gold_loan_details_models  # noqa: F401
-from app.models import home_loan_details as _home_loan_details_models  # noqa: F401
-from app.models import loan_appraisal_record as _loan_appraisal_record_models  # noqa: F401
 from app.models import borrower as _borrower_models  # noqa: F401
 from app.models import user as _user_models  # noqa: F401
+from app.models import aadhaar_registry as _aadhaar_models  # noqa: F401
 from app.services.risk.setu_aa_service import setu_aa_service
 
 logger = logging.getLogger("uvicorn.error")
@@ -40,11 +38,7 @@ app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,5 +86,6 @@ app.include_router(loan_appraisal_router, prefix="/api/v1/loan-appraisal")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(borrower_auth_router, prefix="/api/v1")
 app.include_router(borrower_journey_router, prefix="/api/v1")
+app.include_router(kyc_otp_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")

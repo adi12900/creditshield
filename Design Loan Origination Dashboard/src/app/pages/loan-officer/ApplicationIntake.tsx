@@ -1,78 +1,31 @@
 import { CheckCircle2, ClipboardCheck, FileInput, UserRoundCheck } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
+import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
+import { buildRBIComplianceProfile, getRBIFlowGate } from '../../lib/rbiCompliance';
 import { workflowApi } from '../../lib/workflowApi';
-import { useLoanOfficerApplications } from '../../hooks/useLoanOfficerApplications';
 
 export function ApplicationIntakePage() {
+  const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
+  const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const {
-    selectedApplication,
-    applications,
-    setSelectedApplicationArn,
-    isLoading,
-    errorMessage,
-  } = useLoanOfficerApplications();
-  const [requiredFields, setRequiredFields] = useState<Array<{ name: string; status: string; value: string }>>([]);
-  const [isFileCompleteChecked, setIsFileCompleteChecked] = useState(false);
+  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
 
-  useEffect(() => {
-    if (!selectedApplication || !user || (user.role !== 'loan_officer' && user.role !== 'system_admin')) {
-      setRequiredFields([]);
-      return;
-    }
-
-    workflowApi
-      .getRbiCompliance(selectedApplication.arn, 'loan_officer')
-      .then((payload) => {
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        setRequiredFields(
-          items.map((item: { requirement: string; status: string; value: string }) => ({
-            name: item.requirement,
-            status: item.status,
-            value: item.value,
-          }))
-        );
-      })
-      .catch(() => setRequiredFields([]));
-  }, [selectedApplication, user]);
-
-  if (!selectedApplication) {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        No applications available for intake.
-      </div>
-    );
-  }
-
-  const canSubmit = selectedApplication.stage === 'Submitted';
-  const alreadySubmittedToCreditAnalyst = ['Documents Pending', 'Underwriting', 'Offer Sent', 'Disbursed'].includes(selectedApplication.stage);
-  const hasValidationData = requiredFields.length > 0;
-  const hasPendingComplianceItems = requiredFields.some((field) => field.status !== 'Compliant');
-  const isApplicantFileComplete = isFileCompleteChecked && hasValidationData && !hasPendingComplianceItems;
-  const canSubmitToCreditAnalyst = canSubmit && isApplicantFileComplete && !isLoading;
+  const complianceProfile = buildRBIComplianceProfile(selectedApplication);
+  const documentGate = getRBIFlowGate(selectedApplication, 'document');
+  const requiredFields = complianceProfile.items
+    .filter((item) => ['dl-001', 'dl-002', 'dl-003', 'dl-004', 'dl-005', 'dl-009'].includes(item.id))
+    .map((item) => ({
+      name: `${item.field} (${item.chapter.split(' - ')[0]} ${item.clause})`,
+      status: item.status,
+      value: item.value,
+    }));
 
   const handleSubmitIntake = async () => {
-    if (!user || (user.role !== 'loan_officer' && user.role !== 'system_admin')) return;
+    if (!user || user.role !== 'loan_officer') return;
     try {
-      if (alreadySubmittedToCreditAnalyst) {
-        window.alert('Application is already routed to Credit Analyst workflow.');
-        return;
-      }
-
-      if (!isFileCompleteChecked) {
-        window.alert('Please confirm applicant file is complete before submission.');
-        return;
-      }
-
-      if (hasPendingComplianceItems) {
-        window.alert('Resolve all RBI mandatory validation items before submission.');
-        return;
-      }
-
-      await workflowApi.submitIntake(selectedApplication.arn, user.role, { file_complete: true });
-      window.alert('Application submitted to Credit Analyst queue successfully.');
+      await workflowApi.submitIntake(selectedApplication.arn, user.role);
+      window.alert('Application moved to Documents Pending.');
       window.location.reload();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to submit intake';
@@ -91,20 +44,7 @@ export function ApplicationIntakePage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Select a borrower to validate fields and route into document collection."
-        applications={applications}
       />
-
-      {isLoading ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Loading intake data...
-        </div>
-      ) : null}
-
-      {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -121,25 +61,8 @@ export function ApplicationIntakePage() {
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <p className="text-xs text-slate-500">Status</p>
-          <p className="font-semibold text-green-700">{selectedApplication.stage}</p>
+          <p className="font-semibold text-green-700">Submitted</p>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-xs text-slate-500">Applicant File Status</p>
-        {isApplicantFileComplete ? (
-          <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-            <CheckCircle2 className="h-4 w-4" />
-            File Complete
-          </p>
-        ) : (
-          <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800">
-            File Incomplete
-          </p>
-        )}
-        <p className="mt-2 text-xs text-slate-600">
-          Submit to Credit Analyst is enabled only when file is complete.
-        </p>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -168,11 +91,11 @@ export function ApplicationIntakePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <button
-          disabled={alreadySubmittedToCreditAnalyst || !canSubmitToCreditAnalyst}
+          disabled={!documentGate.canProceed}
           onClick={handleSubmitIntake}
           className="rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {alreadySubmittedToCreditAnalyst ? 'Already Routed To Credit Analyst' : 'Submit To Credit Analyst'}
+          Submit To Document Collection
         </button>
         <button className="rounded-lg border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
           <span className="inline-flex items-center gap-2">
@@ -189,34 +112,11 @@ export function ApplicationIntakePage() {
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <label className="mb-3 flex items-start gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
-          <input
-            id="file-complete-confirmation"
-            name="file-complete-confirmation"
-            type="checkbox"
-            checked={isFileCompleteChecked}
-            onChange={(event) => setIsFileCompleteChecked(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-600"
-          />
-          <span>I confirm applicant file is complete and ready for Credit Analyst review.</span>
-        </label>
         <p className="text-sm text-slate-700">
-          Intake summary: {selectedApplication.borrowerName}'s application has {requiredFields.filter((field) => field.status !== 'Compliant').length} RBI compliance item(s) requiring action.
+          Intake summary: {selectedApplication.borrowerName}'s application has {complianceProfile.blockingIssues} RBI blocking issue(s). Resolve missing mandatory fields before moving to document collection.
         </p>
-        {!canSubmit && !alreadySubmittedToCreditAnalyst && (
-          <p className="mt-2 text-xs text-red-700">Application can be submitted only from Submitted stage.</p>
-        )}
-        {alreadySubmittedToCreditAnalyst && (
-          <p className="mt-2 text-xs text-green-700">Application is already routed beyond intake submission stage.</p>
-        )}
-        {canSubmit && !isFileCompleteChecked && (
-          <p className="mt-2 text-xs text-amber-700">Mark applicant file as complete to enable submission.</p>
-        )}
-        {canSubmit && !hasValidationData && (
-          <p className="mt-2 text-xs text-amber-700">RBI validation data is required before submission.</p>
-        )}
-        {hasPendingComplianceItems && (
-          <p className="mt-2 text-xs text-red-700">All RBI mandatory validations must be Compliant before submission.</p>
+        {!documentGate.canProceed && (
+          <p className="mt-2 text-xs text-red-700">{documentGate.message}</p>
         )}
         <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
           <UserRoundCheck className="w-3.5 h-3.5" />

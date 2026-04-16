@@ -1,0 +1,15 @@
+{
+  "name": "creditshield-otp-service",
+  "version": "1.0.0",
+  "description": "OTP email service for CreditShield KYC",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.9",
+    "dotenv": "^16.4.5"
+  }
+}

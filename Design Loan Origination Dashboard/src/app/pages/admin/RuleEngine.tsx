@@ -1,41 +1,59 @@
-import { Settings, Plus, AlertCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { workflowApi, type RuleEngineResponse } from '../../lib/workflowApi';
+import { Settings, Plus, AlertCircle, CheckCircle } from 'lucide-react';
+
+const policyRules = [
+  {
+    id: 1,
+    name: 'DTI Threshold Check',
+    category: 'Financial',
+    condition: 'DTI_RATIO > 45',
+    action: 'Reject',
+    severity: 'High',
+    status: 'Active',
+    lastModified: '2026-04-01',
+  },
+  {
+    id: 2,
+    name: 'Credit Score Minimum',
+    category: 'Credit',
+    condition: 'CIBIL_SCORE < 650',
+    action: 'Flag for Review',
+    severity: 'High',
+    status: 'Active',
+    lastModified: '2026-03-28',
+  },
+  {
+    id: 3,
+    name: 'Multiple Inquiries Check',
+    category: 'Credit',
+    condition: 'CREDIT_INQUIRIES_6M > 3',
+    action: 'Flag for Review',
+    severity: 'Medium',
+    status: 'Active',
+    lastModified: '2026-04-05',
+  },
+  {
+    id: 4,
+    name: 'LTV Limit',
+    category: 'Financial',
+    condition: 'LTV_RATIO > 80',
+    action: 'Reject',
+    severity: 'High',
+    status: 'Active',
+    lastModified: '2026-03-15',
+  },
+  {
+    id: 5,
+    name: 'Employment Stability',
+    category: 'Income',
+    condition: 'EMPLOYMENT_MONTHS < 12',
+    action: 'Flag for Review',
+    severity: 'Low',
+    status: 'Inactive',
+    lastModified: '2026-02-20',
+  },
+];
 
 export function RuleEnginePage() {
-  const [data, setData] = useState<RuleEngineResponse | null>(null);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const payload = await workflowApi.systemAdminRuleEngine();
-        if (mounted) {
-          setData(payload);
-        }
-      } catch (error) {
-        if (mounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Failed to load rule engine data');
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const metricMap = useMemo(() => {
-    const metrics = data?.metrics ?? [];
-    return new Map(metrics.map((metric) => [metric.key, metric]));
-  }, [data]);
-
-  const policyRules = data?.rules ?? [];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -52,27 +70,21 @@ export function RuleEnginePage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Total Rules</p>
-          <p className="text-2xl font-bold text-slate-900">{metricMap.get('total_rules')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-slate-900">5</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Active Rules</p>
-          <p className="text-2xl font-bold text-green-600">{metricMap.get('active_rules')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-green-600">4</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">High Severity</p>
-          <p className="text-2xl font-bold text-red-600">{metricMap.get('high_severity')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-red-600">3</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm text-slate-600 mb-1">Rules Triggered Today</p>
-          <p className="text-2xl font-bold text-orange-500">{metricMap.get('triggered_today')?.value ?? '-'}</p>
+          <p className="text-2xl font-bold text-orange-500">12</p>
         </div>
       </div>
-
-      {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      ) : null}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-semibold text-slate-900 mb-4">Policy Rules</h3>
@@ -122,7 +134,7 @@ export function RuleEnginePage() {
                       <span className="font-medium">Action:</span> {rule.action}
                     </div>
                     <div>
-                      <span className="font-medium">Last Modified:</span> {rule.last_modified}
+                      <span className="font-medium">Last Modified:</span> {rule.lastModified}
                     </div>
                   </div>
                 </div>
