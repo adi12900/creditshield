@@ -583,10 +583,25 @@ class AuthApiService {
       request.fields['confidence'] = confidence.toString();
     }
 
-    request.files.add(
-      http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
-    );
+    if (storageUrl != null && storageUrl.isNotEmpty) {
+      request.fields['storage_url'] = storageUrl;
+    }
 
+    final http.StreamedResponse streamed;
+    try {
+      streamed = await request.send().timeout(
+        _requestTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Request timed out after ${_requestTimeout.inSeconds} seconds',
+          );
+        },
+      );
+    } catch (error) {
+      _throwNetworkError(requestUri, error);
+    }
+
+    final response = await http.Response.fromStream(streamed);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return BorrowerDocumentUploadDto.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,

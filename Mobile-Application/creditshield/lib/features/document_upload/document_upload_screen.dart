@@ -277,7 +277,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     final doc = _docs[i];
                     final key = doc['key'] as String;
                     final uploaded = _uploaded[key] == true;
-                    if (isOtpDoc) {
+                    if (key == 'co_applicant_otp_verification') {
                       return _CoApplicantOtpCard(
                         verified: uploaded,
                         secondary: secondary,
@@ -399,7 +399,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
     _SelectedDocument? selected;
     try {
-      selected = await _pickDocument(source);
+      selected = await _pickDocument(key, source);
     } on MissingPluginException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -472,7 +472,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
   }
 
-  Future<_SelectedDocument?> _pickDocument(String source) async {
+  Future<_SelectedDocument?> _pickDocument(String key, String source) async {
     if (source == 'camera') {
       final file = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -502,15 +502,15 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
 
     final isCsvAllowedDoc =
-        docKey == 'bank_statement_12m' ||
-        docKey == 'co_applicant_bank_statement_12m';
+        key == 'bank_statement_12m' ||
+        key == 'co_applicant_bank_statement_12m';
     final allowedExtensions = isCsvAllowedDoc
         ? const ['csv', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png']
         : const ['pdf', 'jpg', 'jpeg', 'png'];
 
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+      allowedExtensions: allowedExtensions,
       withData: false,
     );
     if (result == null || result.files.isEmpty) return null;
