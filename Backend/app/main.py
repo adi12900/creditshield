@@ -60,6 +60,19 @@ def startup_database_check() -> None:
         # Ensure all imported models are present in metadata and created if missing.
         Base.metadata.create_all(bind=engine)
         with SessionLocal() as db:
+            # Backfill legacy credit_memos schema safely when database table exists from older versions.
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS summary TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS strengths TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS risk_factors TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS recommendation VARCHAR(40)"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS conditions TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS payload JSON"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS is_submitted BOOLEAN DEFAULT FALSE"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_credit_memos_application_id ON credit_memos (application_id)"))
+            db.commit()
             db.execute(text("SELECT 1"))
         logger.info("Database connection status: connected")
     except SQLAlchemyError as exc:

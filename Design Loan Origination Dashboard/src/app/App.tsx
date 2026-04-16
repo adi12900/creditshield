@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useStore, UserRole } from './store';
+import { clearAuthToken, getAuthToken } from './lib/workflowApi';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/Login';
 import { DashboardLayout } from './components/layout/DashboardLayout';
@@ -92,8 +94,45 @@ function CibilReportRedirectRoute() {
   return <Navigate to={`/dashboard/cibil-report/${id ?? ''}`} replace />;
 }
 
+function readTokenClaims(token: string): { sub?: string; role?: string; full_name?: string; exp?: number } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(payload.padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '='));
+    return JSON.parse(json) as { sub?: string; role?: string; full_name?: string; exp?: number };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const user = useStore((state) => state.user);
+  const setUser = useStore((state) => state.setUser);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    const claims = readTokenClaims(token);
+    if (!claims?.role) {
+      clearAuthToken();
+      setUser(null);
+      return;
+    }
+
+    const tokenRole = claims.role as UserRole;
+    const tokenName = claims.full_name || claims.sub || 'Authenticated User';
+    const tokenEmail = claims.sub || 'user';
+    if (!user || user.role !== tokenRole || user.name !== tokenName || user.email !== tokenEmail) {
+      setUser({
+        id: 'auth-user',
+        name: tokenName,
+        email: tokenEmail,
+        role: tokenRole,
+      });
+    }
+  }, [setUser, user]);
 
   const getDashboard = () => {
     if (!user) return <Navigate to="/login" replace />;
