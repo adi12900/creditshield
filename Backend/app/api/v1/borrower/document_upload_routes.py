@@ -5,11 +5,11 @@ Public endpoints for borrowers to upload documents via secure upload links.
 No authentication required - token-based access only.
 """
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.schemas.communication import DocumentUploadResponse
 from app.services.document_service import DocumentService
 from app.services.token_service import TokenService
@@ -373,6 +373,7 @@ def get_upload_page(upload_token: str, db: Session = Depends(get_db)):
 @router.post("/upload/{upload_token}", response_model=DocumentUploadResponse)
 async def upload_document(
     upload_token: str,
+    background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -443,6 +444,18 @@ async def upload_document(
         resource=arn,
         details=f"Document type: {doc_type}, Filename: {file.filename}",
         risk="Low"
+    )
+
+    # Trigger AI agent verification in background (non-blocking)
+    from app.services.document_verification_service import verify_document_with_agent
+    background_tasks.add_task(
+        verify_document_with_agent,
+        document_id=document_data["id"],
+        arn=arn,
+        doc_type=doc_type,
+        filename=file.filename,
+        storage_url=document_data["storage_url"],
+        db=SessionLocal(),  # fresh session for background task
     )
     
     return DocumentUploadResponse(
