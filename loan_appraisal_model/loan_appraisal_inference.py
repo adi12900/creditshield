@@ -79,7 +79,15 @@ def run_inference(
     pred_safe = int(model.predict(X)[0])
 
     # Keep explainable rule output, then reconcile with ML probability to avoid contradictory outcomes.
-    result = run_loan_appraisal(transactions_csv, rules_yaml, loan_context=loan_context)
+    effective_context = dict(loan_context or {})
+    if float(effective_context.get("loan_amount", 0.0) or 0.0) <= 0.0:
+        effective_context["loan_amount"] = 100000.0
+    if int(effective_context.get("tenure_months", 0) or 0) <= 0:
+        effective_context["tenure_months"] = 24
+    if not str(effective_context.get("loan_type", "")).strip():
+        effective_context["loan_type"] = "personal"
+
+    result = run_loan_appraisal(transactions_csv, rules_yaml, loan_context=effective_context)
     rule_score = float(result.get("final_score", 50.0))
     ml_score = prob_safe * 100.0
     hybrid_score = (0.6 * rule_score) + (0.4 * ml_score)

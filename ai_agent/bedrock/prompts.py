@@ -40,6 +40,21 @@ SYSTEM_PROMPT_EXPLAINER = (
     "Avoid jargon; give actionable next steps. Never invent numbers — use only provided facts."
 )
 
+SYSTEM_PROMPT_LOAN_APPRAISAL_REPORT = (
+    "You are a senior loan appraisal officer at a financial institution. "
+    "Write a realistic, human-like appraisal report based only on the supplied raw transaction data, "
+    "financial behavior, and loan request details. "
+    "First clean and interpret noisy rows, string markers such as CR/DR, commas, and irrelevant text before reasoning. "
+    "Extract monthly income, balance trends, spending behavior, risky activity, low-balance frequency, and repayment capacity from the cleaned data. "
+    "Prioritize real financial patterns over any model signal. "
+    "The ML model is only a shadow/supporting signal and must not control the outcome. "
+    "If the model conflicts with financial behavior, override it using clear reasoning. "
+    "Use conservative banking judgment, but do not reject small loans unless strong negative signals exist. "
+    "Always mention balance trends, essential versus luxury spending, risky activity such as gambling or speculative transactions, "
+    "and existing liabilities when present. "
+    "Return a professional report that sounds like it was written by a real bank officer."
+)
+
 
 def format_llama3_instruct_prompt(system: str, user: str) -> str:
     """Exact Llama 3 Instruct template for Amazon Bedrock native invoke (Meta)."""
@@ -58,6 +73,55 @@ USER_PROMPT_TEMPLATES = {
         "User query:\n{query}\n\n"
         "Use tools if needed. When finished, output FINAL ANSWER: following the required "
         "Decision / Primary Reason / Additional Risks / Final Summary structure from your system instructions."
+    ),
+    "loan_appraisal_report": (
+        "Generate a detailed professional loan appraisal report from the data below.\n\n"
+        "Input data:\n{input_data}\n\n"
+        "Required output sections, in this exact order:\n"
+        "1. Applicant Summary\n"
+        "2. Financial Behavior Analysis\n"
+        "3. Risk Indicators\n"
+        "4. Strengths\n"
+        "5. Weaknesses\n"
+        "6. Final Decision (Approve / Reject)\n"
+        "7. Justification\n\n"
+        "Decision rules:\n"
+        "- Make the final decision based on your own reasoning as the lender, not the ML model.\n"
+        "- Treat the ML model as a shadow/supporting signal only.\n"
+        "- If model output conflicts with the financial behavior, state that you overrode it and explain why.\n"
+        "- Weigh income stability, month-end balance trends, essential versus luxury spending, risky transactions, and liabilities carefully.\n"
+        "- If balances are consistently low or declining, explain the elevated risk.\n"
+        "- If gambling or speculative activity appears frequently, increase risk materially.\n"
+        "- Do not reject a small loan unless the financial evidence is strongly negative.\n"
+        "- Write like a real bank officer: formal, specific, and realistic."
+    ),
+    "raw_bank_transaction_appraisal": (
+        "Analyze the raw bank transaction data below and generate a professional loan appraisal report.\n\n"
+        "Raw input data:\n{input_data}\n\n"
+        "Processing requirements:\n"
+        "- Clean and interpret noisy or unstructured rows before making any decision.\n"
+        "- Convert transaction amounts into numeric values, handling commas, CR, DR, strings, and irrelevant text.\n"
+        "- Identify credits as income and debits as expenses.\n"
+        "- Extract meaningful patterns only from the cleaned data.\n"
+        "- Treat monthly income, balance trend, average balance, spending behavior, risky activity, low-balance frequency, and cash flow consistency as mandatory inputs to the reasoning.\n"
+        "- Apply proportional judgment: small loans should be easier to approve if basic stability exists.\n"
+        "- The ML model is only a shadow/supporting signal and must not dictate the outcome.\n"
+        "- Override the ML model whenever financial reasoning suggests a different outcome.\n\n"
+        "Required output sections in order:\n"
+        "1. Applicant Financial Summary\n"
+        "2. Financial Behavior Analysis\n"
+        "3. Extracted Key Insights (income, balance trends, spending patterns)\n"
+        "4. Risk Indicators (including gambling, low balance, etc.)\n"
+        "5. Strengths\n"
+        "6. Weaknesses\n"
+        "7. Final Decision (Approve / Reject)\n"
+        "8. Justification (clearly explain reasoning and mention if ML model was overridden)\n\n"
+        "Decision rules:\n"
+        "- Increase risk if balances are consistently low or declining.\n"
+        "- Increase risk significantly if gambling or speculative transactions are frequent.\n"
+        "- Do not reject small loans such as 5000 unless strong negative signals exist.\n"
+        "- Always prioritize real financial behavior over model prediction.\n"
+        "- Write the report like a real loan officer using realistic banking judgment."
     ),
     "rejection_explanation": (
         "Borrower name: {borrower_name}\n"

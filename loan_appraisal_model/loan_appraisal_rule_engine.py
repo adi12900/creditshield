@@ -195,6 +195,45 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _build_underwriting_metrics(features: Dict[str, Any], loan_context: Dict[str, Any] | None) -> Dict[str, Any]:
+    ctx = loan_context or {}
+
+    total_inflow = _to_float(features.get("metric_total_inflow", 0.0), 0.0)
+    total_outflow = _to_float(features.get("metric_total_outflow", 0.0), 0.0)
+    salary_cv = _to_float(features.get("metric_salary_cv", 1.0), 1.0)
+
+    monthly_income = total_inflow / 12.0 if total_inflow > 0 else 0.0
+    monthly_expense = total_outflow / 12.0 if total_outflow > 0 else 0.0
+
+    loan_amount = _to_float(ctx.get("loan_amount", 0.0), 0.0)
+    tenure_months = max(1.0, _to_float(ctx.get("tenure_months", 24.0), 24.0))
+    estimated_emi = (loan_amount / tenure_months) if loan_amount > 0 else 0.0
+
+    emi_to_income_ratio = (estimated_emi / monthly_income) if monthly_income > 0 else 99.0
+    expense_to_income_ratio = (monthly_expense / monthly_income) if monthly_income > 0 else 99.0
+
+    annual_income = monthly_income * 12.0
+    loan_size_sensitivity = (loan_amount / annual_income) if annual_income > 0 else 99.0
+    net_surplus_after_emi = monthly_income - monthly_expense - estimated_emi
+
+    dti_ratio = ((monthly_expense + estimated_emi) / monthly_income) if monthly_income > 0 else 99.0
+    income_consistency_score = max(0.0, min(1.0, 1.0 - min(1.0, salary_cv)))
+
+    return {
+        "metric_monthly_income_proxy": round(monthly_income, 2),
+        "metric_monthly_expense_proxy": round(monthly_expense, 2),
+        "metric_monthly_savings_proxy": round(monthly_income - monthly_expense, 2),
+        "metric_expense_to_income_ratio": round(expense_to_income_ratio, 4),
+        "metric_estimated_emi": round(estimated_emi, 2),
+        "metric_emi_to_income_ratio": round(emi_to_income_ratio, 4),
+        "metric_dti_ratio": round(dti_ratio, 4),
+        "metric_annual_income_proxy": round(annual_income, 2),
+        "metric_loan_size_sensitivity": round(loan_size_sensitivity, 4),
+        "metric_net_surplus_after_emi": round(net_surplus_after_emi, 2),
+        "metric_income_consistency_score": round(income_consistency_score, 4),
+    }
+
+
 def classify_account_type(features: Dict[str, Any], loan_context: Dict[str, Any] | None = None) -> Dict[str, str]:
     ctx = loan_context or {}
     salary_tier = str(features.get("salary_salary_detection_tier", "moderate")).lower()
@@ -386,8 +425,11 @@ def evaluate_rules(
     loan_context: Dict[str, Any] | None = None,
 ) -> List[RuleHit]:
     hits: List[RuleHit] = []
-    salary_months = int(features.get("metric_salary_months", 0) or 0)
-    account_type = classify_account_type(features, loan_context).get("account_type", "MIXED")
+    eval_features = dict(features)
+    eval_features.update(_build_underwriting_metrics(features, loan_context))
+
+    salary_months = int(eval_features.get("metric_salary_months", 0) or 0)
+    account_type = classify_account_type(eval_features, loan_context).get("account_type", "MIXED")
     loan_product = detect_loan_product(loan_context)
 
     for rule in rules:
@@ -400,7 +442,7 @@ def evaluate_rules(
             continue
 
         # Apply all rules that are relevant to available engineered features.
-        if not all(v in features for v in rule_vars):
+        if not all(v in eval_features for v in rule_vars):
             continue
 
         parsed = rule.get("_parsed_expr")
@@ -408,7 +450,7 @@ def evaluate_rules(
             continue
 
         try:
-            matched = bool(_SafeEvaluator(features).visit(parsed))
+            matched = bool(_SafeEvaluator(eval_features).visit(parsed))
         except Exception:
             continue
 
