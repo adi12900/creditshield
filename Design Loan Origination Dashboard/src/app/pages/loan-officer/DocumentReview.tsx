@@ -172,9 +172,9 @@ export function DocumentReviewPage() {
                       className={`text-xs px-2 py-0.5 rounded-full ${
                         doc.status === 'Verified'
                           ? 'bg-green-100 text-green-700'
-                          : doc.status === 'Pending OCR'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-orange-100 text-orange-600'
+                          : doc.status === 'Flagged'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
                       }`}
                     >
                       {doc.status}
@@ -195,36 +195,60 @@ export function DocumentReviewPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-900">{selectedDoc?.type ?? 'No Document'}</h3>
               <div className="flex gap-2">
-                <button className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2">
+                <a
+                  href={selectedDoc?.storage_url || '#'}
+                  download
+                  className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
+                >
                   <Download className="w-4 h-4" />
                   Download
-                </button>
-                <button className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2">
+                </a>
+                <a
+                  href={selectedDoc?.storage_url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
+                >
                   <Eye className="w-4 h-4" />
                   View Full
-                </button>
+                </a>
               </div>
             </div>
 
-            <div className="bg-slate-100 rounded-lg aspect-[3/4] flex items-center justify-center mb-4">
-              <div className="text-center">
-                <div className="w-24 h-24 bg-slate-200 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                  <svg
-                    className="w-12 h-12 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
+            <div className="bg-slate-100 rounded-lg aspect-[3/4] flex items-center justify-center mb-4 overflow-hidden">
+              {selectedDoc?.storage_url ? (
+                selectedDoc.storage_url.match(/\.(jpg|jpeg|png)$/i) ? (
+                  <img
+                    src={selectedDoc.storage_url}
+                    alt={selectedDoc.type}
+                    className="w-full h-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="text-center p-6">
+                    <FileText className="w-16 h-16 text-slate-400 mx-auto mb-3" />
+                    <p className="text-sm text-slate-600 font-medium">{selectedDoc.type}</p>
+                    <a
+                      href={selectedDoc.storage_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Open PDF
+                    </a>
+                  </div>
+                )
+              ) : (
+                <div className="text-center">
+                  <div className="w-24 h-24 bg-slate-200 rounded-lg mx-auto mb-3 flex items-center justify-center">
+                    <svg className="w-12 h-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-slate-600">Document Preview</p>
                 </div>
-                <p className="text-sm text-slate-600">Document Preview</p>
-              </div>
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -240,13 +264,68 @@ export function DocumentReviewPage() {
           </div>
         </div>
 
-        {/* OCR Extracted Data */}
+        {/* OCR / Agent Verdict Panel */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h3 className="font-semibold text-slate-900 mb-4">OCR Extracted Data</h3>
-            <div className="text-center py-8">
-              <p className="text-sm text-slate-500">OCR data is not exposed by this API yet.</p>
-            </div>
+            <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-green-600" />
+              AI Verification Result
+            </h3>
+            {selectedDoc?.agent_verdict ? (
+              <div className="space-y-3">
+                {/* Status badge */}
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
+                  selectedDoc.status === 'Verified'
+                    ? 'bg-green-100 text-green-700'
+                    : selectedDoc.status === 'Flagged'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {selectedDoc.status === 'Verified' ? <Check className="w-3.5 h-3.5" /> :
+                   selectedDoc.status === 'Flagged' ? <X className="w-3.5 h-3.5" /> :
+                   <AlertTriangle className="w-3.5 h-3.5" />}
+                  {selectedDoc.status}
+                </div>
+                {/* Confidence */}
+                {selectedDoc.confidence > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Confidence</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${selectedDoc.confidence >= 70 ? 'bg-green-500' : selectedDoc.confidence >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${selectedDoc.confidence}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium text-slate-700">{selectedDoc.confidence}%</span>
+                    </div>
+                  </div>
+                )}
+                {/* Verdict text */}
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Agent Findings</p>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-lg p-3 max-h-64 overflow-y-auto">
+                    {selectedDoc.agent_verdict}
+                  </p>
+                </div>
+                {/* Upload time */}
+                {selectedDoc.uploaded_at && (
+                  <p className="text-xs text-slate-400">
+                    Uploaded: {new Date(selectedDoc.uploaded_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            ) : selectedDoc && selectedDoc.status === 'Pending OCR' ? (
+              <div className="text-center py-6">
+                <Clock className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-slate-700">Verification in progress</p>
+                <p className="text-xs text-slate-500 mt-1">AI agent is analysing this document</p>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-sm text-slate-500">No document selected</p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-6">
