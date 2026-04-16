@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   workflowApi,
+  type FieldEvidenceItem,
+  type FieldEvidenceGroupedResponse,
   type FieldOfficerCaseDetail,
   type FieldVisitReportPayload,
+  type VerificationSection,
 } from '../../lib/workflowApi';
 import { useStore } from '../../store';
 import {
@@ -18,17 +21,14 @@ function formatMoney(value: number): string {
   return `Rs ${value.toLocaleString('en-IN')}`;
 }
 
-async function toDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function yesNo(value: boolean): 'yes' | 'no' {
   return value ? 'yes' : 'no';
+}
+
+function toVerificationSection(title: string): VerificationSection {
+  if (title === 'Residence Proof') return 'residence';
+  if (title === 'Business Proof') return 'business';
+  return 'loan_specific';
 }
 
 export function FieldVisitCasePage() {
@@ -42,6 +42,8 @@ export function FieldVisitCasePage() {
 
   const [selectedLoanType, setSelectedLoanType] = useState<LoanTypeCategory>('Personal Loan');
   const [requiredDocFiles, setRequiredDocFiles] = useState<Record<string, File[]>>({});
+  const [persistedEvidenceMap, setPersistedEvidenceMap] = useState<Record<string, number>>({});
+  const [persistedEvidenceItems, setPersistedEvidenceItems] = useState<Record<string, FieldEvidenceItem[]>>({});
   const [loanSpecificValues, setLoanSpecificValues] = useState<Record<string, unknown>>({});
   const [geoLocation, setGeoLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -117,8 +119,31 @@ export function FieldVisitCasePage() {
       .finally(() => setLoading(false));
   };
 
+  const refreshEvidence = () => {
+    if (!user || user.role !== 'field_officer' || !targetArn) return;
+    workflowApi
+      .getFieldEvidence(targetArn)
+      .then((payload: FieldEvidenceGroupedResponse) => {
+        const next: Record<string, number> = {};
+        const itemMap: Record<string, FieldEvidenceItem[]> = {};
+        Object.values(payload.grouped_evidence || {}).forEach((evidenceByType) => {
+          Object.entries(evidenceByType || {}).forEach(([evidenceType, records]) => {
+            next[evidenceType] = (records || []).length;
+            itemMap[evidenceType] = records || [];
+          });
+        });
+        setPersistedEvidenceMap(next);
+        setPersistedEvidenceItems(itemMap);
+      })
+      .catch(() => {
+        setPersistedEvidenceMap({});
+        setPersistedEvidenceItems({});
+      });
+  };
+
   useEffect(() => {
     refreshCase();
+    refreshEvidence();
   }, [targetArn, user]);
 
   const handleStartVisit = async () => {
@@ -190,7 +215,17 @@ export function FieldVisitCasePage() {
       const allEvidenceItems = config.evidenceSections.flatMap((section) => section.items);
       const missingRequired = allEvidenceItems
         .filter((item) => item.mandatory)
-        .filter((item) => !requiredDocFiles[item.evidenceType] || requiredDocFiles[item.evidenceType].length === 0);
+        .filter((item) => {
+          const localCount = (requiredDocFiles[item.evidenceType] || []).length;
+          const existingCount = persistedEvidenceMap[item.evidenceType] || 0;
+          return localCount + existingCount === 0;
+        });
+
+      if (!geoLocation) {
+        window.alert('Location capture is required before submitting field report.');
+        setSubmitting(false);
+        return;
+      }
 
       if (missingRequired.length > 0) {
         if (missingRequired.length === 1) {
@@ -202,30 +237,40 @@ export function FieldVisitCasePage() {
         return;
       }
 
-      const uploadedDocuments: Array<{ doc_type: string; files: string[] }> = [];
-      const evidenceRecords: Array<{
-        file_url: string;
-        evidence_type: string;
-        loan_type: LoanTypeCategory;
-        timestamp: string;
-        location?: { lat: number; lng: number };
-      }> = [];
-
-      for (const item of allEvidenceItems) {
-        const files = requiredDocFiles[item.evidenceType] || [];
-        if (files.length === 0) continue;
-
-        const encoded = await Promise.all(files.map((file) => toDataUrl(file)));
-        uploadedDocuments.push({ doc_type: item.evidenceType, files: encoded });
-
-        encoded.forEach((fileUrl) => {
-          evidenceRecords.push({
-            file_url: fileUrl,
-            evidence_type: item.evidenceType,
-            loan_type: selectedLoanType,
-            timestamp: new Date().toISOString(),
-            ...(geoLocation ? { location: geoLocation } : {}),
+      const uploadJobs: Array<Promise<unknown>> = [];
+      for (const section of config.evidenceSections) {
+        const verificationSection = toVerificationSection(section.title);
+        for (const item of section.items) {
+          const files = requiredDocFiles[item.evidenceType] || [];
+          files.forEach((file) => {
+            uploadJobs.push(
+              workflowApi.uploadFieldEvidence(detail.arn, {
+                loanType: selectedLoanType,
+                verificationSection,
+                evidenceType: item.evidenceType,
+                latitude: geoLocation.lat,
+                longitude: geoLocation.lng,
+                capturedAt: new Date().toISOString(),
+                file,
+              }),
+            );
           });
+        }
+      }
+
+      if (uploadJobs.length > 0) {
+        await Promise.all(uploadJobs);
+        await workflowApi.getFieldEvidence(detail.arn).then((payload: FieldEvidenceGroupedResponse) => {
+          const next: Record<string, number> = {};
+          const itemMap: Record<string, FieldEvidenceItem[]> = {};
+          Object.values(payload.grouped_evidence || {}).forEach((evidenceByType) => {
+            Object.entries(evidenceByType || {}).forEach(([evidenceType, records]) => {
+              next[evidenceType] = (records || []).length;
+              itemMap[evidenceType] = records || [];
+            });
+          });
+          setPersistedEvidenceMap(next);
+          setPersistedEvidenceItems(itemMap);
         });
       }
 
@@ -234,10 +279,9 @@ export function FieldVisitCasePage() {
         loan_type: selectedLoanType,
         loan_specific_details: {
           ...loanSpecificValues,
-          evidence_records: evidenceRecords,
           field_location: geoLocation,
         },
-        uploaded_documents: uploadedDocuments,
+        uploaded_documents: [],
       });
 
       window.alert('Field report submitted successfully. Case marked Completed and moved to next stage.');
@@ -522,14 +566,14 @@ export function FieldVisitCasePage() {
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
             >
               <MapPin className="w-4 h-4" />
-              {geoLoading ? 'Capturing Location...' : 'Capture Location (Optional)'}
+              {geoLoading ? 'Capturing Location...' : 'Capture Location (Required)'}
             </button>
             {geoLocation ? (
               <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-1">
                 Location Tagged: {geoLocation.lat}, {geoLocation.lng}
               </span>
             ) : (
-              <span className="text-xs text-slate-500">Location not tagged</span>
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-1">Location missing</span>
             )}
           </div>
 
@@ -541,7 +585,10 @@ export function FieldVisitCasePage() {
                   {section.items.map((item) => {
                     const files = requiredDocFiles[item.evidenceType] || [];
                     const previews = (previewUrls[item.evidenceType] as Array<{ name: string; url: string }> | undefined) || [];
-                    const isMissingMandatory = item.mandatory && files.length === 0;
+                    const persistedItems = persistedEvidenceItems[item.evidenceType] || [];
+                    const persistedCount = persistedEvidenceMap[item.evidenceType] || 0;
+                    const totalCount = files.length + persistedCount;
+                    const isMissingMandatory = item.mandatory && totalCount === 0;
                     const accept = item.accept === 'image' ? 'image/*' : item.accept === 'document' ? '.pdf,.jpg,.jpeg,.png' : 'image/*,.pdf';
 
                     return (
@@ -550,9 +597,9 @@ export function FieldVisitCasePage() {
                           <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                             <UploadCloud className="w-4 h-4" /> Upload {item.label}{item.mandatory ? ' *' : ' (Optional)'}
                           </label>
-                          {files.length > 0 ? (
+                          {totalCount > 0 ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
-                              <CheckCircle2 className="w-3 h-3" /> Uploaded
+                              <CheckCircle2 className="w-3 h-3" /> Uploaded ({totalCount})
                             </span>
                           ) : isMissingMandatory ? (
                             <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
@@ -564,6 +611,9 @@ export function FieldVisitCasePage() {
                         </div>
 
                         <p className="text-xs text-slate-500 mt-1">Evidence Type: {item.evidenceType}</p>
+                        {persistedCount > 0 ? (
+                          <p className="text-xs text-emerald-700 mt-1">Existing evidence in DB: {persistedCount}</p>
+                        ) : null}
 
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <input
@@ -582,6 +632,23 @@ export function FieldVisitCasePage() {
                         </div>
 
                         <div className="mt-3 grid grid-cols-2 gap-2">
+                          {persistedItems.map((persisted) => {
+                            const lower = persisted.access_url.toLowerCase();
+                            const isImage = lower.includes('.png') || lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.webp');
+                            return isImage ? (
+                              <img key={`persisted-${persisted.id}`} src={persisted.access_url} alt={persisted.evidence_type} className="w-full h-24 object-cover rounded-md border border-slate-200" />
+                            ) : (
+                              <a
+                                key={`persisted-${persisted.id}`}
+                                href={persisted.access_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-md border border-slate-200 px-2 py-2 text-xs text-blue-700 bg-slate-50 hover:underline"
+                              >
+                                Existing evidence #{persisted.id}
+                              </a>
+                            );
+                          })}
                           {previews.map((preview) => {
                             const sourceFile = files.find((file) => file.name === preview.name);
                             const isImage = sourceFile ? sourceFile.type.startsWith('image/') : false;

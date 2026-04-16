@@ -55,6 +55,7 @@ LoanTypeCategory = Literal[
     "Education Loan",
     "Business Loan",
 ]
+VerificationSection = Literal["residence", "business", "education", "loan_specific"]
 
 
 class FieldOfficerCaseItem(BaseModel):
@@ -143,6 +144,31 @@ class FieldVisitReportRequest(BaseModel):
     loan_specific_details: dict[str, Any] = Field(default_factory=dict)
     uploaded_documents: list[FieldUploadedDocument] = Field(default_factory=list)
     risk_remarks: RiskRemarks
+
+
+class FieldEvidenceItem(BaseModel):
+    id: int
+    arn: str
+    loan_type: str
+    verification_section: VerificationSection
+    evidence_type: str
+    storage_url: str
+    access_url: str
+    uploaded_by_role: str
+    latitude: float | None = None
+    longitude: float | None = None
+    captured_at: datetime
+    created_at: datetime
+
+
+class FieldEvidenceUploadResponse(BaseModel):
+    evidence: FieldEvidenceItem
+
+
+class FieldEvidenceGroupedResponse(BaseModel):
+    arn: str
+    loan_type: str
+    grouped_evidence: dict[str, dict[str, list[FieldEvidenceItem]]]
 
 
 class DocumentItem(BaseModel):

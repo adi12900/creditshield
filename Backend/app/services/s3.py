@@ -148,3 +148,35 @@ def upload_document_file(file, arn: str, doc_type: str, filename: str, content_t
     
     # Return S3 URL
     return _build_storage_url(s3_key)
+
+
+def upload_field_verification_file(
+    file,
+    borrower_id: int,
+    arn: str,
+    loan_type: str,
+    evidence_type: str,
+    filename: str,
+    content_type: str,
+) -> str:
+    """Upload field verification evidence file to S3 using loan-type-aware path format."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    loan_type_safe = loan_type.strip().replace(" ", "_").lower()
+    evidence_type_safe = evidence_type.strip().replace(" ", "_").lower()
+
+    s3_key = (
+        f"borrowers/{borrower_id}/applications/{arn}/field_verification/"
+        f"{loan_type_safe}/{evidence_type_safe}/{timestamp}_{filename}"
+    )
+
+    _s3_client().upload_fileobj(
+        file,
+        _s3_bucket(),
+        s3_key,
+        ExtraArgs={
+            "ContentType": content_type,
+            "ServerSideEncryption": "AES256",
+        },
+    )
+
+    return _build_storage_url(s3_key)

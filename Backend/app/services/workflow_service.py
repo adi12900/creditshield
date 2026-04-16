@@ -10,6 +10,7 @@ from app.models.document import Document
 from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.models.credit_memo import CreditMemo
+from app.models.field_verification_evidence import FieldVerificationEvidence
 from app.models.user import User, UserRole
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 from app.services.s3 import extract_object_key_from_url, generate_presigned_url
@@ -119,18 +120,13 @@ class WorkflowService:
         self._underwriter_decisions: dict[str, list[dict[str, Any]]] = {}
         self._field_visit_status: dict[str, str] = {}
         self._field_visit_reports: dict[str, dict[str, Any]] = {}
-        self._required_documents_by_loan_type: dict[str, list[str]] = {
-            "Personal Loan": ["house_front_photo", "landmark_photo"],
-            "Car Loan": ["applicant_house_photo", "parking_space_photo", "dealer_location_photo", "proforma_invoice"],
-            "Home Loan": [
-                "property_exterior_photo",
-                "property_interior_photo",
-                "nearby_landmark_photo",
-                "builder_project_board_photo",
-            ],
-            "Gold Loan": ["gold_items_photo", "gold_purity_closeup", "gold_storage_location_photo"],
-            "Education Loan": ["student_photo", "college_building_photo", "admission_letter", "marksheet_upload"],
-            "Business Loan": ["shop_front_photo", "inside_shop_photo", "business_activity_photo", "gst_registration_proof"],
+        self._required_evidence_by_loan_type: dict[str, list[str]] = {
+            "Personal Loan": ["house_front_photo"],
+            "Business Loan": ["shop_front_photo", "shop_activity_photo"],
+            "Gold Loan": ["gold_closeup_image"],
+            "Education Loan": ["college_building_photo"],
+            "Car Loan": ["parking_space_photo"],
+            "Home Loan": ["property_exterior_photo"],
         }
 
         self._reports: list[RegulatoryReport] = [
@@ -437,17 +433,39 @@ class WorkflowService:
         app = self._get_application(arn)
 
         loan_type = str(payload.get("loan_type") or "").strip()
-        required_docs = self._required_documents_by_loan_type.get(loan_type, [])
-        uploaded_docs = payload.get("uploaded_documents") or []
-        uploaded_doc_types = {
-            str(item.get("doc_type", "")).strip().lower()
-            for item in uploaded_docs
-            if isinstance(item, dict)
-        }
-        missing_docs = [doc for doc in required_docs if doc.lower() not in uploaded_doc_types]
-        if missing_docs:
+        required_evidence = self._required_evidence_by_loan_type.get(loan_type, [])
+        evidence_types: set[str] = set()
+        try:
+            with SessionLocal() as db:
+                application_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+                if application_row:
+                    evidence_rows = (
+                        db.query(FieldVerificationEvidence.evidence_type)
+                        .filter(FieldVerificationEvidence.application_id == application_row.id)
+                        .all()
+                    )
+                    evidence_types = {
+                        str(row[0]).strip().lower()
+                        for row in evidence_rows
+                        if row and row[0]
+                    }
+        except Exception:
+            evidence_types = set()
+
+        missing_evidence = [item for item in required_evidence if item.lower() not in evidence_types]
+        if missing_evidence:
+            legacy_uploaded_docs = payload.get("uploaded_documents") or []
+            legacy_types = {
+                str(item.get("doc_type", "")).strip().lower()
+                for item in legacy_uploaded_docs
+                if isinstance(item, dict)
+            }
+            evidence_types.update(legacy_types)
+            missing_evidence = [item for item in required_evidence if item.lower() not in evidence_types]
+
+        if missing_evidence:
             raise WorkflowServiceError(
-                f"Missing required documents for {loan_type}: {', '.join(missing_docs)}",
+                f"Missing required field evidence for {loan_type}: {', '.join(missing_evidence)}",
                 422,
             )
 
