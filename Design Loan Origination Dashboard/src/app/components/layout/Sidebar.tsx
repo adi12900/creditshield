@@ -71,6 +71,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       icon: Signature,
       href: '/dashboard/e-sign-agreement',
     },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
+    },
   ],
   credit_analyst: [
     {
@@ -98,6 +103,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       icon: FileCheck,
       href: '/dashboard/credit-memo',
     },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
+    },
   ],
   underwriter: [
     {
@@ -119,6 +129,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       label: 'Loan Structuring',
       icon: Calculator,
       href: '/dashboard/loan-structuring',
+    },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
     },
   ],
   compliance_officer: [
@@ -391,7 +406,8 @@ export function Sidebar({ role }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto p-4">
         <div className="space-y-1">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isCibilPath = item.href === '/dashboard/cibil-reports' && location.pathname.startsWith('/dashboard/cibil-report/');
+            const isActive = location.pathname === item.href || isCibilPath;
             return (
               <Link
                 key={item.href}
