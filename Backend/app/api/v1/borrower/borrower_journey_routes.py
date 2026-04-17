@@ -7,8 +7,10 @@ from typing import Any
 import os
 import copy
 import logging
+import re
 from random import randint
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -1298,27 +1300,30 @@ def _statement_format_from_name(file_name: str = "", content_type: str | None = 
     if normalized.endswith(".pdf"):
         return "pdf"
     if normalized.endswith(".xlsx") or normalized.endswith(".xls"):
-            return "xlsx"
+        return "xlsx"
 
     mime = (content_type or "").strip().lower()
     if mime in {"text/csv", "application/csv", "application/vnd.ms-excel", "text/plain"}:
         return "csv"
     if mime == "application/pdf":
         return "pdf"
-        if mime in {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel.sheet.macroenabled.12"}:
-            return "xlsx"
+    if mime in {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel.sheet.macroenabled.12",
+    }:
+        return "xlsx"
 
     return "unknown"
 
 
-    def _statement_format_from_bytes(payload: bytes) -> str:
-        if not payload:
-            return "unknown"
-        if payload.startswith(b"%PDF"):
-            return "pdf"
-        if payload.startswith(b"PK\x03\x04"):
-            return "xlsx"
+def _statement_format_from_bytes(payload: bytes) -> str:
+    if not payload:
         return "unknown"
+    if payload.startswith(b"%PDF"):
+        return "pdf"
+    if payload.startswith(b"PK\x03\x04"):
+        return "xlsx"
+    return "unknown"
 
 
 def _missing_required_docs_for_application(db: Session, application: LoanApplication) -> list[str]:

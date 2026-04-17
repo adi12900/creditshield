@@ -560,3 +560,173 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         red_flags=red_flags,
         category_scores=category_scores,
     )
+
+
+# =====================================================
+# EDUCATION LOAN FEATURE EXTRACTION
+# =====================================================
+
+@dataclass
+class EducationFeatureResult:
+    features: Dict[str, Any]
+    student_analysis: Dict[str, Any]
+    co_applicant_cashflow: Dict[str, Any]
+    red_flags: List[str]
+    category_scores: Dict[str, float]
+
+
+def _gpa_to_score(gpa: float, scale: float = 10.0) -> float:
+    if scale <= 0:
+        return 0.0
+    return max(0.0, min(1.0, gpa / scale))
+
+
+def extract_education_features(
+    education_context: Dict[str, Any],
+    co_applicant_csv_path: str | None = None,
+) -> "EducationFeatureResult":
+    """
+    education_context keys:
+        university_rank        – int, lower = better (0 = unranked)
+        university_tier        – 'tier1' | 'tier2' | 'tier3'
+        course                 – str e.g. 'B.Tech', 'MBA'
+        course_duration_years  – int
+        marks_pct              – float 0-100
+        gpa                    – float
+        gpa_scale              – float default 10.0
+        loan_amount            – float
+        annual_fee             – float
+        living_expenses_annual – float
+        employment_prospects   – 'high' | 'medium' | 'low'
+        admission_confirmed    – bool
+        scholarship_amount     – float
+    """
+    ctx = education_context or {}
+
+    university_rank: int = int(ctx.get("university_rank", 0) or 0)
+    university_tier: str = str(ctx.get("university_tier", "tier3")).lower()
+    course: str = str(ctx.get("course", "")).strip()
+    course_duration: int = max(1, int(ctx.get("course_duration_years", 3) or 3))
+    marks_pct: float = float(ctx.get("marks_pct", 0.0) or 0.0)
+    gpa: float = float(ctx.get("gpa", 0.0) or 0.0)
+    gpa_scale: float = float(ctx.get("gpa_scale", 10.0) or 10.0)
+    loan_amount: float = float(ctx.get("loan_amount", 0.0) or 0.0)
+    annual_fee: float = float(ctx.get("annual_fee", 0.0) or 0.0)
+    living_expenses_annual: float = float(ctx.get("living_expenses_annual", 0.0) or 0.0)
+    employment_prospects: str = str(ctx.get("employment_prospects", "medium")).lower()
+    admission_confirmed: bool = bool(ctx.get("admission_confirmed", False))
+    scholarship_amount: float = float(ctx.get("scholarship_amount", 0.0) or 0.0)
+
+    if marks_pct > 0:
+        academic_score_norm = max(0.0, min(1.0, marks_pct / 100.0))
+    elif gpa > 0:
+        academic_score_norm = _gpa_to_score(gpa, gpa_scale)
+    else:
+        academic_score_norm = 0.5
+
+    tier_score_map = {"tier1": 1.0, "tier2": 0.70, "tier3": 0.40}
+    tier_score = tier_score_map.get(university_tier, 0.40)
+    if university_rank > 0:
+        rank_score = max(0.1, 1.0 - (university_rank / 1000.0))
+        university_quality = round((tier_score * 0.5) + (rank_score * 0.5), 4)
+    else:
+        university_quality = tier_score
+
+    prospect_score_map = {"high": 1.0, "medium": 0.6, "low": 0.3}
+    prospect_score = prospect_score_map.get(employment_prospects, 0.6)
+
+    total_cost = (annual_fee + living_expenses_annual) * course_duration
+    net_loan = max(0.0, loan_amount - scholarship_amount)
+    loan_to_cost_ratio = (net_loan / total_cost) if total_cost > 0 else 1.0
+
+    academic_cat = round(academic_score_norm * 100.0, 2)
+    university_cat = round(university_quality * 100.0, 2)
+    employability_cat = round(prospect_score * 100.0, 2)
+    loan_feasibility_cat = round(max(0.0, (1.0 - min(1.0, loan_to_cost_ratio)) * 100.0), 2)
+
+    red_flags: List[str] = []
+    if not admission_confirmed:
+        red_flags.append("Admission not yet confirmed — loan disbursement risk")
+    if academic_score_norm < 0.50:
+        red_flags.append("Academic performance below 50% — repayment capability concern")
+    if loan_to_cost_ratio > 0.90:
+        red_flags.append("Loan covers >90% of total education cost — high exposure")
+    if employment_prospects == "low":
+        red_flags.append("Low employment prospects in chosen field — repayment risk")
+    if university_quality < 0.45:
+        red_flags.append("University tier/rank indicates low placement quality")
+
+    student_analysis: Dict[str, Any] = {
+        "university_tier": university_tier,
+        "university_rank": university_rank,
+        "university_quality_score": round(university_quality, 4),
+        "course": course,
+        "course_duration_years": course_duration,
+        "marks_pct": marks_pct,
+        "gpa": gpa,
+        "academic_score_normalised": round(academic_score_norm, 4),
+        "loan_amount": round(loan_amount, 2),
+        "net_loan_after_scholarship": round(net_loan, 2),
+        "total_education_cost": round(total_cost, 2),
+        "loan_to_cost_ratio": round(loan_to_cost_ratio, 4),
+        "employment_prospects": employment_prospects,
+        "admission_confirmed": admission_confirmed,
+        "scholarship_amount": round(scholarship_amount, 2),
+    }
+
+    co_applicant_cashflow: Dict[str, Any] = {}
+    if co_applicant_csv_path:
+        try:
+            co_df = load_transactions(co_applicant_csv_path)
+            co_feat = extract_features(co_df)
+            co_cash = co_feat.cashflow_analysis
+            co_monthly_income = float(co_cash.get("monthly_income", 0.0) or 0.0)
+            co_monthly_expense = float(co_cash.get("monthly_expense", 0.0) or 0.0)
+            co_monthly_savings = co_monthly_income - co_monthly_expense
+            monthly_emi_capacity = net_loan / (course_duration * 12 + 12) if net_loan > 0 else 0.0
+            repayment_ratio = (monthly_emi_capacity / co_monthly_income) if co_monthly_income > 0 else 99.0
+
+            if repayment_ratio > 0.5:
+                red_flags.append("Co-applicant EMI burden >50% of income — repayment stress")
+            if float(co_cash.get("liquidity_stress_pct", 0.0)) > 40.0:
+                red_flags.append("Co-applicant shows frequent low-balance days")
+
+            co_cashflow_score = round(max(0.0, min(100.0, (1.0 - min(1.0, repayment_ratio)) * 100.0)), 2)
+            co_applicant_cashflow = {
+                "monthly_income": round(co_monthly_income, 2),
+                "monthly_expense": round(co_monthly_expense, 2),
+                "monthly_savings": round(co_monthly_savings, 2),
+                "liquidity_stress_pct": co_cash.get("liquidity_stress_pct", 0.0),
+                "min_balance": co_cash.get("minimum_balance", 0.0),
+                "income_classification": co_feat.income_analysis.get("income_classification", "Unknown"),
+                "estimated_monthly_emi_on_repayment": round(monthly_emi_capacity, 2),
+                "emi_to_income_ratio": round(repayment_ratio, 4),
+                "co_applicant_cashflow_score": co_cashflow_score,
+            }
+            loan_feasibility_cat = round((loan_feasibility_cat + co_cashflow_score) / 2.0, 2)
+        except Exception as exc:
+            co_applicant_cashflow = {"error": str(exc)}
+
+    features: Dict[str, Any] = {
+        "edu_academic_score": round(academic_score_norm, 4),
+        "edu_university_quality": round(university_quality, 4),
+        "edu_prospect_score": round(prospect_score, 4),
+        "edu_loan_to_cost_ratio": round(loan_to_cost_ratio, 4),
+        "edu_admission_confirmed": int(admission_confirmed),
+        "edu_co_applicant_emi_ratio": float(co_applicant_cashflow.get("emi_to_income_ratio", 0.5)),
+    }
+
+    category_scores: Dict[str, float] = {
+        "Academic Performance": academic_cat,
+        "University Quality": university_cat,
+        "Employability": employability_cat,
+        "Loan Feasibility": loan_feasibility_cat,
+    }
+
+    return EducationFeatureResult(
+        features=features,
+        student_analysis=student_analysis,
+        co_applicant_cashflow=co_applicant_cashflow,
+        red_flags=red_flags,
+        category_scores=category_scores,
+    )

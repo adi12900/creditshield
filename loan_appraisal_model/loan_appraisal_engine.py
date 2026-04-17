@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from loan_appraisal_features import extract_features, load_transactions
-from loan_appraisal_rule_engine import build_underwriting_decision, evaluate_rules, load_rules
+from loan_appraisal_features import EducationFeatureResult, extract_education_features, extract_features, load_transactions
+from loan_appraisal_rule_engine import build_underwriting_decision, evaluate_rules, is_behavioral_factors_applicable, load_rules
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -517,6 +517,44 @@ def run_loan_appraisal(
     }
 
     return output
+
+
+def run_education_loan_appraisal(
+    rules_yaml_path: str,
+    education_context: Dict[str, Any],
+    co_applicant_csv_path: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Dedicated pipeline for EDUCATION_LOAN.
+    Does NOT run behavioral transaction analysis on the student.
+    Factors: university, course, marks/GPA, loan amount, co-applicant bank statement.
+    """
+    edu = extract_education_features(education_context, co_applicant_csv_path=co_applicant_csv_path)
+
+    weights = {"Academic Performance": 0.30, "University Quality": 0.25, "Employability": 0.25, "Loan Feasibility": 0.20}
+    final_score = round(
+        sum(edu.category_scores.get(k, 0.0) * w for k, w in weights.items()), 2
+    )
+    final_score = _clamp(final_score, 0.0, 100.0)
+    risk_level = _risk_level(final_score)
+    recommendation = _recommendation(final_score)
+
+    return {
+        "loan_product": "EDUCATION_LOAN",
+        "final_score": final_score,
+        "risk_level": risk_level,
+        "recommendation": recommendation,
+        "summary": (
+            f"Education loan score {final_score:.2f} ({risk_level}). "
+            f"Key concerns: {', '.join(edu.red_flags[:3]) if edu.red_flags else 'no major red flags.'}"
+        ),
+        "student_analysis": edu.student_analysis,
+        "co_applicant_cashflow": edu.co_applicant_cashflow,
+        "category_scores": edu.category_scores,
+        "red_flags": edu.red_flags,
+        "behavioral_factors_applied": False,
+        "note": "Behavioral lifestyle/addiction/salary factors are not applicable for education loans.",
+    }
 
 
 def run_and_print_json(transaction_csv_path: str, rules_yaml_path: str) -> None:

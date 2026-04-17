@@ -7,6 +7,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -79,6 +80,28 @@ class LoanAppraisalService:
 
     def _parse_date_series(self, series: pd.Series) -> pd.Series:
         return pd.to_datetime(series, errors="coerce", dayfirst=True)
+
+    def _infer_suffix_from_bytes(self, payload: bytes) -> str:
+        if payload.startswith(b"%PDF"):
+            return ".pdf"
+        if payload.startswith(b"PK\x03\x04"):
+            return ".xlsx"
+        # OLE compound binary signature used by legacy .xls files.
+        if payload.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
+            return ".xls"
+
+        # Heuristic fallback for CSV-like plain text payloads.
+        head = payload[:4096]
+        try:
+            decoded = head.decode("utf-8", errors="ignore")
+        except Exception:
+            decoded = ""
+        if decoded:
+            non_empty_lines = [line for line in decoded.splitlines() if line.strip()]
+            if non_empty_lines and any(sep in non_empty_lines[0] for sep in (",", ";", "\t")):
+                return ".csv"
+
+        return ""
 
     def _extract_pdf_to_dataframe(self, pdf_path: Path) -> pd.DataFrame:
         try:
@@ -1348,9 +1371,12 @@ class LoanAppraisalService:
         rules_abs = self._resolve_path(rules_path, must_exist=True)
         model_abs = self._resolve_path(model_path, must_exist=False)
 
-        suffix = Path(source_file_name).suffix.lower()
-        if suffix not in {".csv", ".pdf"}:
-            raise LoanAppraisalServiceError("Only CSV or PDF statements are supported", 400)
+        normalized_source_name = Path(urlparse(source_file_name).path).name or Path(source_file_name).name
+        suffix = Path(normalized_source_name).suffix.lower()
+        if suffix not in {".csv", ".pdf", ".xlsx", ".xls"}:
+            suffix = self._infer_suffix_from_bytes(payload_bytes)
+        if suffix not in {".csv", ".pdf", ".xlsx", ".xls"}:
+            raise LoanAppraisalServiceError("Only CSV, XLS, XLSX, or PDF statements are supported", 400)
 
         with tempfile.TemporaryDirectory(prefix="loan_appraisal_") as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -1361,11 +1387,24 @@ class LoanAppraisalService:
                 raw_df = self._extract_pdf_to_dataframe(source_path)
                 detected_format = "pdf"
             else:
-                try:
-                    raw_df = pd.read_csv(source_path, dtype=str)
-                except Exception as exc:
-                    raise LoanAppraisalServiceError(f"Unable to read CSV statement: {exc}", 400) from exc
-                detected_format = "csv"
+                if suffix == ".csv":
+                    try:
+                        raw_df = pd.read_csv(source_path, dtype=str)
+                    except Exception as exc:
+                        raise LoanAppraisalServiceError(f"Unable to read CSV statement: {exc}", 400) from exc
+                    detected_format = "csv"
+                else:
+                    excel_engine = "xlrd" if suffix == ".xls" else "openpyxl"
+                    try:
+                        raw_df = pd.read_excel(source_path, dtype=str, engine=excel_engine)
+                    except ModuleNotFoundError as exc:
+                        raise LoanAppraisalServiceError(
+                            f"Excel parsing for {suffix} requires '{excel_engine}' package in backend environment",
+                            500,
+                        ) from exc
+                    except Exception as exc:
+                        raise LoanAppraisalServiceError(f"Unable to read Excel statement ({suffix}): {exc}", 400) from exc
+                    detected_format = "xlsx" if suffix == ".xlsx" else "xls"
 
             normalized = self._normalize_statement_df(raw_df)
             normalized, period_meta = self._restrict_to_recent_one_year(normalized)
