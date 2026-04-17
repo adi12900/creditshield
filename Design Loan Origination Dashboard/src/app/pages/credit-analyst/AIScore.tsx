@@ -86,6 +86,8 @@ export function AIScorePage() {
   const canAccessAiPage = user?.role === 'credit_analyst' || user?.role === 'underwriter' || user?.role === 'system_admin';
   const localProfile = buildAIRiskProfile(selectedApplication);
   const [apiScore, setApiScore] = useState<WorkflowAiScore | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isPdfViewerOpen, setIsPdfViewerOpen] = useState(false);
 
   useEffect(() => {
@@ -109,10 +111,19 @@ export function AIScorePage() {
 
   useEffect(() => {
     if (!user || !canAccessAiPage) return;
+    setIsAiLoading(true);
+    setAiError(null);
     workflowApi
       .getAiScore(selectedApplicationArn, user.role)
-      .then((score) => setApiScore(score))
-      .catch(() => setApiScore(null));
+      .then((score) => {
+        setApiScore(score);
+        setAiError(null);
+      })
+      .catch((error: unknown) => {
+        setApiScore(null);
+        setAiError(error instanceof Error ? error.message : 'Failed to load AI score from backend');
+      })
+      .finally(() => setIsAiLoading(false));
   }, [canAccessAiPage, selectedApplicationArn, user]);
 
   const aiRiskProfile = useMemo(() => {
@@ -226,6 +237,23 @@ export function AIScorePage() {
           No applications are available for this role yet.
           {user?.role === 'underwriter' ? ' Underwriters can view only applications submitted by Credit Analyst through Credit Memo.' : ''}
         </p>
+      </div>
+    );
+  }
+
+  if (isAiLoading && !apiScore) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
+        Loading AI score from backend...
+      </div>
+    );
+  }
+
+  if (aiError && !apiScore) {
+    return (
+      <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 space-y-2">
+        <h1 className="text-xl font-semibold text-rose-900">AI Credit Score Unavailable</h1>
+        <p className="text-sm text-rose-800">{aiError}</p>
       </div>
     );
   }

@@ -267,6 +267,17 @@ function getSyntheticFields(id: string, score: number): SyntheticFields {
   const cached = syntheticCache.get(id);
   if (cached) return cached;
 
+  try {
+    const persisted = localStorage.getItem(`cibil.synthetic.${id}`);
+    if (persisted) {
+      const parsed = JSON.parse(persisted) as SyntheticFields;
+      syntheticCache.set(id, parsed);
+      return parsed;
+    }
+  } catch {
+    // Ignore localStorage/parse issues and generate fresh synthetic fields.
+  }
+
   const generated: SyntheticFields = {
     pan: generatePAN(),
     dob: generateDOB(),
@@ -277,6 +288,11 @@ function getSyntheticFields(id: string, score: number): SyntheticFields {
   };
 
   syntheticCache.set(id, generated);
+  try {
+    localStorage.setItem(`cibil.synthetic.${id}`, JSON.stringify(generated));
+  } catch {
+    // Ignore persistence failure; in-memory cache still works for current session.
+  }
   return generated;
 }
 

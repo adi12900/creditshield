@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+import httpx
 from sqlalchemy import text
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.loan_application import LoanApplication
@@ -255,9 +257,20 @@ class WorkflowService:
             with SessionLocal() as session:
                 query = session.query(LoanApplication)
                 if require_submitted_memo:
-                    query = (
-                        query.join(CreditMemo, CreditMemo.application_id == LoanApplication.id)
-                        .filter(CreditMemo.is_submitted.is_(True))
+                    submitted_ids = db.execute(
+                        text(
+                            """
+                            SELECT application_id
+                            FROM credit_memos
+                            WHERE is_submitted = TRUE
+                            """
+                        )
+                    ).fetchall()
+                    submitted_set = {int(row[0]) for row in submitted_ids if row and row[0] is not None}
+
+                    query = query.filter(
+                        (LoanApplication.id.in_(submitted_set))
+                        | (LoanApplication.stage == "Underwriting")
                     )
                 if stage:
                     query = query.filter(LoanApplication.stage == stage)
@@ -269,7 +282,11 @@ class WorkflowService:
 
         applications = list(self._applications.values())
         if require_submitted_memo:
-            applications = [app for app in applications if self._credit_memos.get(app["arn"], {}).get("submitted")]
+            applications = [
+                app
+                for app in applications
+                if self._credit_memos.get(app["arn"], {}).get("submitted") or app.get("stage") == "Underwriting"
+            ]
         if stage:
             applications = [app for app in applications if app["stage"] == stage]
         return applications
@@ -860,13 +877,24 @@ class WorkflowService:
 
     def has_submitted_credit_memo(self, arn: str, db=None) -> bool:
         if db is not None:
-            row = self._get_application_row(arn, db)
-            memo = (
-                db.query(CreditMemo)
-                .filter(CreditMemo.application_id == row.id)
-                .first()
-            )
-            return bool(memo and memo.is_submitted)
+            try:
+                row = self._get_application_row(arn, db)
+                result = db.execute(
+                    text(
+                        """
+                        SELECT is_submitted
+                        FROM credit_memos
+                        WHERE application_id = :application_id
+                        LIMIT 1
+                        """
+                    ),
+                    {"application_id": row.id},
+                ).fetchone()
+                # Backward-compatible fallback: underwriting stage implies memo was submitted.
+                return bool((result and result[0]) or row.stage == "Underwriting")
+            except Exception:
+                # Fallback to in-memory cache if DB schema is not fully migrated yet.
+                return bool(self._credit_memos.get(arn, {}).get("submitted"))
 
         try:
             with SessionLocal() as session:
@@ -924,7 +952,14 @@ class WorkflowService:
         return payload
 
     def generate_offer(self, arn: str, loan_amount: float, tenure_months: int, interest_rate: float) -> dict[str, Any]:
-        self._get_application(arn)
+        app = self._get_application(arn)
+        requested_amount = float(app.get("loan_amount") or 0)
+        if requested_amount > 0 and loan_amount > requested_amount:
+            raise WorkflowServiceError(
+                f"Offered loan amount cannot exceed requested amount ({self._format_inr(requested_amount)})",
+                422,
+            )
+
         monthly_rate = interest_rate / 12 / 100
         emi = (loan_amount * monthly_rate * (1 + monthly_rate) ** tenure_months) / (((1 + monthly_rate) ** tenure_months) - 1)
         total_payable = emi * tenure_months
@@ -939,6 +974,38 @@ class WorkflowService:
             details=f"Amount {loan_amount}, tenure {tenure_months}, rate {interest_rate}",
             risk="Low",
         )
+
+        # Borrower approval/offer email should be sent when offer is generated, not at decision-engine approval.
+        try:
+            with SessionLocal() as db:
+                row = self._get_application_row(arn, db)
+                if row.borrower_email:
+                    borrower_name = row.borrower_name or "Applicant"
+                    bank_name = "CreditShield NBFC"
+                    html = (
+                        f"<p>Dear {borrower_name},</p>"
+                        f"<p>We are pleased to inform you that your loan application (Application ID: {arn}) has been approved after a thorough review by our underwriting team.</p>"
+                        f"<p><strong>Loan Details:</strong></p>"
+                        f"<ul>"
+                        f"<li>Loan Amount: {self._format_inr(loan_amount)}</li>"
+                        f"<li>Tenure: {tenure_months} months</li>"
+                        f"<li>Interest Rate: {interest_rate:.2f}%</li>"
+                        f"<li>Monthly EMI: {self._format_inr(emi)}</li>"
+                        f"</ul>"
+                        f"<p>Our team will contact you shortly regarding the next steps, including agreement signing and disbursement.</p>"
+                        f"<p>If you have any questions, feel free to contact us.</p>"
+                        f"<p>Congratulations and thank you for choosing us.</p>"
+                        f"<p>Warm regards,<br>{bank_name}<br>Loan Processing Team</p>"
+                    )
+                    self._send_email_notification(
+                        to=row.borrower_email,
+                        subject=f"Loan Offer Generated - {arn}",
+                        html=html,
+                    )
+        except Exception:
+            # Offer generation must continue even if email sending fails.
+            pass
+
         return {
             "arn": arn,
             "emi": round(emi, 2),
@@ -1007,19 +1074,26 @@ class WorkflowService:
 
         email_status = None
         email_error = None
-        if normalized in {"approve", "reject"} and db is not None:
+        if normalized in {"reject"} and db is not None:
             row = self._get_application_row(arn, db)
             if row.borrower_email:
-                decision_label = "Approved" if normalized == "approve" else "Rejected"
+                borrower_name = row.borrower_name or "Applicant"
+                bank_name = "CreditShield NBFC"
+                subject = f"Loan Application Status Update - {arn}"
                 html = (
-                    f"<h2>CreditShield Loan Decision</h2>"
-                    f"<p>Application <strong>{arn}</strong> has been <strong>{decision_label}</strong>.</p>"
-                    f"<p>Reason: {reason or 'As per underwriting review'}</p>"
-                    f"<p>Thank you, CreditShield Team.</p>"
+                    f"<p>Dear {borrower_name},</p>"
+                    f"<p>Thank you for applying for a loan with us.</p>"
+                    f"<p>After careful evaluation by our underwriting team, we regret to inform you that your loan application (Application ID: {arn}) has not been approved at this time.</p>"
+                    f"<p><strong>Reason(s) for Rejection:</strong></p>"
+                    f"<p>{reason or 'As per internal credit assessment policies.'}</p>"
+                    f"<p>This decision is based on our internal credit assessment policies.</p>"
+                    f"<p>You may reapply in the future after improving your eligibility criteria. For further clarification, feel free to contact our support team.</p>"
+                    f"<p>Thank you for your understanding.</p>"
+                    f"<p>Sincerely,<br>{bank_name}<br>Credit Underwriting Team</p>"
                 )
                 success, error = self._send_email_notification(
                     to=row.borrower_email,
-                    subject=f"Loan Application {decision_label} - {arn}",
+                    subject=subject,
                     html=html,
                 )
                 email_status = "sent" if success else "failed"
@@ -1162,14 +1236,19 @@ class WorkflowService:
 
         officer_emails = self._get_loan_officer_emails(db)
         email_results: list[dict[str, str | None]] = []
+        underwriter_name = "Underwriter"
         for email in officer_emails:
+            officer_name = self._display_name_from_email(email)
             html = (
-                f"<h2>Clarification Required - {arn}</h2>"
-                f"<p>Underwriter has sent this application back for clarification.</p>"
-                f"<p><strong>Message:</strong> {message}</p>"
-                f"<p>Please update the borrower case and resubmit.</p>"
+                f"<p>Dear {officer_name},</p>"
+                f"<p>The loan application (Application ID: {arn}) has been reviewed by the underwriting team. However, certain clarifications are required before proceeding further.</p>"
+                f"<p><strong>Clarification Required:</strong></p>"
+                f"<p>{message}</p>"
+                f"<p>Kindly coordinate with the applicant and provide the necessary clarification at the earliest to proceed with the evaluation.</p>"
+                f"<p>Please update the system once the required details are obtained.</p>"
+                f"<p>Regards,<br>{underwriter_name}<br>Credit Underwriting Team</p>"
             )
-            success, error = self._send_email_notification(email, f"Clarification Required - {arn}", html)
+            success, error = self._send_email_notification(email, f"Clarification Required for Application ID {arn}", html)
             email_results.append({"email": email, "status": "sent" if success else "failed", "error": error})
 
         self.add_audit_log(
@@ -1204,16 +1283,20 @@ class WorkflowService:
         officer_emails = self._get_loan_officer_emails(db)
         email_results: list[dict[str, str | None]] = []
         requested_html = "".join([f"<li>{doc}</li>" for doc in required_documents])
-        existing_html = "".join([f"<li>{doc}</li>" for doc in existing_doc_codes]) or "<li>No documents uploaded yet</li>"
+        underwriter_name = "Underwriter"
 
         for email in officer_emails:
+            officer_name = self._display_name_from_email(email)
             html = (
-                f"<h2>Additional Documents Requested - {arn}</h2>"
-                f"<p><strong>Underwriter note:</strong> {message or 'Please collect and upload the requested documents.'}</p>"
-                f"<p><strong>Requested Documents:</strong></p><ul>{requested_html}</ul>"
-                f"<p><strong>Currently Uploaded Documents:</strong></p><ul>{existing_html}</ul>"
+                f"<p>Dear {officer_name},</p>"
+                f"<p>Upon reviewing the loan application (Application ID: {arn}), the underwriting team requires additional documents to complete the assessment.</p>"
+                f"<p><strong>Required Documents:</strong></p><ul>{requested_html}</ul>"
+                f"<p>{message or 'Kindly arrange to collect these documents from the applicant and upload them to the system for further processing.'}</p>"
+                f"<p>The application will remain pending until the required documents are received.</p>"
+                f"<p>Thank you for your cooperation.</p>"
+                f"<p>Best regards,<br>{underwriter_name}<br>Credit Underwriting Team</p>"
             )
-            success, error = self._send_email_notification(email, f"Additional Documents Needed - {arn}", html)
+            success, error = self._send_email_notification(email, f"Additional Documents Required for Application ID {arn}", html)
             email_results.append({"email": email, "status": "sent" if success else "failed", "error": error})
 
         self.add_audit_log(
