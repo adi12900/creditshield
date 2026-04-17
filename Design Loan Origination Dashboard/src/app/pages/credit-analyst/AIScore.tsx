@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/button';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { buildAIRiskProfile } from '../../lib/aiRiskModel';
 import { useStore } from '../../store';
-import { workflowApi, type WorkflowAiScore, type WorkflowApplication } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowAiScore, type WorkflowApplication, type WorkflowRole } from '../../lib/workflowApi';
 
 function formatMoney(value: number): string {
   return `Rs ${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -38,6 +38,32 @@ function buildEmbeddedPdfUrl(url: string): string {
   if (!url) return url;
   const [base] = url.split('#');
   return `${base}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
+}
+
+function normalizeRiskGrade(value: string): 'A+' | 'A' | 'B' | 'C' {
+  if (value === 'A+' || value === 'A' || value === 'B' || value === 'C') {
+    return value;
+  }
+  return 'C';
+}
+
+function isCreditAnalystStage(stage: string): boolean {
+  const normalized = stage.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return normalized === 'CREDIT_ANALYST' || normalized === 'CREDIT_ANALYST_REVIEW';
+}
+
+function isUnderwritingStage(stage: string): boolean {
+  return stage.trim().toUpperCase() === 'UNDERWRITING';
+}
+
+function isEligibleForAiPage(stage: string, role: string | undefined): boolean {
+  if (role === 'underwriter') {
+    return isUnderwritingStage(stage);
+  }
+  if (role === 'credit_analyst') {
+    return isCreditAnalystStage(stage);
+  }
+  return true;
 }
 
 function extractSalarySignals(
@@ -77,11 +103,11 @@ export function AIScorePage() {
     arn: selectedWorkflowApplication?.arn ?? localSelectedApplication.arn,
     borrowerName: selectedWorkflowApplication?.borrower_name ?? localSelectedApplication.borrowerName,
     loanAmount: selectedWorkflowApplication?.loan_amount ?? localSelectedApplication.loanAmount,
-    stage: selectedWorkflowApplication?.stage ?? localSelectedApplication.stage,
-    riskGrade: selectedWorkflowApplication?.risk_grade ?? localSelectedApplication.riskGrade,
+    stage: (selectedWorkflowApplication?.stage as typeof localSelectedApplication.stage | undefined) ?? localSelectedApplication.stage,
+    riskGrade: normalizeRiskGrade(selectedWorkflowApplication?.risk_grade ?? localSelectedApplication.riskGrade),
     creditScore: selectedWorkflowApplication?.credit_score ?? localSelectedApplication.creditScore,
-    kycStatus: selectedWorkflowApplication?.kyc_status ?? localSelectedApplication.kycStatus,
-    employmentType: selectedWorkflowApplication?.employment_type ?? localSelectedApplication.employmentType,
+    kycStatus: (selectedWorkflowApplication?.kyc_status as typeof localSelectedApplication.kycStatus | undefined) ?? localSelectedApplication.kycStatus,
+    employmentType: (selectedWorkflowApplication?.employment_type as typeof localSelectedApplication.employmentType | undefined) ?? localSelectedApplication.employmentType,
   };
   const canAccessAiPage = user?.role === 'credit_analyst' || user?.role === 'underwriter' || user?.role === 'system_admin';
   const localProfile = buildAIRiskProfile(selectedApplication);
@@ -99,7 +125,7 @@ export function AIScorePage() {
     workflowApi
       .listApplications()
       .then((rows) => {
-        const filteredRows = rows.filter((row) => row.stage === 'CREDIT_ANALYST');
+        const filteredRows = rows.filter((row) => isEligibleForAiPage(row.stage, user?.role));
         setEligibleApplications(filteredRows);
         const exists = filteredRows.some((row) => row.arn === selectedApplicationArn);
         if (!exists && filteredRows.length > 0) {
@@ -114,7 +140,7 @@ export function AIScorePage() {
     setIsAiLoading(true);
     setAiError(null);
     workflowApi
-      .getAiScore(selectedApplicationArn, user.role)
+      .getAiScore(selectedApplicationArn, user.role as WorkflowRole)
       .then((score) => {
         setApiScore(score);
         setAiError(null);
@@ -138,15 +164,18 @@ export function AIScorePage() {
   }, [apiScore, localProfile]);
 
   const actualAppraisal = apiScore?.actual_appraisal ?? null;
-  const appraisalAvailable = Boolean(actualAppraisal?.available ?? actualAppraisal?.final_score !== undefined);
-  const displayScore = appraisalAvailable && actualAppraisal?.final_score != null ? Number(actualAppraisal.final_score) : aiRiskProfile.compositeScore;
-  const displayConfidence = appraisalAvailable && actualAppraisal?.confidence_score != null ? Number(actualAppraisal.confidence_score) : aiRiskProfile.confidencePercent;
-  const scoreMax = appraisalAvailable ? 100 : 900;
-  const scoreLabel = appraisalAvailable ? 'Loan Appraisal Score' : 'Credit Score Proxy';
-  const sourceLabel = apiScore?.model_source === 'loan_appraisal_record' ? 'Actual loan appraisal record' : 'Workflow proxy score';
-  const reportPdfViewUrl = actualAppraisal?.report_pdf_access_url ?? '';
-  const reportPdfDownloadUrl = actualAppraisal?.report_pdf_download_url ?? reportPdfViewUrl;
-  const hasReportPdf = Boolean(reportPdfViewUrl);
+  const appraisalScore = actualAppraisal?.final_score != null ? Number(actualAppraisal.final_score) : null;
+  const appraisalConfidence = actualAppraisal?.confidence_score != null ? Number(actualAppraisal.confidence_score) : null;
+  const appraisalAvailable = appraisalScore !== null;
+  const displayScore = appraisalScore ?? 0;
+  const displayConfidence = appraisalConfidence ?? 0;
+  const scoreMax = 100;
+  const scoreLabel = 'Loan Appraisal Score';
+  const sourceLabel = 'Loan appraisal report';
+  const reportPdfStorageUrl = actualAppraisal?.report_pdf_storage_url ?? '';
+  const reportPdfViewUrl = actualAppraisal?.report_pdf_access_url ?? actualAppraisal?.report_pdf_download_url ?? reportPdfStorageUrl;
+  const reportPdfDownloadUrl = actualAppraisal?.report_pdf_download_url ?? actualAppraisal?.report_pdf_access_url ?? reportPdfStorageUrl;
+  const hasReportPdf = Boolean(reportPdfViewUrl || reportPdfDownloadUrl || reportPdfStorageUrl);
 
   const analysisPeriod = actualAppraisal?.analysis_period;
   const monthCount = readNumber(analysisPeriod?.month_count ?? actualAppraisal?.month_count ?? actualAppraisal?.monthly_balance_table?.length ?? 0);
@@ -258,6 +287,35 @@ export function AIScorePage() {
     );
   }
 
+  if (!appraisalAvailable) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">AI Credit Score Breakdown</h1>
+          <p className="text-slate-600">Score is shown only from the loan appraisal report.</p>
+        </div>
+
+        <ApplicationSelector
+          selectedArn={selectedApplication.arn}
+          onSelect={setSelectedApplicationArn}
+          subtitle="Select an application with a completed loan appraisal report to view score breakdown."
+          applications={eligibleApplications.map((application) => ({
+            arn: application.arn,
+            borrowerName: application.borrower_name,
+            email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+            stage: application.stage,
+            riskGrade: normalizeRiskGrade(application.risk_grade),
+            loanAmount: application.loan_amount,
+          }))}
+        />
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+          Loan appraisal report score is not available for ARN {selectedApplication.arn} yet. Please generate/complete the loan appraisal report first.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 text-white shadow-2xl">
@@ -275,9 +333,7 @@ export function AIScorePage() {
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
               <Badge className="bg-white/10 text-white border-white/15">{sourceLabel}</Badge>
-              <Badge className="bg-emerald-500/15 text-emerald-100 border-emerald-300/20">
-                {appraisalAvailable ? 'Live appraisal record' : 'Workflow proxy'}
-              </Badge>
+              <Badge className="bg-emerald-500/15 text-emerald-100 border-emerald-300/20">Live appraisal record</Badge>
               <Badge className="bg-slate-800/80 text-slate-100 border-slate-700/80">
                 Coverage: {monthCount || selectedApplication.tenureMonths} months
               </Badge>
@@ -319,7 +375,7 @@ export function AIScorePage() {
               borrowerName: application.borrower_name,
               email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
               stage: application.stage,
-              riskGrade: application.risk_grade,
+              riskGrade: normalizeRiskGrade(application.risk_grade),
               loanAmount: application.loan_amount,
             }))}
           />
@@ -334,7 +390,7 @@ export function AIScorePage() {
                 </div>
                 <div className="flex items-center gap-2 text-emerald-300">
                   <Sparkles className="w-5 h-5" />
-                  <span className="text-sm font-medium">{appraisalAvailable ? 'Actual appraisal' : 'Proxy score'}</span>
+                  <span className="text-sm font-medium">Actual appraisal</span>
                 </div>
               </div>
             </div>
@@ -346,7 +402,7 @@ export function AIScorePage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-300">Confidence</p>
               <p className="mt-4 text-2xl font-semibold text-white">{displayConfidence.toFixed(2)}%</p>
-              <p className="text-sm text-slate-300 mt-1">Confidence interval: {appraisalAvailable ? `${displayScore.toFixed(2)} / ${scoreMax}` : `${aiRiskProfile.compositeScore} ± ${aiRiskProfile.confidenceDelta}`}</p>
+              <p className="text-sm text-slate-300 mt-1">Confidence interval: {`${displayScore.toFixed(2)} / ${scoreMax}`}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-300">Rows</p>

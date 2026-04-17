@@ -17,6 +17,11 @@ type AnalysisQueueItem = {
   status: 'Completed' | 'In Progress';
 };
 
+function isCreditAnalystStage(stage: string): boolean {
+  const normalized = stage.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return normalized === 'CREDIT_ANALYST' || normalized === 'CREDIT_ANALYST_REVIEW';
+}
+
 export function CreditAnalystDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
@@ -37,25 +42,41 @@ export function CreditAnalystDashboard() {
 
   useEffect(() => {
     if (!user || user.role !== 'credit_analyst') return;
-    Promise.all([workflowApi.creditAnalystDashboard(user.role), workflowApi.listApplications()])
-      .then(([dashboard, applications]) => {
-        const queue = applications
-          .filter((app) => app.stage === 'CREDIT_ANALYST')
-          .map((app) => ({
-          arn: app.arn,
-          borrowerName: app.borrower_name,
-          loanAmount: app.loan_amount,
-          creditScore: app.credit_score,
-          riskGrade: app.risk_grade,
-          status: app.current_stage === 'Credit Review' || app.current_stage === 'Documents Pending' ? 'In Progress' : 'Completed',
-          }));
+    let inProgressStatValue: number | undefined;
 
+    workflowApi
+      .creditAnalystDashboard(user.role)
+      .then((dashboard) => {
         const inProgressStat = dashboard?.stats?.find((item) => item.key === 'in_progress');
-        setAnalysisQueue(queue);
-        setTotalAnalyzed(queue.length);
-        setInProgressCount(inProgressStat?.value !== undefined ? Number(inProgressStat.value) : queue.filter((item) => item.status === 'In Progress').length);
+        if (inProgressStat?.value !== undefined) {
+          inProgressStatValue = Number(inProgressStat.value);
+        }
       })
       .catch(() => undefined);
+
+    workflowApi
+      .listApplications()
+      .then((applications) => {
+        const queue = applications
+          .filter((app) => isCreditAnalystStage(app.stage))
+          .map((app) => ({
+            arn: app.arn,
+            borrowerName: app.borrower_name,
+            loanAmount: app.loan_amount,
+            creditScore: app.credit_score,
+            riskGrade: app.risk_grade,
+            status: isCreditAnalystStage(app.stage) ? 'In Progress' : 'Completed',
+          }));
+
+        setAnalysisQueue(queue);
+        setTotalAnalyzed(queue.length);
+        setInProgressCount(inProgressStatValue !== undefined ? inProgressStatValue : queue.filter((item) => item.status === 'In Progress').length);
+      })
+      .catch(() => {
+        setAnalysisQueue([]);
+        setTotalAnalyzed(0);
+        setInProgressCount(0);
+      });
   }, [user]);
 
   return (

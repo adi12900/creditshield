@@ -19,6 +19,17 @@ type UnderwritingQueueItem = {
   status: 'Completed' | 'In Progress';
 };
 
+function isUnderwritingStage(stage: string): boolean {
+  return stage.trim().toUpperCase() === 'UNDERWRITING';
+}
+
+function normalizeRiskGrade(value: string): 'A+' | 'A' | 'B' | 'C' {
+  if (value === 'A+' || value === 'A' || value === 'B' || value === 'C') {
+    return value;
+  }
+  return 'C';
+}
+
 export function UnderwriterDashboard() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
@@ -32,7 +43,7 @@ export function UnderwriterDashboard() {
     arn: selectedApiApplication?.arn ?? fallbackApplication.arn,
     borrowerName: selectedApiApplication?.borrower_name ?? fallbackApplication.borrowerName,
     loanAmount: selectedApiApplication?.loan_amount ?? fallbackApplication.loanAmount,
-    riskGrade: selectedApiApplication?.risk_grade ?? fallbackApplication.riskGrade,
+    riskGrade: normalizeRiskGrade(selectedApiApplication?.risk_grade ?? fallbackApplication.riskGrade),
     creditScore: selectedApiApplication?.credit_score ?? fallbackApplication.creditScore,
     stage: (selectedApiApplication?.stage as typeof fallbackApplication.stage | undefined) ?? fallbackApplication.stage,
   };
@@ -50,8 +61,21 @@ export function UnderwriterDashboard() {
 
   useEffect(() => {
     if (!user || user.role !== 'underwriter') return;
-    Promise.all([workflowApi.underwriterDashboard(user.role), workflowApi.listApplications()])
-      .then(([dashboard, applications]) => {
+    let queueStatValue: number | undefined;
+
+    workflowApi
+      .underwriterDashboard(user.role)
+      .then((dashboard) => {
+        const queueStat = dashboard?.stats?.find((item) => item.key === 'underwriting_queue');
+        if (queueStat?.value !== undefined) {
+          queueStatValue = Number(queueStat.value);
+        }
+      })
+      .catch(() => undefined);
+
+    workflowApi
+      .listApplications()
+      .then((applications) => {
         setApiApplications(applications);
         if (!applications.some((item) => item.arn === selectedApplicationArn) && applications.length > 0) {
           setSelectedApplicationArn(applications[0].arn);
@@ -63,24 +87,27 @@ export function UnderwriterDashboard() {
             : app.risk_grade === 'B'
               ? 'Approved with Conditions'
               : 'Declined';
-          const status: UnderwritingQueueItem['status'] = app.stage === 'Underwriting' ? 'In Progress' : 'Completed';
+          const status: UnderwritingQueueItem['status'] = isUnderwritingStage(app.stage) ? 'In Progress' : 'Completed';
 
           return {
             arn: app.arn,
             borrowerName: app.borrower_name,
             loanAmount: app.loan_amount,
-            riskGrade: app.risk_grade,
+            riskGrade: normalizeRiskGrade(app.risk_grade),
             creditScore: app.credit_score,
             recommendation,
             status,
           };
         });
 
-        const queueStat = dashboard?.stats?.find((item) => item.key === 'underwriting_queue');
         setUnderwritingQueue(queue);
-        setQueueCount(queueStat?.value !== undefined ? Number(queueStat.value) : queue.filter((item) => item.status === 'In Progress').length);
+        setQueueCount(queueStatValue !== undefined ? queueStatValue : queue.filter((item) => item.status === 'In Progress').length);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setApiApplications([]);
+        setUnderwritingQueue([]);
+        setQueueCount(0);
+      });
   }, [selectedApplicationArn, setSelectedApplicationArn, user]);
 
   return (
@@ -124,7 +151,7 @@ export function UnderwriterDashboard() {
           borrowerName: application.borrower_name,
           email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
           stage: application.stage,
-          riskGrade: application.risk_grade,
+          riskGrade: normalizeRiskGrade(application.risk_grade),
           loanAmount: application.loan_amount,
         }))}
       />

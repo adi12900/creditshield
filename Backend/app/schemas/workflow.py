@@ -235,6 +235,9 @@ class LoanOfferResponse(BaseModel):
     emi: float
     total_interest: float
     total_payable: float
+    email_status: str | None = None
+    email_error: str | None = None
+    email_to: str | None = None
 
 
 class PolicyOverrideRequest(BaseModel):

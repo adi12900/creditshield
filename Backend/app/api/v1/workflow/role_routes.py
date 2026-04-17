@@ -221,22 +221,121 @@ def credit_analyst_dashboard() -> DashboardResponse:
     "/credit-analyst/bureau/{arn}",
     dependencies=[Depends(require_roles({"credit_analyst"}))],
 )
-def credit_analyst_bureau_report(arn: str) -> dict:
+def credit_analyst_bureau_report(arn: str, db: Session = Depends(get_db)) -> dict:
     try:
         app = workflow_service.get_application(arn)
+
+        def _to_int(value: object, default: int = 0) -> int:
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                return default
+
+        def _extract_tradelines(payload: object) -> list[dict[str, object]]:
+            if not isinstance(payload, list):
+                return []
+            tradelines: list[dict[str, object]] = []
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                tradelines.append(
+                    {
+                        "lender": str(
+                            item.get("lender")
+                            or item.get("bank")
+                            or item.get("institution")
+                            or item.get("name")
+                            or "Unknown Lender"
+                        ),
+                        "type": str(
+                            item.get("type")
+                            or item.get("account_type")
+                            or item.get("product")
+                            or "Loan"
+                        ),
+                        "limit": _to_int(
+                            item.get("limit")
+                            or item.get("credit_limit")
+                            or item.get("sanctioned_amount")
+                            or item.get("loan_amount")
+                        ),
+                        "balance": _to_int(
+                            item.get("balance")
+                            or item.get("outstanding")
+                            or item.get("current_balance")
+                            or item.get("principal_outstanding")
+                        ),
+                        "status": str(item.get("status") or "Active"),
+                        "dpd": _to_int(item.get("dpd") or item.get("days_past_due") or 0),
+                    }
+                )
+            return tradelines
+
+        def _extract_score_trend(payload: object) -> list[dict[str, object]]:
+            if not isinstance(payload, list):
+                return []
+            trend: list[dict[str, object]] = []
+            for idx, item in enumerate(payload, start=1):
+                if isinstance(item, dict):
+                    month_value = item.get("month") or item.get("label") or f"M{idx}"
+                    score_value = (
+                        item.get("score")
+                        or item.get("credit_score")
+                        or item.get("value")
+                    )
+                    trend.append({"month": str(month_value), "score": _to_int(score_value)})
+                else:
+                    trend.append({"month": f"M{idx}", "score": _to_int(item)})
+            return trend
+
+        tradelines: list[dict[str, object]] = []
+        score_trend: list[dict[str, object]] = []
+
+        application_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+        if application_row:
+            record = (
+                db.query(LoanAppraisalRecord)
+                .filter(LoanAppraisalRecord.application_id == application_row.id)
+                .filter(LoanAppraisalRecord.status == "success")
+                .order_by(LoanAppraisalRecord.updated_at.desc(), LoanAppraisalRecord.id.desc())
+                .first()
+            )
+            if record and isinstance(record.kpi_metrics, dict):
+                metrics = record.kpi_metrics
+
+                # Prefer explicit bureau/cibil structures if present in appraisal payload.
+                tradeline_sources = [
+                    metrics.get("tradelines"),
+                    metrics.get("bureau_tradelines"),
+                    metrics.get("cibil_tradelines"),
+                    (metrics.get("borrower_kpis") or {}).get("tradelines") if isinstance(metrics.get("borrower_kpis"), dict) else None,
+                    (metrics.get("co_applicant_kpis") or {}).get("tradelines") if isinstance(metrics.get("co_applicant_kpis"), dict) else None,
+                ]
+                for source in tradeline_sources:
+                    extracted = _extract_tradelines(source)
+                    if extracted:
+                        tradelines = extracted
+                        break
+
+                trend_sources = [
+                    metrics.get("score_trend"),
+                    metrics.get("bureau_score_trend"),
+                    metrics.get("cibil_score_trend"),
+                    metrics.get("credit_score_history"),
+                    (metrics.get("borrower_kpis") or {}).get("score_trend") if isinstance(metrics.get("borrower_kpis"), dict) else None,
+                    (metrics.get("co_applicant_kpis") or {}).get("score_trend") if isinstance(metrics.get("co_applicant_kpis"), dict) else None,
+                ]
+                for source in trend_sources:
+                    extracted = _extract_score_trend(source)
+                    if extracted:
+                        score_trend = extracted
+                        break
+
         return {
             "arn": arn,
             "credit_score": app["credit_score"],
-            "tradelines": [
-                {"lender": "HDFC Credit Card", "type": "Credit Card", "limit": 500000, "balance": 125000, "status": "Active", "dpd": 0},
-                {"lender": "SBI Home Loan", "type": "Home Loan", "limit": 5000000, "balance": 3500000, "status": "Active", "dpd": 0},
-            ],
-            "score_trend": [
-                {"month": "Oct", "score": app["credit_score"] - 40},
-                {"month": "Nov", "score": app["credit_score"] - 20},
-                {"month": "Dec", "score": app["credit_score"] - 5},
-                {"month": "Jan", "score": app["credit_score"]},
-            ],
+            "tradelines": tradelines,
+            "score_trend": score_trend,
         }
     except WorkflowServiceError as exc:
         raise _to_http_exception(exc) from exc
@@ -320,8 +419,8 @@ def credit_analyst_ai_score(
                         report_pdf_download_url = generate_presigned_url(object_key, response_disposition="attachment")
                     except Exception:
                         # Do not fail AI score response when PDF link generation fails.
-                        report_pdf_access_url = None
-                        report_pdf_download_url = None
+                        report_pdf_access_url = record.report_pdf_storage_url
+                        report_pdf_download_url = record.report_pdf_storage_url
 
                 actual_appraisal = {
                     "available": True,
@@ -357,6 +456,7 @@ def credit_analyst_ai_score(
                     "rulebook_top_insights": metrics.get("rulebook_top_insights", []),
                     "report_pdf_access_url": report_pdf_access_url,
                     "report_pdf_download_url": report_pdf_download_url,
+                    "report_pdf_storage_url": record.report_pdf_storage_url,
                     "report_text": record.report_text,
                     "month_count": month_count,
                 }

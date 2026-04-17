@@ -13,6 +13,7 @@ from app.models.loan_application import LoanApplication
 from app.models.loan_appraisal_record import LoanAppraisalRecord
 from app.models.credit_memo import CreditMemo
 from app.models.field_verification_evidence import FieldVerificationEvidence
+from app.models.borrower import Borrower
 from app.models.user import User, UserRole
 from app.schemas.workflow import AuditLogItem, RegulatoryReport
 from app.services.s3 import extract_object_key_from_url, generate_presigned_url
@@ -257,7 +258,8 @@ class WorkflowService:
             with SessionLocal() as session:
                 query = session.query(LoanApplication)
                 if require_submitted_memo:
-                    submitted_ids = db.execute(
+                    execute_session = db or session
+                    submitted_ids = execute_session.execute(
                         text(
                             """
                             SELECT application_id
@@ -321,6 +323,13 @@ class WorkflowService:
             return True, None
         except Exception as exc:  # noqa: BLE001
             return False, str(exc)
+
+    def _format_inr(self, amount: float | int | Decimal) -> str:
+        try:
+            value = float(amount)
+        except (TypeError, ValueError):
+            value = 0.0
+        return f"Rs {value:,.2f}"
 
     def role_dashboard(self, role: str) -> dict[str, Any]:
         apps = self.list_applications()
@@ -976,10 +985,23 @@ class WorkflowService:
         )
 
         # Borrower approval/offer email should be sent when offer is generated, not at decision-engine approval.
+        email_status: str | None = None
+        email_error: str | None = None
+        email_to: str | None = None
         try:
             with SessionLocal() as db:
                 row = self._get_application_row(arn, db)
-                if row.borrower_email:
+                borrower_email = row.borrower_email
+                if (not borrower_email) and row.borrower_id:
+                    try:
+                        borrower = db.query(Borrower).filter(Borrower.id == row.borrower_id).first()
+                        if borrower and borrower.email:
+                            borrower_email = borrower.email
+                    except Exception:
+                        # Some deployments may not have borrower table/migration; continue with application email.
+                        borrower_email = row.borrower_email
+
+                if borrower_email:
                     borrower_name = row.borrower_name or "Applicant"
                     bank_name = "CreditShield NBFC"
                     html = (
@@ -997,20 +1019,34 @@ class WorkflowService:
                         f"<p>Congratulations and thank you for choosing us.</p>"
                         f"<p>Warm regards,<br>{bank_name}<br>Loan Processing Team</p>"
                     )
-                    self._send_email_notification(
-                        to=row.borrower_email,
+                    success, error = self._send_email_notification(
+                        to=borrower_email,
                         subject=f"Loan Offer Generated - {arn}",
                         html=html,
                     )
-        except Exception:
+                    email_to = borrower_email
+                    email_status = "sent" if success else "failed"
+                    email_error = error
+                else:
+                    email_status = "skipped"
+                    email_error = "Borrower email not available"
+        except Exception as exc:
             # Offer generation must continue even if email sending fails.
-            pass
+            email_status = "failed"
+            email_error = f"Unexpected error while sending offer email: {exc}"
+
+        # Provide actionable error details when available.
+        if email_status == "failed" and not email_error:
+            email_error = "Failed to send offer email"
 
         return {
             "arn": arn,
             "emi": round(emi, 2),
             "total_interest": round(total_interest, 2),
             "total_payable": round(total_payable, 2),
+            "email_status": email_status,
+            "email_error": email_error,
+            "email_to": email_to,
         }
 
     def submit_policy_override(self, arn: str, payload: dict[str, Any]) -> dict[str, Any]:

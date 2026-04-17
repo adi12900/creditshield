@@ -5,6 +5,11 @@ import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
 import { workflowApi, type WorkflowAiScore, type WorkflowApplication, type WorkflowBureauReport } from '../../lib/workflowApi';
 
+function isCreditAnalystStage(stage: string): boolean {
+  const normalized = stage.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return normalized === 'CREDIT_ANALYST' || normalized === 'CREDIT_ANALYST_REVIEW';
+}
+
 export function CreditMemoPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
@@ -42,7 +47,7 @@ export function CreditMemoPage() {
     workflowApi
       .listApplications()
       .then((rows) => {
-        const filteredRows = rows.filter((row) => row.stage === 'CREDIT_ANALYST');
+        const filteredRows = rows.filter((row) => isCreditAnalystStage(row.stage));
         setApplications(filteredRows);
         if (!filteredRows.some((row) => row.arn === selectedApplicationArn) && filteredRows.length > 0) {
           setSelectedApplicationArn(filteredRows[0].arn);
@@ -115,8 +120,12 @@ export function CreditMemoPage() {
     if (!user || user.role !== 'credit_analyst') return;
     try {
       await workflowApi.submitCreditMemo(selectedApplication.arn, user.role, payload);
-      window.alert('Credit memo submitted to underwriter.');
-      setApplications((prev) => prev.filter((application) => application.arn !== selectedApplication.arn));
+      const remainingApplications = applications.filter((application) => application.arn !== selectedApplication.arn);
+      setApplications(remainingApplications);
+      if (remainingApplications.length > 0) {
+        setSelectedApplicationArn(remainingApplications[0].arn);
+      }
+      window.alert('Credit memo submitted to underwriter. This application has moved to Underwriting queue.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to submit memo';
       window.alert(message);
@@ -145,6 +154,12 @@ export function CreditMemoPage() {
           loanAmount: application.loan_amount,
         }))}
       />
+
+      {!applicationLoading && applications.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No applications are currently pending in Credit Analyst queue. After you submit a credit memo, that application moves to Underwriting.
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-semibold text-slate-900 mb-4">Pre-Populated Data</h3>
