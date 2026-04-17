@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 const String _configuredApiBaseUrl = String.fromEnvironment(
@@ -15,22 +15,7 @@ String get _defaultApiBaseUrl {
     return configured;
   }
 
-  if (kIsWeb) {
-    return 'http://127.0.0.1:8000';
-  }
-
-  switch (defaultTargetPlatform) {
-    case TargetPlatform.android:
-      // Android emulator reaches host machine via 10.0.2.2.
-      // For real devices, use the host machine LAN IP.
-      return 'http://192.168.1.13:8000';
-    case TargetPlatform.iOS:
-    case TargetPlatform.linux:
-    case TargetPlatform.macOS:
-    case TargetPlatform.windows:
-    case TargetPlatform.fuchsia:
-      return 'http://127.0.0.1:8000';
-  }
+  return 'http://10.30.126.216:8000';
 }
 
 class BorrowerProfileDto {
@@ -567,13 +552,20 @@ class AuthApiService {
     required String accessToken,
     required String applicationId,
     required String docType,
+    required String filePath,
+    String? fileName,
     String status = 'Pending OCR',
     int? confidence,
-    String? storageUrl,
   }) async {
     final requestUri = _uri(
-      '/api/v1/borrower/applications/$applicationId/documents',
+      '/api/v1/borrower/applications/$applicationId/documents/upload',
     );
+
+    final file = File(filePath);
+    if (!file.existsSync()) {
+      throw Exception('Selected file not found. Please choose the document again.');
+    }
+
     final request = http.MultipartRequest('POST', requestUri)
       ..headers['Authorization'] = 'Bearer $accessToken'
       ..fields['doc_type'] = docType
@@ -583,9 +575,16 @@ class AuthApiService {
       request.fields['confidence'] = confidence.toString();
     }
 
-    if (storageUrl != null && storageUrl.isNotEmpty) {
-      request.fields['storage_url'] = storageUrl;
-    }
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        filePath,
+        filename:
+            (fileName != null && fileName.trim().isNotEmpty)
+            ? fileName.trim()
+            : null,
+      ),
+    );
 
     final http.StreamedResponse streamed;
     try {

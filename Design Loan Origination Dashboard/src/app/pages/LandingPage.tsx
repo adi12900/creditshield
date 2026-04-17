@@ -1,365 +1,733 @@
-import { ArrowRight, CheckCircle, Shield, Zap, TrendingUp, Users, Clock, BarChart3, FileCheck, Brain, Lock, Globe } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Shield,
+  Zap,
+  TrendingUp,
+  Users,
+  Clock3,
+  BarChart3,
+  FileCheck,
+  Brain,
+  Lock,
+  Globe,
+  AlertTriangle,
+  Search,
+  Workflow,
+  Gauge,
+  Building2,
+  Landmark,
+  Fingerprint,
+  BadgeCheck,
+  Sparkles,
+  CircleDollarSign,
+  Activity,
+  MessageSquareQuote,
+  Building,
+  Menu,
+  X,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { useState } from 'react';
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navItems = [
+    { id: 'problem', label: 'Problem' },
+    { id: 'solution', label: 'Solution' },
+    { id: 'how-it-works', label: 'How It Works' },
+    { id: 'features', label: 'Features' },
+    { id: 'security', label: 'Security' },
+    { id: 'impact', label: 'Impact' },
+  ];
+
+  const problemCards = [
+    {
+      icon: AlertTriangle,
+      title: 'Fraudulent Approval Risk',
+      body: 'Rule evasion, identity mismatch, and manipulated statements silently increase portfolio stress.',
+    },
+    {
+      icon: Search,
+      title: 'Low Credit Visibility',
+      body: 'Teams cannot quickly interpret transaction behavior, debt burden, and repayment intent in one view.',
+    },
+    {
+      icon: Clock3,
+      title: 'Manual Verification Delays',
+      body: 'File-heavy underwriting and fragmented handoffs stretch turnaround time from hours to days.',
+    },
+  ];
+
+  const solutionFlow = [
+    'Unified borrower intake and consent capture',
+    'AI pipeline for statement cleaning and enrichment',
+    'Risk engine with policy + behavior intelligence',
+    'Human-in-the-loop underwriting decision cockpit',
+  ];
+
+  const workflowSteps = [
+    {
+      title: 'Applicant Submits Data',
+      text: 'Borrower profile, loan intent, KYC docs, and consent are captured through a guided LOS journey.',
+      icon: FileCheck,
+    },
+    {
+      title: 'Transaction Analysis Pipeline',
+      text: 'Financial records are normalized and enriched into consistent monthly behavior indicators.',
+      icon: Activity,
+    },
+    {
+      title: 'AI Risk Scoring',
+      text: 'Feature vectors and policy checks generate explainable risk categories and decision confidence.',
+      icon: Brain,
+    },
+    {
+      title: 'Field Officer Verification',
+      text: 'On-ground checks and contextual signals are attached before final underwriting review.',
+      icon: Users,
+    },
+    {
+      title: 'Final Decision Output',
+      text: 'Decision-ready case sheet with score rationale, red flags, and compliance-ready audit traces.',
+      icon: BadgeCheck,
+    },
+  ];
+
+  const features = [
+    {
+      title: 'AI Credit Scoring',
+      icon: Gauge,
+      text: 'Risk scoring tuned for lending workflows with transparent confidence and explanation layers.',
+    },
+    {
+      title: 'Fraud Detection Engine',
+      icon: Fingerprint,
+      text: 'Flags anomalies across identities, transaction signatures, and document verification patterns.',
+    },
+    {
+      title: 'Behavioral Transaction Intelligence',
+      icon: BarChart3,
+      text: 'Classifies inflow/outflow discipline, debt pressure, and lifestyle expenditure volatility.',
+    },
+    {
+      title: 'Risk Categorization Framework',
+      icon: Shield,
+      text: 'Maps each applicant into clear underwriting zones: safe, monitor, conditional, and reject.',
+    },
+    {
+      title: 'Field Verification Integration',
+      icon: Workflow,
+      text: 'Bridges branch operations and field officer insights directly into the core decision model.',
+    },
+    {
+      title: 'Real-Time Decision Dashboard',
+      icon: Zap,
+      text: 'Live operational panels for credit teams to monitor SLA, alerts, and conversion funnel health.',
+    },
+  ];
+
+  const useCases = [
+    {
+      title: 'Banks',
+      icon: Landmark,
+      text: 'Accelerate retail and MSME underwriting with compliant, auditable risk decisioning.',
+    },
+    {
+      title: 'NBFCs',
+      icon: Building2,
+      text: 'Scale portfolios with tighter fraud controls and faster loan origination turnaround.',
+    },
+    {
+      title: 'Microfinance Institutions',
+      icon: Building,
+      text: 'Make fair and explainable credit decisions for thin-file borrowers using alternative behavior signals.',
+    },
+  ];
+
+  const testimonials = [
+    {
+      quote:
+        'Credit Shield reduced our initial underwriting cycle by more than half while improving decision consistency.',
+      name: 'Head of Risk, Regional NBFC',
+    },
+    {
+      quote:
+        'The explainable AI layer helped our credit committee trust model outputs and move faster on approvals.',
+      name: 'Chief Credit Officer, Mid-size Bank',
+    },
+    {
+      quote:
+        'Strong LOS orchestration with high visibility into fraud and transaction behavior from day one.',
+      name: 'Operations Lead, Lending Fintech',
+    },
+  ];
+
+  const sectionBase = 'snap-start px-4 sm:px-6 lg:px-8 py-20 lg:py-24';
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header/Navigation */}
-      <header className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-slate-200 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#00A86B' }}>
-                <span className="text-white font-bold text-lg">L</span>
-              </div>
-              <span className="text-xl font-bold text-slate-900">LOS Platform</span>
+    <div
+      className="min-h-screen bg-[#F4FBF7] text-slate-900 scroll-smooth snap-y snap-proximity"
+      style={{ fontFamily: 'Inter, Poppins, ui-sans-serif, system-ui, sans-serif' }}
+    >
+      <header className="fixed top-0 z-50 w-full border-b border-[#1F7A6B]/10 bg-white/70 backdrop-blur-xl">
+        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <a href="#hero" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1F7A6B] text-white shadow-lg shadow-[#1F7A6B]/30">
+              <Shield className="h-5 w-5" />
             </div>
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-slate-600 hover:text-slate-900 transition-colors">Features</a>
-              <a href="#benefits" className="text-slate-600 hover:text-slate-900 transition-colors">Benefits</a>
-              <a href="#how-it-works" className="text-slate-600 hover:text-slate-900 transition-colors">How It Works</a>
-              <a href="#stats" className="text-slate-600 hover:text-slate-900 transition-colors">Stats</a>
-              <button
-                onClick={() => navigate('/login')}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                style={{ backgroundColor: '#00A86B' }}
-              >
-                Sign In
-              </button>
-            </nav>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1F7A6B]">IdeaBliss</p>
+              <p className="text-lg font-semibold leading-none">CREDIT SHIELD</p>
+            </div>
+          </a>
+
+          <nav className="hidden items-center gap-7 md:flex">
+            {navItems.map((item) => (
+              <a key={item.id} href={`#${item.id}`} className="text-sm font-medium text-slate-600 transition hover:text-[#1F7A6B]">
+                {item.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden items-center gap-3 md:flex">
             <button
               onClick={() => navigate('/login')}
-              className="md:hidden px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-              style={{ backgroundColor: '#00A86B' }}
+              className="rounded-xl border border-[#1F7A6B]/20 px-4 py-2 text-sm font-semibold text-[#1F7A6B] transition hover:bg-[#1F7A6B]/5"
             >
-              Sign In
+              Get Started
+            </button>
+            <button className="rounded-xl bg-[#1F7A6B] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#1F7A6B]/30 transition hover:-translate-y-0.5">
+              Request Demo
             </button>
           </div>
-        </div>
-      </header>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8" style={{ background: 'linear-gradient(135deg, #00A86B 0%, #008557 100%)' }}>
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-                Transform Your Lending Operations
-              </h1>
-              <p className="text-xl text-white/90 mb-8 leading-relaxed">
-                End-to-end digital loan origination system for NBFCs and Banks. Automate workflows, reduce TAT by 70%, and make data-driven credit decisions with AI-powered risk assessment.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button
-                  onClick={() => navigate('/login')}
-                  className="px-8 py-4 bg-white text-green-700 rounded-lg hover:bg-green-50 transition-colors font-semibold text-lg flex items-center justify-center gap-2"
+          <button
+            className="rounded-lg border border-[#1F7A6B]/20 p-2 md:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Toggle Menu"
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
+
+        {mobileOpen && (
+          <div className="border-t border-[#1F7A6B]/10 bg-white px-4 py-4 md:hidden">
+            <div className="flex flex-col gap-3">
+              {navItems.map((item) => (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  className="rounded-lg px-2 py-2 text-sm font-medium text-slate-700 hover:bg-[#1F7A6B]/5"
+                  onClick={() => setMobileOpen(false)}
                 >
-                  Get Started
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-                <button className="px-8 py-4 border-2 border-white text-white rounded-lg hover:bg-white/10 transition-colors font-semibold text-lg">
-                  Watch Demo
-                </button>
-              </div>
-              <div className="mt-12 flex items-center gap-8">
-                <div>
-                  <p className="text-3xl font-bold text-white">98.5%</p>
-                  <p className="text-white/80 text-sm">Compliance Rate</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-white">70%</p>
-                  <p className="text-white/80 text-sm">Faster Processing</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-white">₹500Cr+</p>
-                  <p className="text-white/80 text-sm">Loans Processed</p>
-                </div>
-              </div>
-            </div>
-            <div className="hidden lg:block">
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                <img
-                  src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&h=400&fit=crop"
-                  alt="Dashboard Preview"
-                  className="rounded-lg shadow-2xl"
-                />
-              </div>
+                  {item.label}
+                </a>
+              ))}
+              <button
+                onClick={() => navigate('/login')}
+                className="mt-2 rounded-xl bg-[#1F7A6B] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Get Started
+              </button>
             </div>
           </div>
+        )}
+      </header>
+
+      <section id="hero" className={`${sectionBase} relative overflow-hidden pt-30`}>
+        <div className="absolute inset-0 -z-10">
+          <motion.div
+            className="absolute -left-20 top-10 h-64 w-64 rounded-full bg-[#1F7A6B]/20 blur-3xl"
+            animate={{ y: [0, -12, 0] }}
+            transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <motion.div
+            className="absolute right-10 top-24 h-72 w-72 rounded-full bg-emerald-300/30 blur-3xl"
+            animate={{ y: [0, 14, 0] }}
+            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+          />
+        </div>
+
+        <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-2">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#1F7A6B]/20 bg-white/80 px-4 py-2 text-sm font-medium text-[#1F7A6B] shadow-sm">
+              <Sparkles className="h-4 w-4" />
+              AI Credit Intelligence For Banks and NBFCs
+            </div>
+            <h1 className="text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl lg:text-6xl">
+              Detect Risk Earlier.
+              <span className="block text-[#1F7A6B]">Approve Smarter With CREDIT SHIELD.</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
+              A complete LOS intelligence layer combining fraud detection, transaction analytics, explainable AI scoring,
+              and decision-ready underwriting workflows in one secure platform.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={() => navigate('/login')}
+                className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1F7A6B] px-7 py-4 font-semibold text-white shadow-xl shadow-[#1F7A6B]/30 transition hover:-translate-y-0.5"
+              >
+                Get Started
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </button>
+              <a
+                href="#final-cta"
+                className="inline-flex items-center justify-center rounded-2xl border border-[#1F7A6B]/30 bg-white px-7 py-4 font-semibold text-[#1F7A6B] transition hover:bg-[#1F7A6B]/5"
+              >
+                Request Demo
+              </a>
+            </div>
+
+            <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {['RBI-aligned controls', 'Audit-ready trails', 'AA-ready ingestion', 'Enterprise APIs'].map((badge) => (
+                <div key={badge} className="rounded-xl border border-[#1F7A6B]/15 bg-white/80 px-3 py-2 text-center text-xs font-semibold text-slate-700 shadow-sm">
+                  {badge}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.65 }} className="relative">
+            <div className="rounded-3xl border border-white/70 bg-white/75 p-4 shadow-2xl shadow-[#1F7A6B]/20 backdrop-blur-xl sm:p-6">
+              <div className="rounded-2xl border border-[#1F7A6B]/15 bg-gradient-to-br from-white to-emerald-50 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-600">Live Decision Console</p>
+                  <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">Model Active</div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#1F7A6B]/15 bg-white p-4">
+                    <p className="text-xs text-slate-500">Risk Score</p>
+                    <p className="mt-2 text-4xl font-semibold text-[#1F7A6B]">82</p>
+                    <div className="mt-3 h-2 rounded-full bg-slate-100">
+                      <motion.div
+                        className="h-2 rounded-full bg-[#1F7A6B]"
+                        initial={{ width: '0%' }}
+                        whileInView={{ width: '82%' }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1.2 }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs font-medium text-emerald-700">Low-to-Moderate Risk</p>
+                  </div>
+                  <div className="rounded-xl border border-[#1F7A6B]/15 bg-white p-4">
+                    <p className="text-xs text-slate-500">Fraud Alert Signal</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">1 of 12</p>
+                    <div className="mt-4 space-y-2">
+                      <div className="h-2 animate-pulse rounded-full bg-emerald-100" />
+                      <div className="h-2 w-5/6 animate-pulse rounded-full bg-emerald-100" />
+                      <div className="h-2 w-3/5 animate-pulse rounded-full bg-emerald-100" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-[#1F7A6B]/15 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+                    <span>Transaction Stability (6 Months)</span>
+                    <span>Confidence 91%</span>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    {[40, 52, 65, 58, 74, 82].map((h, idx) => (
+                      <motion.div
+                        key={idx}
+                        className="w-full rounded-t-md bg-gradient-to-t from-[#1F7A6B] to-emerald-300"
+                        initial={{ height: 0 }}
+                        whileInView={{ height: `${h}%` }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: idx * 0.08 }}
+                        style={{ minHeight: '10px' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Powerful Features for Modern Lending</h2>
-            <p className="text-xl text-slate-600 max-w-3xl mx-auto">
-              Everything you need to originate, assess, and disburse loans faster and more accurately
-            </p>
+      <section id="problem" className={`${sectionBase} bg-white/60`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Problem</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Why lending teams lose speed, control, and trust</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Brain,
-                title: 'AI-Powered Credit Assessment',
-                description: 'Multi-tier AI scoring with explainable decisions. Combine bureau data, behavioral patterns, and alternative data for accurate risk assessment.',
-                color: '#00A86B'
-              },
-              {
-                icon: Zap,
-                title: 'Automated Workflows',
-                description: 'Configurable workflow engine with role-based routing. Reduce manual handoffs and process applications 5x faster.',
-                color: '#00A86B'
-              },
-              {
-                icon: Shield,
-                title: 'Built-in Compliance',
-                description: 'KYC/AML screening, regulatory reporting, and complete audit trails. Stay compliant with RBI guidelines automatically.',
-                color: '#00A86B'
-              },
-              {
-                icon: FileCheck,
-                title: 'Smart Document Processing',
-                description: 'OCR-powered document verification with tampering detection. Auto-extract data from uploaded documents.',
-                color: '#00A86B'
-              },
-              {
-                icon: BarChart3,
-                title: 'Real-time Analytics',
-                description: 'Portfolio insights, conversion tracking, and SLA monitoring. Make data-driven decisions with live dashboards.',
-                color: '#00A86B'
-              },
-              {
-                icon: Lock,
-                title: 'Enterprise Security',
-                description: 'End-to-end encryption, role-based access control, and SOC 2 compliant infrastructure. Your data is safe.',
-                color: '#00A86B'
-              },
-            ].map((feature, idx) => (
-              <div key={idx} className="bg-white rounded-xl p-8 shadow-sm border border-slate-200 hover:shadow-lg transition-shadow">
-                <div
-                  className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
-                  style={{ backgroundColor: `${feature.color}15` }}
-                >
-                  <feature.icon className="w-6 h-6" style={{ color: feature.color }} />
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {problemCards.map((card, idx) => (
+              <motion.article
+                key={card.title}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.45, delay: idx * 0.07 }}
+                className="rounded-2xl border border-[#1F7A6B]/10 bg-white p-6 shadow-md shadow-emerald-100/60"
+              >
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[#1F7A6B]/10 text-[#1F7A6B]">
+                  <card.icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-xl font-semibold text-slate-900 mb-3">{feature.title}</h3>
-                <p className="text-slate-600 leading-relaxed">{feature.description}</p>
-              </div>
+                <h3 className="text-xl font-semibold text-slate-900">{card.title}</h3>
+                <p className="mt-3 leading-relaxed text-slate-600">{card.body}</p>
+              </motion.article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Benefits Section */}
-      <section id="benefits" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-4xl font-bold text-slate-900 mb-6">Why Leading Lenders Choose Us</h2>
-              <p className="text-lg text-slate-600 mb-8">
-                Join 50+ NBFCs and banks who have transformed their loan origination process
-              </p>
-              <div className="space-y-6">
-                {[
-                  { text: 'Reduce turnaround time from days to hours', metric: '70% faster' },
-                  { text: 'Improve approval rates with better risk assessment', metric: '25% increase' },
-                  { text: 'Cut operational costs with automation', metric: '₹50L+ saved/year' },
-                  { text: 'Ensure 100% regulatory compliance', metric: '0 violations' },
-                  { text: 'Scale without adding headcount', metric: '3x volume' },
-                ].map((benefit, idx) => (
-                  <div key={idx} className="flex items-start gap-4">
-                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-1">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-slate-900 font-medium">{benefit.text}</p>
-                      <p className="text-green-600 font-semibold text-sm">{benefit.metric}</p>
-                    </div>
+      <section id="solution" className={`${sectionBase} bg-gradient-to-b from-[#F4FBF7] to-emerald-50/60`}>
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Solution</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">CREDIT SHIELD unifies AI, policy, and workflow in one origination layer</h2>
+            <p className="mt-5 text-lg leading-relaxed text-slate-600">
+              Purpose-built for financial institutions that need faster approvals without compromising fraud controls,
+              explainability, or regulatory readiness.
+            </p>
+            <div className="mt-8 space-y-4">
+              {solutionFlow.map((item, idx) => (
+                <motion.div
+                  key={item}
+                  initial={{ opacity: 0, x: -8 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.35, delay: idx * 0.06 }}
+                  className="flex items-center gap-3 rounded-xl border border-[#1F7A6B]/10 bg-white px-4 py-3"
+                >
+                  <CheckCircle2 className="h-5 w-5 text-[#1F7A6B]" />
+                  <span className="font-medium text-slate-700">{item}</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-[#1F7A6B]/10 bg-white p-6 shadow-lg shadow-emerald-100/80">
+            <p className="mb-5 text-sm font-semibold text-slate-500">Signal Fusion Map</p>
+            <div className="space-y-4">
+              {[
+                { name: 'Bureau + KYC', pct: 78 },
+                { name: 'Transaction Behavior', pct: 92 },
+                { name: 'Fraud Patterns', pct: 66 },
+                { name: 'Policy Compliance', pct: 88 },
+              ].map((signal) => (
+                <div key={signal.name}>
+                  <div className="mb-1 flex justify-between text-sm text-slate-600">
+                    <span>{signal.name}</span>
+                    <span>{signal.pct}%</span>
                   </div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <motion.div
+                      className="h-2 rounded-full bg-gradient-to-r from-[#1F7A6B] to-emerald-300"
+                      initial={{ width: '0%' }}
+                      whileInView={{ width: `${signal.pct}%` }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.8 }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" className={`${sectionBase} bg-white`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">How It Works</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">End-to-end decision flow from application to sanction-ready output</h2>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-5">
+            {workflowSteps.map((step, idx) => (
+              <motion.div
+                key={step.title}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: idx * 0.08 }}
+                className="relative rounded-2xl border border-[#1F7A6B]/10 bg-[#F4FBF7] p-5"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="rounded-lg bg-white p-2 text-[#1F7A6B] shadow-sm">
+                    <step.icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-bold tracking-widest text-[#1F7A6B]">0{idx + 1}</span>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.text}</p>
+                {idx < workflowSteps.length - 1 && (
+                  <ArrowRight className="absolute -right-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-[#1F7A6B] lg:block" />
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className={`${sectionBase} bg-[#F4FBF7]`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Core Features</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Modular capabilities built for modern lending operations</h2>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature, idx) => (
+              <motion.article
+                key={feature.title}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.35, delay: idx * 0.06 }}
+                whileHover={{ y: -5 }}
+                className="rounded-2xl border border-[#1F7A6B]/12 bg-white p-6 shadow-sm shadow-emerald-100/70"
+              >
+                <div className="mb-4 inline-flex rounded-xl bg-[#1F7A6B]/10 p-3 text-[#1F7A6B]">
+                  <feature.icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
+                <p className="mt-3 leading-relaxed text-slate-600">{feature.text}</p>
+              </motion.article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className={`${sectionBase} bg-white`}>
+        <div className="mx-auto max-w-7xl rounded-3xl border border-[#1F7A6B]/10 bg-gradient-to-br from-[#F4FBF7] to-white p-6 shadow-xl shadow-emerald-100/80 sm:p-10">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Live Dashboard Preview</p>
+              <h2 className="mt-3 text-3xl font-semibold text-slate-900">A decision cockpit built for risk teams</h2>
+            </div>
+            <div className="hidden rounded-xl border border-[#1F7A6B]/15 bg-white px-4 py-2 text-sm font-semibold text-[#1F7A6B] md:block">
+              Real-Time Stream
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-3">
+            <div className="rounded-2xl border border-[#1F7A6B]/12 bg-white p-5">
+              <p className="text-sm text-slate-500">Decision Mix</p>
+              <div className="mt-4 h-38 animate-pulse rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50" />
+            </div>
+            <div className="rounded-2xl border border-[#1F7A6B]/12 bg-white p-5">
+              <p className="text-sm text-slate-500">Risk Alerts</p>
+              <div className="mt-3 space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-10 animate-pulse rounded-lg bg-slate-100" />
                 ))}
               </div>
             </div>
-            <div className="bg-slate-50 rounded-2xl p-8">
-              <img
-                src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&h=400&fit=crop"
-                alt="Benefits Illustration"
-                className="rounded-lg shadow-lg mb-6"
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-green-600">10M+</p>
-                  <p className="text-sm text-slate-600">Applications Processed</p>
-                </div>
-                <div className="bg-white rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-green-600">99.9%</p>
-                  <p className="text-sm text-slate-600">Uptime SLA</p>
-                </div>
+            <div className="rounded-2xl border border-[#1F7A6B]/12 bg-white p-5">
+              <p className="text-sm text-slate-500">Portfolio Velocity</p>
+              <div className="mt-4 flex h-38 items-end gap-2">
+                {[48, 55, 71, 63, 80, 74, 88].map((height, idx) => (
+                  <motion.div
+                    key={idx}
+                    className="w-full rounded-t-md bg-[#1F7A6B]/80"
+                    initial={{ height: 0 }}
+                    whileInView={{ height: `${height}%` }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.45, delay: idx * 0.05 }}
+                  />
+                ))}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">How It Works</h2>
-            <p className="text-xl text-slate-600">Simple, streamlined loan processing in 4 steps</p>
+      <section id="security" className={`${sectionBase} bg-[#0f2f2a] text-white`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-300">Trust and Security</p>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Designed for regulated lending environments from day one</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid gap-5 md:grid-cols-3">
             {[
               {
-                step: '01',
-                title: 'Application Intake',
-                description: 'Digital application form with instant validation. Auto-fetch data from Aadhaar, PAN, and bank statements.',
+                icon: Lock,
+                title: 'Data Privacy Controls',
+                text: 'Encryption in transit and at rest, strict role boundaries, and event-level access governance.',
               },
               {
-                step: '02',
-                title: 'AI Credit Assessment',
-                description: 'Automated bureau pulls, financial ratio analysis, and AI risk scoring with explainable results.',
+                icon: Globe,
+                title: 'Secure API Architecture',
+                text: 'Service-level authentication, scoped permissions, and secure integration patterns for banking rails.',
               },
               {
-                step: '03',
-                title: 'Smart Underwriting',
-                description: 'Policy engine checks, delegated authority rules, and workflow-based approvals with override tracking.',
+                icon: BadgeCheck,
+                title: 'Compliance-Ready Workflow',
+                text: 'Audit trails, explainable decision logs, and policy evidence packs for internal and regulatory review.',
               },
-              {
-                step: '04',
-                title: 'Instant Disbursement',
-                description: 'e-Sign integration, pre-disbursement checks, and direct bank transfer execution.',
-              },
-            ].map((step, idx) => (
-              <div key={idx} className="relative">
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 h-full">
-                  <div
-                    className="text-6xl font-bold mb-4 opacity-10"
-                    style={{ color: '#00A86B' }}
-                  >
-                    {step.step}
-                  </div>
-                  <h3 className="text-xl font-semibold text-slate-900 mb-3">{step.title}</h3>
-                  <p className="text-slate-600">{step.description}</p>
-                </div>
-                {idx < 3 && (
-                  <div className="hidden lg:block absolute top-1/2 -right-4 transform -translate-y-1/2">
-                    <ArrowRight className="w-8 h-8 text-green-600" />
-                  </div>
-                )}
-              </div>
+            ].map((item) => (
+              <article key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <item.icon className="h-7 w-7 text-emerald-300" />
+                <h3 className="mt-4 text-xl font-semibold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-200">{item.text}</p>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section id="stats" className="py-20 px-4 sm:px-6 lg:px-8 bg-green-600" style={{ backgroundColor: '#00A86B' }}>
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Trusted by Industry Leaders</h2>
-            <p className="text-xl text-white/90">Our platform processes millions in loans every month</p>
+      <section className={`${sectionBase} bg-white`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Use Cases</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Built for each lending institution type</h2>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid gap-5 lg:grid-cols-3">
+            {useCases.map((caseItem) => (
+              <article key={caseItem.title} className="rounded-2xl border border-[#1F7A6B]/12 bg-[#F4FBF7] p-6">
+                <caseItem.icon className="h-6 w-6 text-[#1F7A6B]" />
+                <h3 className="mt-3 text-xl font-semibold text-slate-900">{caseItem.title}</h3>
+                <p className="mt-2 text-slate-600">{caseItem.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="impact" className={`${sectionBase} bg-[#F4FBF7]`}>
+        <div className="mx-auto max-w-7xl rounded-3xl border border-[#1F7A6B]/12 bg-white p-8 shadow-lg shadow-emerald-100/70 sm:p-10">
+          <div className="mb-8 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Impact</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Measurable outcomes across risk, speed, and portfolio quality</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { icon: Users, label: '50+ Lenders', value: 'Active Clients' },
-              { icon: TrendingUp, label: '₹500Cr+', value: 'Monthly Disbursal' },
-              { icon: Clock, label: '4.2 Hours', value: 'Avg. TAT' },
-              { icon: Globe, label: '15 States', value: 'Pan-India Coverage' },
+              { icon: Clock3, value: '68%', label: 'Faster loan decision TAT' },
+              { icon: Shield, value: '42%', label: 'Fraud attempt reduction' },
+              { icon: TrendingUp, value: '31%', label: 'Higher decision accuracy' },
+              { icon: CircleDollarSign, value: '2.3x', label: 'Underwriter productivity gain' },
             ].map((stat, idx) => (
-              <div key={idx} className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-full mb-4">
-                  <stat.icon className="w-8 h-8 text-white" />
-                </div>
-                <p className="text-3xl font-bold text-white mb-2">{stat.label}</p>
-                <p className="text-white/80">{stat.value}</p>
-              </div>
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 8 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.35, delay: idx * 0.05 }}
+                className="rounded-2xl border border-[#1F7A6B]/10 bg-[#F4FBF7] p-5"
+              >
+                <stat.icon className="h-5 w-5 text-[#1F7A6B]" />
+                <p className="mt-3 text-3xl font-semibold text-slate-900">{stat.value}</p>
+                <p className="mt-1 text-sm text-slate-600">{stat.label}</p>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold text-slate-900 mb-6">Ready to Transform Your Lending?</h2>
-          <p className="text-xl text-slate-600 mb-8">
-            Join leading NBFCs and banks who have modernized their loan origination process
+      <section className={`${sectionBase} bg-white`}>
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1F7A6B]">Validation</p>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-900 sm:text-4xl">Built by innovators, validated by lending practitioners</h2>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-3">
+            {testimonials.map((item) => (
+              <article key={item.name} className="rounded-2xl border border-[#1F7A6B]/12 bg-[#F4FBF7] p-6">
+                <MessageSquareQuote className="h-6 w-6 text-[#1F7A6B]" />
+                <p className="mt-4 text-slate-700">{item.quote}</p>
+                <p className="mt-5 text-sm font-semibold text-slate-900">{item.name}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-8 rounded-2xl border border-[#1F7A6B]/12 bg-white p-5 text-sm text-slate-600">
+            Hackathon-ready build with investor-demo positioning. Production architecture supports LOS workflows for banks,
+            NBFCs, and digital lending ecosystems.
+          </div>
+        </div>
+      </section>
+
+      <section id="final-cta" className={`${sectionBase} relative overflow-hidden bg-[#1F7A6B] text-white`}>
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute left-10 top-10 h-52 w-52 rounded-full bg-emerald-400/20 blur-3xl" />
+          <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-emerald-200/20 blur-3xl" />
+        </div>
+        <div className="mx-auto max-w-5xl text-center">
+          <h2 className="text-3xl font-semibold sm:text-5xl">Start using CREDIT SHIELD for underwriting precision today</h2>
+          <p className="mx-auto mt-5 max-w-3xl text-lg text-emerald-50">
+            Convert fragmented origination into a secure, AI-powered decision system trusted by credit teams and leadership.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <button
               onClick={() => navigate('/login')}
-              className="px-8 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-lg"
-              style={{ backgroundColor: '#00A86B' }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-7 py-4 font-semibold text-[#1F7A6B] transition hover:-translate-y-0.5"
             >
-              Start Free Trial
+              Start Using Credit Shield Today
+              <ArrowRight className="h-4 w-4" />
             </button>
-            <button className="px-8 py-4 border-2 border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors font-semibold text-lg">
-              Schedule a Demo
+            <button className="rounded-2xl border border-white/60 px-7 py-4 font-semibold text-white transition hover:bg-white/10">
+              Book a Demo
             </button>
           </div>
-          <p className="text-sm text-slate-500 mt-6">No credit card required • 14-day free trial • Cancel anytime</p>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-white py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+      <footer className="snap-start bg-[#0f2521] px-4 py-14 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-8 md:grid-cols-4">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#00A86B' }}>
-                  <span className="text-white font-bold">L</span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1F7A6B]">
+                  <Shield className="h-4 w-4" />
                 </div>
-                <span className="text-xl font-bold">LOS Platform</span>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-200">IdeaBliss</p>
+                  <p className="font-semibold">CREDIT SHIELD</p>
+                </div>
               </div>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                Enterprise-grade loan origination system for modern financial institutions.
-              </p>
+              <p className="mt-4 max-w-xs text-sm text-slate-300">One-stop AI lending intelligence platform. Prototype currently showcases LOS excellence.</p>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Security</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Integrations</a></li>
+              <h4 className="font-semibold">Product</h4>
+              <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                <li><a href="#solution" className="transition hover:text-white">Platform Overview</a></li>
+                <li><a href="#features" className="transition hover:text-white">Features</a></li>
+                <li><a href="#security" className="transition hover:text-white">Security</a></li>
+                <li><a href="#impact" className="transition hover:text-white">Impact</a></li>
               </ul>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+              <h4 className="font-semibold">Contact</h4>
+              <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                <li>hello@ideabliss.ai</li>
+                <li>+91 90000 00000</li>
+                <li>Bengaluru, India</li>
               </ul>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">GDPR</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Compliance</a></li>
-              </ul>
+              <h4 className="font-semibold">Social</h4>
+              <div className="mt-3 flex gap-3">
+                {[
+                  { label: 'LinkedIn', icon: Globe },
+                  { label: 'GitHub', icon: Building },
+                  { label: 'X', icon: Activity },
+                ].map((social) => (
+                  <a
+                    key={social.label}
+                    href="#"
+                    aria-label={social.label}
+                    className="rounded-lg border border-white/15 p-2 text-slate-300 transition hover:border-white/40 hover:text-white"
+                  >
+                    <social.icon className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-sm text-slate-400">© 2026 LOS Platform. All rights reserved.</p>
-            <div className="flex gap-6 mt-4 md:mt-0">
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
-              </a>
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-              </a>
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-              </a>
+
+          <div className="mt-10 border-t border-white/10 pt-6 text-sm text-slate-400">
+            <div className="flex flex-col justify-between gap-2 sm:flex-row">
+              <p>© 2026 IdeaBliss. CREDIT SHIELD. All rights reserved.</p>
+              <p>Privacy | Terms | Compliance</p>
             </div>
           </div>
         </div>

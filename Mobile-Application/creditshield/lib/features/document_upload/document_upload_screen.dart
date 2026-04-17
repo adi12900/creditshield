@@ -443,8 +443,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         accessToken: accessToken,
         applicationId: widget.applicationId!.trim(),
         docType: key,
+        filePath: selected.localPath,
+        fileName: selected.fileName,
         status: 'Pending OCR',
-        storageUrl: selected.storageUrl,
       );
       if (!mounted) return;
       setState(() {
@@ -483,7 +484,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         fileName: _fileNameFromPath(file.path),
         sizeBytes: await file.length(),
         source: source,
-        storageUrl: 'picked://$source/${_fileNameFromPath(file.path)}',
+        localPath: file.path,
       );
     }
 
@@ -497,7 +498,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         fileName: _fileNameFromPath(file.path),
         sizeBytes: await file.length(),
         source: source,
-        storageUrl: 'picked://$source/${_fileNameFromPath(file.path)}',
+        localPath: file.path,
       );
     }
 
@@ -517,17 +518,16 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
     final picked = result.files.first;
     final fileName = picked.name.trim().isEmpty ? 'document' : picked.name;
-    final bytes = picked.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      throw Exception(
-        'Unable to read selected file bytes. Please pick another file.',
-      );
+    final localPath = picked.path;
+    if (localPath == null || localPath.trim().isEmpty) {
+      throw Exception('Unable to access selected file. Please pick another file.');
     }
+
     return _SelectedDocument(
       fileName: fileName,
       sizeBytes: picked.size,
       source: source,
-      storageUrl: 'picked://$source/$fileName',
+      localPath: localPath,
     );
   }
 
@@ -980,13 +980,13 @@ class _SelectedDocument {
   final String fileName;
   final int sizeBytes;
   final String source;
-  final String storageUrl;
+  final String localPath;
 
   const _SelectedDocument({
     required this.fileName,
     required this.sizeBytes,
     required this.source,
-    required this.storageUrl,
+    required this.localPath,
   });
 
   String get displayLabel {
