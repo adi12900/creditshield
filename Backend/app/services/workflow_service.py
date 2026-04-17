@@ -86,7 +86,7 @@ class WorkflowService:
                 "arn": "ARN202600015",
                 "borrower_name": "Anil Kumar",
                 "loan_amount": 1100000,
-                "stage": "Rejected",
+                "stage": "REJECTED",
                 "risk_grade": "C",
                 "credit_score": 640,
                 "kyc_status": "Verified",
@@ -166,34 +166,42 @@ class WorkflowService:
             "Submitted",
             "Documents Pending",
             "KYC",
+            "CREDIT_ANALYST",
             "Underwriting",
             "Offer Sent",
             "Disbursed",
             "Rejected",
+            "REJECTED",
         }
         self._allowed_risk_grades = {"A+", "A", "B", "C"}
         self._allowed_kyc_statuses = {"Verified", "Pending"}
         self._allowed_employment_types = {"Salaried", "Self Employed"}
 
-    def _display_name_from_email(self, email: str | None) -> str:
-        if not email:
-            return "Loan Officer"
-        local = email.split("@", 1)[0].replace(".", " ").replace("_", " ").replace("-", " ").strip()
-        return local.title() if local else "Loan Officer"
-
-    def _format_inr(self, amount: float | Decimal | None) -> str:
-        try:
-            value = float(amount or 0)
-        except (TypeError, ValueError):
-            value = 0.0
-        return f"₹{value:,.2f}"
-
-    def _to_workflow_application(self, row: LoanApplication) -> dict[str, Any]:
+    def _to_workflow_application(self, row: LoanApplication, db=None) -> dict[str, Any]:
         stage = row.stage if row.stage in self._allowed_stages else "Submitted"
         risk_grade = row.risk_grade if row.risk_grade in self._allowed_risk_grades else "B"
         kyc_status = row.kyc_status if row.kyc_status in self._allowed_kyc_statuses else "Pending"
         employment_type = row.employment_type if row.employment_type in self._allowed_employment_types else "Salaried"
         loan_amount = float(row.loan_amount if isinstance(row.loan_amount, Decimal) else row.loan_amount or 0)
+
+        final_score: float | None = None
+        try:
+            session = db
+            if session is None:
+                session = SessionLocal()
+            appraisal = (
+                session.query(LoanAppraisalRecord)
+                .filter(LoanAppraisalRecord.application_id == row.id)
+                .filter(LoanAppraisalRecord.status == "success")
+                .order_by(LoanAppraisalRecord.updated_at.desc())
+                .first()
+            )
+            if appraisal and appraisal.final_score is not None:
+                final_score = float(appraisal.final_score)
+            if db is None:
+                session.close()
+        except Exception:
+            pass
 
         return {
             "arn": row.arn,
@@ -206,9 +214,11 @@ class WorkflowService:
             "risk_grade": risk_grade,
             "credit_score": int(row.credit_score or 700),
             "kyc_status": kyc_status,
+            "is_cibil_verified": bool(getattr(row, "is_cibil_verified", False)),
             "employment_type": employment_type,
             "purpose": row.purpose or "General Purpose",
             "created_at": row.created_at,
+            "final_score": final_score,
         }
 
     def _update_application_fields(self, arn: str, **fields: Any) -> bool:
@@ -226,25 +236,26 @@ class WorkflowService:
         except Exception:
             return False
 
-    def _get_application(self, arn: str) -> dict[str, Any]:
+    def _get_application(self, arn: str, db=None) -> dict[str, Any]:
         try:
-            with SessionLocal() as db:
-                row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+            with SessionLocal() as session:
+                row = session.query(LoanApplication).filter(LoanApplication.arn == arn).first()
                 if row:
-                    return self._to_workflow_application(row)
+                    return self._to_workflow_application(row, db=session)
         except Exception:
-            # Fallback to in-memory dataset when DB is unavailable.
             pass
 
         app = self._applications.get(arn)
         if not app:
             raise WorkflowServiceError(f"Application not found for ARN {arn}", 404)
+        if "is_cibil_verified" not in app:
+            app["is_cibil_verified"] = False
         return app
 
-    def list_applications(self, stage: str | None = None, require_submitted_memo: bool = False) -> list[dict[str, Any]]:
+    def list_applications(self, stage: str | None = None, require_submitted_memo: bool = False, db=None) -> list[dict[str, Any]]:
         try:
-            with SessionLocal() as db:
-                query = db.query(LoanApplication)
+            with SessionLocal() as session:
+                query = session.query(LoanApplication)
                 if require_submitted_memo:
                     submitted_ids = db.execute(
                         text(
@@ -265,9 +276,8 @@ class WorkflowService:
                     query = query.filter(LoanApplication.stage == stage)
                 rows = query.order_by(LoanApplication.id.asc()).all()
                 if rows:
-                    return [self._to_workflow_application(row) for row in rows]
+                    return [self._to_workflow_application(row, db=session) for row in rows]
         except Exception:
-            # Fallback to in-memory dataset when DB is unavailable.
             pass
 
         applications = list(self._applications.values())
@@ -339,16 +349,20 @@ class WorkflowService:
             return {
                 "role": role,
                 "stats": [
-                    {"key": "active_applications", "value": len([a for a in apps if a["stage"] not in {"Disbursed", "Rejected"}])},
+                    {"key": "active_applications", "value": len([a for a in apps if a["stage"] not in {"Disbursed", "Rejected", "REJECTED"}])},
                     {"key": "sla_breaches", "value": len([a for a in apps if a["stage"] == "Documents Pending"])},
                 ],
             }
         if role == "credit_analyst":
+            credit_analyst_apps = [a for a in apps if a["stage"] == "CREDIT_ANALYST"]
             return {
                 "role": role,
                 "stats": [
-                    {"key": "in_progress", "value": len([a for a in apps if a["stage"] in {"Submitted", "Documents Pending"}])},
-                    {"key": "avg_credit_score", "value": int(sum(a["credit_score"] for a in apps) / len(apps))},
+                    {"key": "in_progress", "value": len(credit_analyst_apps)},
+                    {
+                        "key": "avg_credit_score",
+                        "value": int(sum(a["credit_score"] for a in credit_analyst_apps) / len(credit_analyst_apps)) if credit_analyst_apps else 0,
+                    },
                 ],
             }
         if role == "underwriter":
@@ -373,7 +387,7 @@ class WorkflowService:
     def _get_assigned_field_cases(self, username: str) -> list[dict[str, Any]]:
         applications = [
             app for app in self.list_applications()
-            if app["stage"] not in {"Disbursed", "Rejected"}
+            if app["stage"] not in {"Disbursed", "Rejected", "REJECTED"}
         ]
         if not applications:
             return []
@@ -826,6 +840,23 @@ class WorkflowService:
         )
         return self._get_application(arn)
 
+    def verify_cibil_report(self, arn: str, actor: str = "Loan Officer") -> dict[str, Any]:
+        self._get_application(arn)
+        updated_db = self._update_application_fields(arn, is_cibil_verified=True, stage="CREDIT_ANALYST")
+        if not updated_db:
+            app = self._get_application(arn)
+            app["is_cibil_verified"] = True
+            app["stage"] = "CREDIT_ANALYST"
+
+        self.add_audit_log(
+            user=actor,
+            action="CIBIL Report Verified",
+            resource=arn,
+            details="CIBIL verification status marked as verified",
+            risk="Low",
+        )
+        return self._get_application(arn)
+
     def recalculate_ratios(
         self,
         monthly_income: float,
@@ -1011,7 +1042,7 @@ class WorkflowService:
             status = "approved_for_structuring"
             risk = "Low"
         elif normalized == "reject":
-            new_stage = "Rejected"
+            new_stage = "REJECTED"
             status = "rejected"
             risk = "High"
         else:

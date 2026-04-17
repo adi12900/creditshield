@@ -42,9 +42,10 @@ export function CreditMemoPage() {
     workflowApi
       .listApplications()
       .then((rows) => {
-        setApplications(rows);
-        if (!rows.some((row) => row.arn === selectedApplicationArn) && rows.length > 0) {
-          setSelectedApplicationArn(rows[0].arn);
+        const filteredRows = rows.filter((row) => row.stage === 'CREDIT_ANALYST');
+        setApplications(filteredRows);
+        if (!filteredRows.some((row) => row.arn === selectedApplicationArn) && filteredRows.length > 0) {
+          setSelectedApplicationArn(filteredRows[0].arn);
         }
       })
       .catch(() => setApplications([]))

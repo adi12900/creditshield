@@ -96,7 +96,7 @@ def _latest_active_application(db: Session, borrower_id: int) -> LoanApplication
     return (
         db.query(LoanApplication)
         .filter(LoanApplication.borrower_id == borrower_id)
-        .filter(LoanApplication.stage.notin_({"Disbursed", "Rejected"}))
+        .filter(LoanApplication.stage.notin_({"Disbursed", "Rejected", "REJECTED"}))
         .order_by(LoanApplication.created_at.desc(), LoanApplication.id.desc())
         .first()
     )

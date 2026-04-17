@@ -195,6 +195,19 @@ def loan_officer_send_esign(arn: str) -> dict:
         raise _to_http_exception(exc) from exc
 
 
+@router.post(
+    "/loan-officer/cibil/{arn}/verify",
+    response_model=LoanApplicationOut,
+    dependencies=[Depends(require_roles({"loan_officer"}))],
+)
+def loan_officer_verify_cibil(arn: str) -> LoanApplicationOut:
+    try:
+        updated = workflow_service.verify_cibil_report(arn, actor="Loan Officer")
+        return LoanApplicationOut(**updated)
+    except WorkflowServiceError as exc:
+        raise _to_http_exception(exc) from exc
+
+
 @router.get(
     "/credit-analyst/dashboard",
     response_model=DashboardResponse,

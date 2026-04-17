@@ -381,9 +381,11 @@ export interface WorkflowApplication {
   risk_grade: string;
   credit_score: number;
   kyc_status: string;
+  is_cibil_verified: boolean;
   employment_type: string;
   purpose: string;
   created_at?: string | null;
+  final_score?: number | null;
 }
 
 export type AdminUserRole = 'loan_officer' | 'credit_analyst' | 'underwriter' | 'compliance_officer';
@@ -515,6 +517,8 @@ export const workflowApi = {
     request(`/api/v1/workflow/loan-officer/intake/${arn}/submit`, { method: 'POST' }, role),
   sendEsignLink: (arn: string, role: WorkflowRole) =>
     request(`/api/v1/workflow/loan-officer/esign/${arn}/send-link`, { method: 'POST' }, role),
+  verifyCibilReport: (arn: string, role: WorkflowRole) =>
+    request<WorkflowApplication>(`/api/v1/workflow/loan-officer/cibil/${arn}/verify`, { method: 'POST' }, role),
 
   recalculateRatios: (arn: string, role: WorkflowRole, payload: {
     monthly_income: number;
