@@ -5,12 +5,13 @@ Public endpoints for borrowers to upload documents via secure upload links.
 No authentication required - token-based access only.
 """
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.communication import DocumentUploadResponse
+from app.services.document_ai_verification_service import run_document_verification_task
 from app.services.document_service import DocumentService
 from app.services.token_service import TokenService
 
@@ -373,6 +374,7 @@ def get_upload_page(upload_token: str, db: Session = Depends(get_db)):
 @router.post("/upload/{upload_token}", response_model=DocumentUploadResponse)
 async def upload_document(
     upload_token: str,
+    background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -434,6 +436,10 @@ async def upload_document(
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=error_msg)
         else:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+    # Trigger AI verification asynchronously so status moves out of Pending OCR.
+    document_id = int(document_data["id"])
+    background_tasks.add_task(run_document_verification_task, document_id)
     
     # Create audit log for document upload
     from app.services.workflow_service import workflow_service

@@ -1,9 +1,9 @@
 import { Calculator, TrendingUp } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ApplicationSelector } from '../../components/ui/ApplicationSelector';
 import { getLoanApplicationByArn } from '../../data/loanApplications';
 import { useStore } from '../../store';
-import { workflowApi } from '../../lib/workflowApi';
+import { workflowApi, type WorkflowApplication } from '../../lib/workflowApi';
 
 export function LoanStructuringPage() {
   const [loanAmount, setLoanAmount] = useState(850000);
@@ -12,7 +12,61 @@ export function LoanStructuringPage() {
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
   const setSelectedApplicationArn = useStore((state) => state.setSelectedApplicationArn);
   const user = useStore((state) => state.user);
-  const selectedApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const [apiApplications, setApiApplications] = useState<WorkflowApplication[]>([]);
+  const fallbackApplication = getLoanApplicationByArn(selectedApplicationArn);
+  const selectedApiApplication = apiApplications.find((item) => item.arn === selectedApplicationArn) ?? null;
+  const selectedApplication = {
+    ...fallbackApplication,
+    arn: selectedApiApplication?.arn ?? fallbackApplication.arn,
+    borrowerName: selectedApiApplication?.borrower_name ?? fallbackApplication.borrowerName,
+    loanAmount: selectedApiApplication?.loan_amount ?? fallbackApplication.loanAmount,
+    stage: (selectedApiApplication?.stage as typeof fallbackApplication.stage | undefined) ?? fallbackApplication.stage,
+    riskGrade: (selectedApiApplication?.risk_grade as typeof fallbackApplication.riskGrade | undefined) ?? fallbackApplication.riskGrade,
+    creditScore: selectedApiApplication?.credit_score ?? fallbackApplication.creditScore,
+    employmentType: (selectedApiApplication?.employment_type as typeof fallbackApplication.employmentType | undefined) ?? fallbackApplication.employmentType,
+    kycStatus: (selectedApiApplication?.kyc_status as typeof fallbackApplication.kycStatus | undefined) ?? fallbackApplication.kycStatus,
+  };
+  const requestedAmount = useMemo(() => {
+    const raw = Number(selectedApplication.loanAmount);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return 100000;
+    }
+    return Math.round(raw);
+  }, [selectedApplication.loanAmount]);
+  const minOfferAmount = 0;
+  const amountStep = useMemo(() => {
+    const spread = Math.max(requestedAmount - minOfferAmount, 0);
+    if (spread <= 0) return 1;
+    return Math.max(1, Math.floor(spread / 200));
+  }, [minOfferAmount, requestedAmount]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'underwriter') {
+      setApiApplications([]);
+      return;
+    }
+
+    workflowApi
+      .listApplications()
+      .then((rows) => {
+        const underwritingRows = rows.filter((row) => row.stage.trim().toUpperCase() === 'UNDERWRITING');
+        setApiApplications(underwritingRows);
+        if (!underwritingRows.some((row) => row.arn === selectedApplicationArn) && underwritingRows.length > 0) {
+          setSelectedApplicationArn(underwritingRows[0].arn);
+        }
+      })
+      .catch(() => setApiApplications([]));
+  }, [selectedApplicationArn, setSelectedApplicationArn, user]);
+
+  useEffect(() => {
+    // Reset structuring amount to the borrower's requested amount whenever file changes.
+    setLoanAmount(requestedAmount);
+  }, [requestedAmount, selectedApplication.arn]);
+
+  useEffect(() => {
+    // Keep current slider value within valid bounds if borrower amount changes.
+    setLoanAmount((current) => Math.min(Math.max(current, minOfferAmount), requestedAmount));
+  }, [minOfferAmount, requestedAmount]);
 
   const calculateEMI = () => {
     const p = loanAmount;
@@ -36,13 +90,16 @@ export function LoanStructuringPage() {
   const handleGenerateOffer = async () => {
     if (!user || user.role !== 'underwriter') return;
     try {
+      const offeredAmount = Math.min(loanAmount, requestedAmount);
       const offer = await workflowApi.generateLoanOffer(selectedApplication.arn, user.role, {
-        loan_amount: loanAmount,
+        loan_amount: offeredAmount,
         tenure_months: tenure,
         interest_rate: interestRate,
       });
-      window.alert(`Offer generated. EMI ₹${offer.emi}`);
-      window.location.reload();
+      const emailStatus = offer.email_status ? ` Email status: ${offer.email_status}.` : '';
+      const emailTo = offer.email_to ? ` Sent to: ${offer.email_to}.` : '';
+      const emailError = offer.email_error ? ` Error: ${offer.email_error}.` : '';
+      window.alert(`Offer generated. EMI ₹${offer.emi}.${emailStatus}${emailTo}${emailError}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate offer';
       window.alert(message);
@@ -62,6 +119,14 @@ export function LoanStructuringPage() {
         selectedArn={selectedApplication.arn}
         onSelect={setSelectedApplicationArn}
         subtitle="Choose a borrower file before adjusting loan amount, tenure, and pricing in the structuring tool."
+        applications={apiApplications.map((application) => ({
+          arn: application.arn,
+          borrowerName: application.borrower_name,
+          email: `${application.borrower_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+          stage: application.stage,
+          riskGrade: (application.risk_grade === 'A+' || application.risk_grade === 'A' || application.risk_grade === 'B' || application.risk_grade === 'C' || application.risk_grade === 'D') ? application.risk_grade : 'C',
+          loanAmount: application.loan_amount,
+        }))}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -75,16 +140,16 @@ export function LoanStructuringPage() {
                 </label>
                 <input
                   type="range"
-                  min="100000"
-                  max="2000000"
-                  step="50000"
+                  min={String(minOfferAmount)}
+                  max={String(requestedAmount)}
+                  step={String(amountStep)}
                   value={loanAmount}
-                  onChange={(e) => setLoanAmount(Number(e.target.value))}
+                  onChange={(e) => setLoanAmount(Math.min(Number(e.target.value), requestedAmount))}
                   className="w-full"
                 />
                 <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>₹1L</span>
-                  <span>₹20L</span>
+                  <span>₹{minOfferAmount.toLocaleString('en-IN')}</span>
+                  <span>₹{(requestedAmount / 100000).toFixed(2)}L (requested)</span>
                 </div>
               </div>
 

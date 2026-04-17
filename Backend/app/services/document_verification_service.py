@@ -18,6 +18,8 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.database import SessionLocal
+
 logger = logging.getLogger(__name__)
 
 # Ensure repo root is on path so ai_agent is importable from Backend context
@@ -166,6 +168,55 @@ def verify_document_with_agent(
     except Exception as e:
         logger.exception("Document verification failed for doc_id=%s: %s", document_id, e)
         _update_document_verdict(db, document_id, "Verification Failed", str(e)[:500])
+
+
+def run_document_verification_task(document_id: int) -> None:
+    """
+    Background-task safe wrapper.
+
+    Opens a fresh DB session, loads document metadata, and triggers agent verification.
+    """
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT d.id, d.doc_type, d.storage_url, la.arn
+                FROM documents d
+                JOIN loan_applications la ON la.id = d.application_id
+                WHERE d.id = :doc_id
+                """
+            ),
+            {"doc_id": int(document_id)},
+        ).fetchone()
+
+        if not row:
+            logger.error("Verification task skipped; document not found doc_id=%s", document_id)
+            return
+
+        storage_url = row[2]
+        if not storage_url:
+            _update_document_verdict(
+                db,
+                int(row[0]),
+                "Flagged",
+                "Document storage URL is missing; cannot run AI verification.",
+                0,
+            )
+            return
+
+        verify_document_with_agent(
+            document_id=int(row[0]),
+            arn=str(row[3]),
+            doc_type=str(row[1] or "document"),
+            filename=str(storage_url).rsplit("/", 1)[-1],
+            storage_url=str(storage_url),
+            db=db,
+        )
+    except Exception:
+        logger.exception("Verification task crashed for doc_id=%s", document_id)
+    finally:
+        db.close()
 
 
 def _update_document_verdict(

@@ -35,21 +35,23 @@ interface NavItem {
 }
 
 const navigationMap: Record<UserRole, NavItem[]> = {
+  field_officer: [
+    {
+      label: 'Field Dashboard',
+      icon: LayoutDashboard,
+      href: '/dashboard',
+    },
+    {
+      label: 'Assigned Visits',
+      icon: FileSearch,
+      href: '/dashboard/field-visits',
+    },
+  ],
   loan_officer: [
     {
       label: 'Dashboard',
       icon: LayoutDashboard,
       href: '/dashboard',
-    },
-    {
-      label: 'Lead Workbench',
-      icon: Users,
-      href: '/dashboard/lead-workbench',
-    },
-    {
-      label: 'Application Intake',
-      icon: FileInput,
-      href: '/dashboard/application-intake',
     },
     {
       label: 'Application Detail',
@@ -71,17 +73,17 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       icon: Signature,
       href: '/dashboard/e-sign-agreement',
     },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
+    },
   ],
   credit_analyst: [
     {
       label: 'Dashboard',
       icon: LayoutDashboard,
       href: '/dashboard',
-    },
-    {
-      label: 'Bureau Reports',
-      icon: FileSearch,
-      href: '/dashboard/bureau-reports',
     },
     {
       label: 'Financial Ratios',
@@ -98,6 +100,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       icon: FileCheck,
       href: '/dashboard/credit-memo',
     },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
+    },
   ],
   underwriter: [
     {
@@ -111,6 +118,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       href: '/dashboard/decision-engine',
     },
     {
+      label: 'AI Score Breakdown',
+      icon: Activity,
+      href: '/dashboard/ai-score',
+    },
+    {
       label: 'Policy Override',
       icon: AlertTriangle,
       href: '/dashboard/policy-override',
@@ -119,6 +131,11 @@ const navigationMap: Record<UserRole, NavItem[]> = {
       label: 'Loan Structuring',
       icon: Calculator,
       href: '/dashboard/loan-structuring',
+    },
+    {
+      label: 'CIBIL Reports',
+      icon: FileText,
+      href: '/dashboard/cibil-reports',
     },
   ],
   compliance_officer: [
@@ -391,7 +408,10 @@ export function Sidebar({ role }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto p-4">
         <div className="space-y-1">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isCibilPath = item.href === '/dashboard/cibil-reports' && location.pathname.startsWith('/dashboard/cibil-report/');
+            const isDocumentReviewPath = item.href === '/dashboard/document-review' && location.pathname.startsWith('/dashboard/document-review/');
+            const isFieldVisitPath = item.href === '/dashboard/field-visits' && location.pathname.startsWith('/dashboard/field-visit/');
+            const isActive = location.pathname === item.href || isCibilPath || isDocumentReviewPath || isFieldVisitPath;
             return (
               <Link
                 key={item.href}

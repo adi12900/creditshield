@@ -1,227 +1,295 @@
-version: '3.0'
-design: realistic_underwriting_rule_engine
-generated_rules: 24
+version: '4.0'
+design: realistic_underwriting_rule_engine_v2
+generated_rules: 30
 minimum_target: 5000
 categories:
   - income_stability
-  - cashflow_discipline
-  - debt_burden
-  - digital_credit_risk
-  - spending_discipline
+  - affordability
+  - expense_behavior
   - liquidity_stress
+  - debt_behavior
+  - policy_overrides
+
+weight_distribution:
+  income_stability: 0.25
+  affordability: 0.30
+  expense_behavior: 0.15
+  liquidity_stress: 0.15
+  debt_behavior: 0.10
+  policy_overrides: 0.05
+
+decision_logic:
+  approve_bias: stable_income_and_surplus
+  reject_bias: severe_affordability_or_structural_stress
+  note: rule score is blended with model confidence; no single minor signal should dominate.
+
 rules:
-  - rule_id: R10001
-    id: R10001
+  - rule_id: R20001
+    id: R20001
     category: income_stability
-    subcategory: salary_presence
-    condition: salary_salary_detection_tier in ['stable', 'strong']
+    subcategory: salary_presence_strong
+    condition: metric_salary_months >= 9 and salary_salary_detection_tier in ['stable', 'strong']
     severity: low
-    score_impact: 0.06
-    reason: consistent salary credits support repayment capacity
+    score_impact: 0.08
+    reason: long salary history improves repayment reliability
 
-  - rule_id: R10002
-    id: R10002
+  - rule_id: R20002
+    id: R20002
     category: income_stability
-    subcategory: salary_absence
-    condition: salary_salary_detection_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.10
-    reason: missing or weak salary evidence increases uncertainty
-
-  - rule_id: R10003
-    id: R10003
-    category: income_stability
-    subcategory: salary_consistency
-    condition: salary_salary_consistency_tier in ['stable', 'strong']
+    subcategory: salary_presence_moderate
+    condition: metric_salary_months >= 6 and salary_salary_detection_tier in ['stable', 'strong']
     severity: low
     score_impact: 0.05
-    reason: consistent pay-cycle timing improves servicing confidence
+    reason: moderate salary continuity supports affordability
 
-  - rule_id: R10004
-    id: R10004
+  - rule_id: R20003
+    id: R20003
+    category: income_stability
+    subcategory: weak_income_signal
+    condition: salary_salary_detection_tier in ['critical', 'high'] and metric_net_savings_ratio < 0.05
+    severity: high
+    score_impact: -0.08
+    reason: weak formal income with low savings buffer increases uncertainty
+
+  - rule_id: R20004
+    id: R20004
+    category: income_stability
+    subcategory: salary_consistency_bonus
+    condition: salary_salary_consistency_tier in ['stable', 'strong']
+    severity: low
+    score_impact: 0.04
+    reason: consistent income periodicity lowers payment disruption risk
+
+  - rule_id: R20005
+    id: R20005
     category: income_stability
     subcategory: salary_consistency_risk
-    condition: salary_salary_consistency_tier in ['critical', 'high']
+    condition: salary_salary_consistency_tier in ['critical', 'high'] and metric_emi_to_income_ratio >= 0.45
     severity: high
-    score_impact: -0.08
-    reason: volatile pay-cycle timing increases underwriting risk
+    score_impact: -0.09
+    reason: unstable income timing under elevated EMI load is risky
 
-  - rule_id: R10005
-    id: R10005
+  - rule_id: R20006
+    id: R20006
     category: income_stability
-    subcategory: salary_trend
-    condition: salary_salary_hike_drop_tier in ['stable', 'strong']
-    severity: low
-    score_impact: 0.03
-    reason: stable or improving salary trend supports affordability
+    subcategory: income_variability_risk
+    condition: metric_income_consistency_score <= 0.35 and metric_net_savings_ratio < 0.05
+    severity: medium
+    score_impact: -0.06
+    reason: volatile income with thin surplus reduces repayment confidence
 
-  - rule_id: R10006
-    id: R10006
-    category: income_stability
-    subcategory: salary_drop_risk
-    condition: salary_salary_hike_drop_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.08
-    reason: recent salary decline is a repayment warning sign
-
-  - rule_id: R10007
-    id: R10007
-    category: cashflow_discipline
-    subcategory: savings_buffer
-    condition: metric_net_savings_ratio >= 0.10
+  - rule_id: R20007
+    id: R20007
+    category: affordability
+    subcategory: strong_foir_band
+    condition: metric_emi_to_income_ratio <= 0.30
     severity: low
     score_impact: 0.10
-    reason: healthy monthly savings buffer improves resilience
+    reason: low EMI to income ratio indicates strong affordability
 
-  - rule_id: R10008
-    id: R10008
-    category: cashflow_discipline
-    subcategory: thin_buffer
-    condition: metric_net_savings_ratio < 0.05 and metric_net_savings_ratio >= 0.0
+  - rule_id: R20008
+    id: R20008
+    category: affordability
+    subcategory: acceptable_foir_band
+    condition: metric_emi_to_income_ratio > 0.30 and metric_emi_to_income_ratio <= 0.40
+    severity: low
+    score_impact: 0.04
+    reason: moderate EMI ratio is acceptable with stable cash flow
+
+  - rule_id: R20009
+    id: R20009
+    category: affordability
+    subcategory: elevated_foir
+    condition: metric_emi_to_income_ratio > 0.40 and metric_emi_to_income_ratio <= 0.55
     severity: medium
     score_impact: -0.08
-    reason: weak savings buffer leaves little room for repayment stress
+    reason: elevated EMI load narrows repayment headroom
 
-  - rule_id: R10009
-    id: R10009
-    category: cashflow_discipline
-    subcategory: negative_savings
+  - rule_id: R20010
+    id: R20010
+    category: affordability
+    subcategory: stressed_foir
+    condition: metric_emi_to_income_ratio > 0.55
+    severity: critical
+    score_impact: -0.16
+    reason: EMI burden is unsustainably high relative to income
+
+  - rule_id: R20011
+    id: R20011
+    category: affordability
+    subcategory: strong_surplus
+    condition: metric_net_surplus_after_emi >= 10000
+    severity: low
+    score_impact: 0.08
+    reason: strong post-EMI surplus improves resilience to shocks
+
+  - rule_id: R20012
+    id: R20012
+    category: affordability
+    subcategory: moderate_surplus
+    condition: metric_net_surplus_after_emi >= 3000 and metric_net_surplus_after_emi < 10000
+    severity: low
+    score_impact: 0.04
+    reason: positive post-EMI surplus supports repayment continuity
+
+  - rule_id: R20013
+    id: R20013
+    category: affordability
+    subcategory: deficit_after_emi
+    condition: metric_net_surplus_after_emi < 0
+    severity: critical
+    score_impact: -0.15
+    reason: structural monthly deficit after EMI is a primary default indicator
+
+  - rule_id: R20014
+    id: R20014
+    category: affordability
+    subcategory: loan_size_aligned
+    condition: metric_loan_size_sensitivity <= 0.60
+    severity: low
+    score_impact: 0.05
+    reason: requested loan is proportionate to annualized inflow
+
+  - rule_id: R20015
+    id: R20015
+    category: affordability
+    subcategory: loan_size_stretched
+    condition: metric_loan_size_sensitivity > 1.00
+    severity: high
+    score_impact: -0.10
+    reason: loan size is high relative to annualized inflow
+
+  - rule_id: R20016
+    id: R20016
+    category: expense_behavior
+    subcategory: efficient_expense_profile
+    condition: metric_expense_to_income_ratio <= 0.60
+    severity: low
+    score_impact: 0.05
+    reason: controlled expenses leave room for debt servicing
+
+  - rule_id: R20017
+    id: R20017
+    category: expense_behavior
+    subcategory: expense_pressure
+    condition: metric_expense_to_income_ratio > 0.85
+    severity: high
+    score_impact: -0.09
+    reason: high recurring expenses materially reduce debt capacity
+
+  - rule_id: R20018
+    id: R20018
+    category: expense_behavior
+    subcategory: savings_buffer_good
+    condition: metric_net_savings_ratio >= 0.12
+    severity: low
+    score_impact: 0.08
+    reason: healthy savings ratio supports stable installment servicing
+
+  - rule_id: R20019
+    id: R20019
+    category: expense_behavior
+    subcategory: savings_buffer_thin
+    condition: metric_net_savings_ratio >= 0.0 and metric_net_savings_ratio < 0.05
+    severity: medium
+    score_impact: -0.06
+    reason: thin savings leaves limited room for repayment shocks
+
+  - rule_id: R20020
+    id: R20020
+    category: expense_behavior
+    subcategory: structural_negative_savings
     condition: metric_net_savings_ratio < 0.0
     severity: high
-    score_impact: -0.12
-    reason: spending above inflows indicates recurring cash deficit
+    score_impact: -0.11
+    reason: persistent negative savings indicates unsustainable cash flow
 
-  - rule_id: R10010
-    id: R10010
-    category: cashflow_discipline
+  - rule_id: R20021
+    id: R20021
+    category: liquidity_stress
+    subcategory: low_balance_contextual_risk
+    condition: stress_low_balance_tier in ['critical', 'high'] and metric_net_savings_ratio < 0.0 and metric_emi_to_income_ratio > 0.50
+    severity: high
+    score_impact: -0.09
+    reason: low balances are concerning when combined with deficit and high EMI load
+
+  - rule_id: R20022
+    id: R20022
+    category: liquidity_stress
+    subcategory: healthy_liquidity_buffer
+    condition: stress_low_balance_tier in ['stable', 'strong'] and metric_min_balance >= 10000
+    severity: low
+    score_impact: 0.06
+    reason: durable balance cushion improves repayment confidence
+
+  - rule_id: R20023
+    id: R20023
+    category: liquidity_stress
     subcategory: month_end_stress
     condition: cashflow_month_end_stress_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.08
-    reason: repeated month-end stress indicates fragile liquidity management
+    severity: medium
+    score_impact: -0.06
+    reason: repeated month-end tightness raises missed-payment probability
 
-  - rule_id: R10011
-    id: R10011
-    category: debt_burden
-    subcategory: emi_pattern
-    condition: emi_emi_deduction_tier in ['stable', 'strong']
-    severity: low
-    score_impact: 0.03
-    reason: visible EMI discipline can support structured credit behavior
-
-  - rule_id: R10012
-    id: R10012
-    category: debt_burden
-    subcategory: emi_pressure
-    condition: emi_emi_deduction_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.08
-    reason: frequent EMI deductions indicate existing repayment obligations
-
-  - rule_id: R10013
-    id: R10013
-    category: debt_burden
-    subcategory: hidden_liability
+  - rule_id: R20024
+    id: R20024
+    category: debt_behavior
+    subcategory: hidden_loan_obligation
     condition: emi_hidden_loan_tier in ['critical', 'high']
     severity: critical
-    score_impact: -0.12
-    reason: hidden or auto-debit loan obligations are a major risk
+    score_impact: -0.13
+    reason: hidden liabilities materially alter repayment capacity
 
-  - rule_id: R10014
-    id: R10014
-    category: digital_credit_risk
-    subcategory: digital_usage
-    condition: digital_digital_lending_usage_tier in ['critical', 'high']
+  - rule_id: R20025
+    id: R20025
+    category: debt_behavior
+    subcategory: active_emi_load
+    condition: emi_emi_deduction_tier in ['critical', 'high'] and metric_emi_to_income_ratio > 0.45
     severity: high
     score_impact: -0.08
-    reason: frequent short-term digital borrowing can indicate liquidity pressure
+    reason: existing EMI obligations plus elevated new EMI ratio increase burden
 
-  - rule_id: R10015
-    id: R10015
-    category: digital_credit_risk
-    subcategory: bnpl_usage
-    condition: digital_bnpl_dependency_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.07
-    reason: heavy BNPL dependence can mask repayment stress
+  - rule_id: R20026
+    id: R20026
+    category: debt_behavior
+    subcategory: digital_short_term_stress
+    condition: digital_digital_lending_usage_tier in ['critical', 'high'] or digital_bnpl_dependency_tier in ['critical', 'high']
+    severity: medium
+    score_impact: -0.06
+    reason: high short-term digital borrowing indicates liquidity dependence
 
-  - rule_id: R10016
-    id: R10016
-    category: spending_discipline
-    subcategory: bill_regular
+  - rule_id: R20027
+    id: R20027
+    category: debt_behavior
+    subcategory: disciplined_bill_behavior
     condition: bill_bill_regular_tier in ['stable', 'strong']
     severity: low
     score_impact: 0.03
-    reason: regular bill payment behavior signals discipline
+    reason: regular utility payments signal payment discipline
 
-  - rule_id: R10017
-    id: R10017
-    category: spending_discipline
-    subcategory: bill_irregular
-    condition: bill_bill_regular_tier in ['critical', 'high']
-    severity: medium
-    score_impact: -0.04
-    reason: irregular bill payment behavior may lead to delinquency
-
-  - rule_id: R10018
-    id: R10018
-    category: spending_discipline
-    subcategory: lifestyle_spike
-    condition: lifestyle_spending_spike_tier in ['critical', 'high']
-    severity: medium
-    score_impact: -0.05
-    reason: spending spikes suggest less predictable expense control
-
-  - rule_id: R10019
-    id: R10019
-    category: spending_discipline
-    subcategory: addiction_risk
+  - rule_id: R20028
+    id: R20028
+    category: debt_behavior
+    subcategory: high_risk_discretionary_spend
     condition: lifestyle_addiction_tier in ['critical', 'high']
+    severity: high
+    score_impact: -0.09
+    reason: sustained high-risk discretionary spending increases delinquency risk
+
+  - rule_id: R20029
+    id: R20029
+    category: policy_overrides
+    subcategory: high_quality_profile_boost
+    condition: metric_salary_months >= 9 and metric_net_savings_ratio >= 0.12 and metric_emi_to_income_ratio <= 0.35 and stress_low_balance_tier in ['stable', 'strong']
+    severity: low
+    score_impact: 0.09
+    reason: strong multi-signal profile supports confident approvals
+
+  - rule_id: R20030
+    id: R20030
+    category: policy_overrides
+    subcategory: reject_guardrail
+    condition: metric_emi_to_income_ratio > 0.60 and metric_net_surplus_after_emi < 0 and metric_loan_size_sensitivity > 1.20
     severity: critical
-    score_impact: -0.10
-    reason: gambling or high-risk discretionary spend elevates default risk
-
-  - rule_id: R10020
-    id: R10020
-    category: liquidity_stress
-    subcategory: low_balance_days
-    condition: stress_low_balance_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.10
-    reason: repeated low-balance days indicate repayment fragility
-
-  - rule_id: R10021
-    id: R10021
-    category: liquidity_stress
-    subcategory: credit_dependency
-    condition: stress_credit_dependency_tier in ['critical', 'high']
-    severity: high
-    score_impact: -0.06
-    reason: reliance on borrowing to close monthly gaps is risky
-
-  - rule_id: R10022
-    id: R10022
-    category: liquidity_stress
-    subcategory: healthy_liquidity
-    condition: metric_min_balance >= 10000 and metric_net_savings_ratio >= 0.10
-    severity: low
-    score_impact: 0.06
-    reason: strong minimum balance and savings support repayment capacity
-
-  - rule_id: R10023
-    id: R10023
-    category: liquidity_stress
-    subcategory: moderate_liquidity
-    condition: metric_min_balance >= 5000 and metric_net_savings_ratio >= 0.05
-    severity: low
-    score_impact: 0.03
-    reason: reasonable balance buffer supports small-ticket lending
-
-  - rule_id: R10024
-    id: R10024
-    category: overall_policy
-    subcategory: low_risk_profile
-    condition: metric_salary_months >= 6 and metric_net_savings_ratio >= 0.10 and stress_low_balance_tier in ['stable', 'strong']
-    severity: low
-    score_impact: 0.08
-    reason: stable income with savings buffer and limited liquidity stress supports approval
+    score_impact: -0.18
+    reason: severe affordability stress across multiple core indicators warrants rejection

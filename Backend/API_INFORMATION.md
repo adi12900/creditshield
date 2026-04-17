@@ -284,6 +284,45 @@ Base: `/api/v1/workflow`
 }
 ```
 
+### 43) Submit Final Underwriter Decision
+- `POST /api/v1/workflow/underwriter/decision-engine/{arn}/submit`
+- Body:
+```json
+{
+  "decision": "approve",
+  "reason": "Approved after manual underwriter review"
+}
+```
+
+Allowed `decision` values: `approve`, `reject`, `manual_review`.
+
+### 44) Underwriter Case Summary
+- `GET /api/v1/workflow/underwriter/case-summary/{arn}`
+- Returns full underwriting case packet including: application snapshot, creditworthiness, risk analysis, financial ratios, documents, underwriting notes, status tracking, and raw `kpi_metrics` from `loan_appraisal_records`.
+
+### 45) Underwriter Decision History
+- `GET /api/v1/workflow/underwriter/decisions/{arn}/history`
+- Returns previous underwriter decisions for the ARN.
+
+### 46) Send Back for Clarification
+- `POST /api/v1/workflow/underwriter/case/{arn}/send-back`
+- Body:
+```json
+{
+  "message": "Income mismatch detected. Please validate borrower declarations and re-submit."
+}
+```
+
+### 47) Request Additional Documents
+- `POST /api/v1/workflow/underwriter/case/{arn}/request-documents`
+- Body:
+```json
+{
+  "required_documents": ["bank_statement_12m", "itr_last_2_years"],
+  "message": "Need latest income and banking proof before final underwriting decision."
+}
+```
+
 ### Compliance Officer (requires `x-user-role: compliance_officer`)
 
 ### 33) Dashboard

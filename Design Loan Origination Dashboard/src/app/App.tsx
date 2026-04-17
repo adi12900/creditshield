@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useStore, UserRole } from './store';
+import { clearAuthToken, getAuthToken } from './lib/workflowApi';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/Login';
 import { DashboardLayout } from './components/layout/DashboardLayout';
@@ -11,20 +13,24 @@ import { UnderwriterDashboard } from './pages/dashboards/UnderwriterDashboard';
 import { ComplianceDashboard } from './pages/dashboards/ComplianceDashboard';
 import { OperationsDashboard } from './pages/dashboards/OperationsDashboard';
 import { SystemAdminDashboard } from './pages/dashboards/SystemAdminDashboard';
+import { FieldOfficerDashboard } from './pages/dashboards/FieldOfficerDashboard';
 
 // Loan Officer Pages
 import { ApplicationDetailPage } from './pages/ApplicationDetail';
-import { DocumentReviewPage } from './pages/loan-officer/DocumentReview';
+import { DocumentQueuePage } from './pages/loan-officer/DocumentQueuePage';
+import { DocumentDetailPage } from './pages/loan-officer/DocumentDetailPage';
 import { CommunicationPage } from './pages/loan-officer/Communication';
 import { LeadWorkbenchPage } from './pages/loan-officer/LeadWorkbench';
 import { ApplicationIntakePage } from './pages/loan-officer/ApplicationIntake';
 import { ESignAgreementPage } from './pages/loan-officer/ESignAgreement';
+import { FieldVisitCasePage } from './pages/field-officer/FieldVisitCasePage';
 
 // Credit Analyst Pages
-import { BureauReportPage } from './pages/credit-analyst/BureauReport';
 import { FinancialRatiosPage } from './pages/credit-analyst/FinancialRatios';
 import { AIScorePage } from './pages/credit-analyst/AIScore';
 import { CreditMemoPage } from './pages/credit-analyst/CreditMemo';
+import { CibilReportsPage } from './pages/cibil/CibilReports';
+import { CibilReportViewerPage } from './pages/cibil/CibilReportViewer';
 
 // Underwriter Pages
 import { PolicyOverridePage } from './pages/underwriter/PolicyOverride';
@@ -83,13 +89,57 @@ function RoleProtectedRoute({
   return <>{children}</>;
 }
 
+function CibilReportRedirectRoute() {
+  const { id } = useParams();
+  return <Navigate to={`/dashboard/cibil-report/${id ?? ''}`} replace />;
+}
+
+function readTokenClaims(token: string): { sub?: string; role?: string; full_name?: string; exp?: number } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(payload.padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '='));
+    return JSON.parse(json) as { sub?: string; role?: string; full_name?: string; exp?: number };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const user = useStore((state) => state.user);
+  const setUser = useStore((state) => state.setUser);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    const claims = readTokenClaims(token);
+    if (!claims?.role) {
+      clearAuthToken();
+      setUser(null);
+      return;
+    }
+
+    const tokenRole = claims.role as UserRole;
+    const tokenName = claims.full_name || claims.sub || 'Authenticated User';
+    const tokenEmail = claims.sub || 'user';
+    if (!user || user.role !== tokenRole || user.name !== tokenName || user.email !== tokenEmail) {
+      setUser({
+        id: 'auth-user',
+        name: tokenName,
+        email: tokenEmail,
+        role: tokenRole,
+      });
+    }
+  }, [setUser, user]);
 
   const getDashboard = () => {
     if (!user) return <Navigate to="/login" replace />;
 
     switch (user.role) {
+      case 'field_officer':
+        return <FieldOfficerDashboard />;
       case 'loan_officer':
         return <LoanOfficerDashboard />;
       case 'credit_analyst':
@@ -121,6 +171,8 @@ export default function App() {
         {/* Public Routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cibil-reports" element={<Navigate to="/dashboard/cibil-reports" replace />} />
+        <Route path="/cibil-report/:id" element={<CibilReportRedirectRoute />} />
 
         {/* Protected Dashboard Routes */}
         <Route path="/dashboard" element={
@@ -131,18 +183,24 @@ export default function App() {
           <Route index element={getDashboard()} />
 
           {/* Loan Officer Routes */}
-          <Route path="lead-workbench" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><LeadWorkbenchPage /></RoleProtectedRoute>} />
-          <Route path="application-intake" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationIntakePage /></RoleProtectedRoute>} />
+          <Route path="lead-workbench" element={<RoleProtectedRoute allowedRoles={['system_admin']}><LeadWorkbenchPage /></RoleProtectedRoute>} />
+          <Route path="application-intake" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ApplicationIntakePage /></RoleProtectedRoute>} />
           <Route path="application-detail" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ApplicationDetailPage /></RoleProtectedRoute>} />
-          <Route path="document-review" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentReviewPage /></RoleProtectedRoute>} />
+          <Route path="document-review" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentQueuePage /></RoleProtectedRoute>} />
+          <Route path="document-review/:arn" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><DocumentDetailPage /></RoleProtectedRoute>} />
           <Route path="communication" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><CommunicationPage /></RoleProtectedRoute>} />
           <Route path="e-sign-agreement" element={<RoleProtectedRoute allowedRoles={['loan_officer', 'system_admin']}><ESignAgreementPage /></RoleProtectedRoute>} />
 
+          {/* Field Officer Routes */}
+          <Route path="field-visits" element={<RoleProtectedRoute allowedRoles={['field_officer']}><FieldOfficerDashboard /></RoleProtectedRoute>} />
+          <Route path="field-visit/:arn" element={<RoleProtectedRoute allowedRoles={['field_officer']}><FieldVisitCasePage /></RoleProtectedRoute>} />
+
           {/* Credit Analyst Routes */}
-          <Route path="bureau-reports" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><BureauReportPage /></RoleProtectedRoute>} />
           <Route path="financial-ratios" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><FinancialRatiosPage /></RoleProtectedRoute>} />
-          <Route path="ai-score" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><AIScorePage /></RoleProtectedRoute>} />
+          <Route path="ai-score" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'underwriter', 'system_admin']}><AIScorePage /></RoleProtectedRoute>} />
           <Route path="credit-memo" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'system_admin']}><CreditMemoPage /></RoleProtectedRoute>} />
+          <Route path="cibil-reports" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportsPage /></RoleProtectedRoute>} />
+          <Route path="cibil-report/:id" element={<RoleProtectedRoute allowedRoles={['credit_analyst', 'loan_officer', 'underwriter', 'system_admin']}><CibilReportViewerPage /></RoleProtectedRoute>} />
 
           {/* Underwriter Routes */}
           <Route path="decision-engine" element={<RoleProtectedRoute allowedRoles={['underwriter', 'system_admin']}><DecisionEnginePage /></RoleProtectedRoute>} />

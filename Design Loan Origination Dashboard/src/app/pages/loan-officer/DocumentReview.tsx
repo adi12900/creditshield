@@ -7,6 +7,27 @@ import { useStore } from '../../store';
 import { getLoanPolicy, getRequiredDocumentsForLoanType } from '../../lib/rbiPolicy';
 import { workflowApi, type WorkflowDocumentItem } from '../../lib/workflowApi';
 
+function getPathFromUrl(url: string): string {
+  try {
+    return new URL(url).pathname.toLowerCase();
+  } catch {
+    return url.toLowerCase().split('?')[0].split('#')[0];
+  }
+}
+
+function isImageDocument(url: string, docType?: string): boolean {
+  const path = getPathFromUrl(url);
+  const imageByExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(path);
+  const type = (docType || '').toLowerCase();
+  const looksLikeImageDoc = type.includes('photo') || type.includes('selfie') || type.includes('image');
+  return imageByExt || looksLikeImageDoc;
+}
+
+function isPdfDocument(url: string): boolean {
+  const path = getPathFromUrl(url);
+  return /\.pdf$/i.test(path);
+}
+
 export function DocumentReviewPage() {
   const navigate = useNavigate();
   const selectedApplicationArn = useStore((state) => state.selectedApplicationArn);
@@ -55,6 +76,44 @@ export function DocumentReviewPage() {
       const message = error instanceof Error ? error.message : 'Failed to review document';
       window.alert(message);
     }
+  };
+
+  const resolveFreshDocumentUrl = async () => {
+    if (!selectedDoc) return null;
+
+    if (!user || user.role !== 'loan_officer') {
+      return selectedDoc.storage_url || null;
+    }
+
+    try {
+      const refreshed = await workflowApi.getDocuments(selectedApplication.arn, user.role);
+      setDocuments(refreshed);
+      const latest = refreshed.find((doc) => doc.id === selectedDoc.id) ?? selectedDoc;
+      setSelectedDoc(latest);
+      return latest.storage_url || null;
+    } catch {
+      return selectedDoc.storage_url || null;
+    }
+  };
+
+  const handleOpenDocument = async (download: boolean) => {
+    const url = await resolveFreshDocumentUrl();
+    if (!url) {
+      window.alert('Document URL is unavailable.');
+      return;
+    }
+
+    if (download) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = '';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const verifiedDocs = documents.filter(doc => doc.status === 'Verified').length;
@@ -195,29 +254,32 @@ export function DocumentReviewPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-slate-900">{selectedDoc?.type ?? 'No Document'}</h3>
               <div className="flex gap-2">
-                <a
-                  href={selectedDoc?.storage_url || '#'}
-                  download
+                <button
+                  onClick={() => void handleOpenDocument(true)}
                   className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   <Download className="w-4 h-4" />
                   Download
-                </a>
-                <a
-                  href={selectedDoc?.storage_url || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                </button>
+                <button
+                  onClick={() => void handleOpenDocument(false)}
                   className={`px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2 ${!selectedDoc?.storage_url ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   <Eye className="w-4 h-4" />
                   View Full
-                </a>
+                </button>
               </div>
             </div>
 
             <div className="bg-slate-100 rounded-lg aspect-[3/4] flex items-center justify-center mb-4 overflow-hidden">
               {selectedDoc?.storage_url ? (
-                selectedDoc.storage_url.match(/\.(jpg|jpeg|png)$/i) ? (
+                isPdfDocument(selectedDoc.storage_url) ? (
+                  <iframe
+                    src={`${selectedDoc.storage_url}#toolbar=0&navpanes=0`}
+                    title={selectedDoc.type}
+                    className="w-full h-full border-0"
+                  />
+                ) : isImageDocument(selectedDoc.storage_url, selectedDoc.type) ? (
                   <img
                     src={selectedDoc.storage_url}
                     alt={selectedDoc.type}
@@ -228,15 +290,7 @@ export function DocumentReviewPage() {
                   <div className="text-center p-6">
                     <FileText className="w-16 h-16 text-slate-400 mx-auto mb-3" />
                     <p className="text-sm text-slate-600 font-medium">{selectedDoc.type}</p>
-                    <a
-                      href={selectedDoc.storage_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Open PDF
-                    </a>
+                    <p className="mt-2 text-xs text-slate-500">Inline preview is not available for this file type.</p>
                   </div>
                 )
               ) : (

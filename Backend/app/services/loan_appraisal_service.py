@@ -7,6 +7,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -59,8 +60,48 @@ class LoanAppraisalService:
         except ValueError:
             return 0.0
 
+    def _column_looks_like_flag(self, series: pd.Series) -> bool:
+        sample = series.dropna().astype(str).str.strip().str.lower()
+        if sample.empty:
+            return False
+        sample = sample[~sample.isin({"", "-", "nan", "none"})]
+        if sample.empty:
+            return False
+        normalized = sample.str.replace(",", "", regex=False)
+        numeric = pd.to_numeric(normalized, errors="coerce")
+        if numeric.notna().mean() < 0.85:
+            return False
+        non_zero = numeric[numeric > 0]
+        if non_zero.empty:
+            return False
+        if non_zero.max() <= 1.5 and numeric.dropna().isin([0, 1]).mean() >= 0.75:
+            return True
+        return set(sample.unique()).issubset({"0", "1", "1.0", "0.0", "cr", "dr", "credit", "debit"})
+
     def _parse_date_series(self, series: pd.Series) -> pd.Series:
         return pd.to_datetime(series, errors="coerce", dayfirst=True)
+
+    def _infer_suffix_from_bytes(self, payload: bytes) -> str:
+        if payload.startswith(b"%PDF"):
+            return ".pdf"
+        if payload.startswith(b"PK\x03\x04"):
+            return ".xlsx"
+        # OLE compound binary signature used by legacy .xls files.
+        if payload.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
+            return ".xls"
+
+        # Heuristic fallback for CSV-like plain text payloads.
+        head = payload[:4096]
+        try:
+            decoded = head.decode("utf-8", errors="ignore")
+        except Exception:
+            decoded = ""
+        if decoded:
+            non_empty_lines = [line for line in decoded.splitlines() if line.strip()]
+            if non_empty_lines and any(sep in non_empty_lines[0] for sep in (",", ";", "\t")):
+                return ".csv"
+
+        return ""
 
     def _extract_pdf_to_dataframe(self, pdf_path: Path) -> pd.DataFrame:
         try:
@@ -151,8 +192,10 @@ class LoanAppraisalService:
         norm["reference"] = raw[ref_col].fillna("").astype(str) if ref_col else norm["description"]
 
         if debit_col or credit_col:
-            norm["debit"] = raw[debit_col].apply(self._to_number) if debit_col else 0.0
-            norm["credit"] = raw[credit_col].apply(self._to_number) if credit_col else 0.0
+            debit_series = raw[debit_col].apply(self._to_number) if debit_col else pd.Series(0.0, index=raw.index)
+            credit_series = raw[credit_col].apply(self._to_number) if credit_col else pd.Series(0.0, index=raw.index)
+            norm["debit"] = debit_series
+            norm["credit"] = credit_series
         elif amount_col:
             amount_series = raw[amount_col].apply(self._to_number)
             if type_col:
@@ -173,6 +216,31 @@ class LoanAppraisalService:
             norm["balance"] = raw[balance_col].apply(self._to_number)
         else:
             norm["balance"] = (norm["credit"] - norm["debit"]).cumsum()
+
+        # Some statements expose debit/credit as flag columns (for example 1.0 / -)
+        # and keep the real movement in the balance series. Reconstruct amounts from
+        # balance deltas in that case so we do not confuse row markers with money.
+        if balance_col and debit_col and credit_col:
+            flag_style = self._column_looks_like_flag(raw[debit_col]) or self._column_looks_like_flag(raw[credit_col])
+            if flag_style:
+                balance_numeric = raw[balance_col].apply(self._to_number).fillna(method="ffill").fillna(0.0)
+                balance_delta = balance_numeric.diff().fillna(0.0)
+                derived_amount = balance_delta.abs().round(2)
+
+                debit_mark = debit_series > 0
+                credit_mark = credit_series > 0
+                inferred_debit = debit_mark | (~credit_mark & (balance_delta < 0))
+                inferred_credit = credit_mark | (~debit_mark & (balance_delta > 0))
+
+                reconstructed_debit = pd.Series(0.0, index=raw.index)
+                reconstructed_credit = pd.Series(0.0, index=raw.index)
+                reconstructed_debit.loc[inferred_debit] = derived_amount.loc[inferred_debit]
+                reconstructed_credit.loc[inferred_credit] = derived_amount.loc[inferred_credit]
+                reconstructed_debit = pd.concat([reconstructed_debit, debit_series], axis=1).max(axis=1)
+                reconstructed_credit = pd.concat([reconstructed_credit, credit_series], axis=1).max(axis=1)
+
+                norm["debit"] = reconstructed_debit.clip(lower=0).round(2)
+                norm["credit"] = reconstructed_credit.clip(lower=0).round(2)
 
         norm = norm[norm["txn_date"].notna()].copy()
         norm["txn_date"] = norm["txn_date"].dt.strftime("%d/%m/%Y")
@@ -241,6 +309,39 @@ class LoanAppraisalService:
             "period_start": start_dt.strftime("%Y-%m-%d"),
             "period_end": end_dt.strftime("%Y-%m-%d"),
         }
+
+    def _build_monthly_balance_table(self, normalized: pd.DataFrame) -> list[dict[str, Any]]:
+        df = normalized.copy()
+        df["txn_date_dt"] = pd.to_datetime(df["txn_date"], format="%d/%m/%Y", errors="coerce")
+        df = df[df["txn_date_dt"].notna()].copy()
+        if df.empty:
+            return []
+
+        df["debit"] = pd.to_numeric(df["debit"], errors="coerce").fillna(0.0)
+        df["credit"] = pd.to_numeric(df["credit"], errors="coerce").fillna(0.0)
+        df["balance"] = pd.to_numeric(df["balance"], errors="coerce").fillna(0.0)
+        df["month"] = df["txn_date_dt"].dt.to_period("M").astype(str)
+
+        monthly = df.sort_values("txn_date_dt").groupby("month", as_index=False).agg(
+            credit=("credit", "sum"),
+            debit=("debit", "sum"),
+            opening_balance=("balance", "first"),
+            closing_balance=("balance", "last"),
+        )
+        monthly["savings"] = monthly["credit"] - monthly["debit"]
+        monthly["month_index"] = range(1, len(monthly) + 1)
+        return [
+            {
+                "month_index": int(row["month_index"]),
+                "month": str(row["month"]),
+                "credit": round(float(row["credit"]), 2),
+                "debit": round(float(row["debit"]), 2),
+                "savings": round(float(row["savings"]), 2),
+                "opening_balance": round(float(row["opening_balance"]), 2),
+                "balance_remaining": round(float(row["closing_balance"]), 2),
+            }
+            for _, row in monthly.iterrows()
+        ]
 
     def _summarize_rule_insights(self, result: dict[str, Any]) -> list[str]:
         rules = result.get("rule_evaluations") or []
@@ -541,6 +642,7 @@ class LoanAppraisalService:
         return {
             "loan_type": loan_type,
             "analysis_period": period_meta,
+            "monthly_balance_table": result.get("monthly_balance_table", []),
             "rows_analyzed": rows_analyzed,
             "requested_loan_amount": loan_amount,
             "final_score": result.get("final_score"),
@@ -1015,9 +1117,21 @@ class LoanAppraisalService:
             final_justification=str(final_justification),
         )
 
-        # Keep top-level result decision synchronized.
+        # Keep validated and top-level result decisions synchronized.
+        aligned_summary = (
+            f"Validated appraisal. Final score {final_score:.2f} ({risk_level}). "
+            f"Recommendation: {recommendation}."
+        )
+        validated["risk_level"] = risk_level
+        validated["recommendation"] = recommendation
+        validated["final_score"] = final_score
+        validated["corrected_summary"] = aligned_summary
+        result["validated_appraisal"] = validated
+
         result["risk_level"] = risk_level
         result["recommendation"] = recommendation
+        result["final_score"] = final_score
+        result["summary"] = aligned_summary
         return normalized
 
     def _build_deterministic_professional_report(self, result: dict[str, Any]) -> dict[str, Any]:
@@ -1257,9 +1371,12 @@ class LoanAppraisalService:
         rules_abs = self._resolve_path(rules_path, must_exist=True)
         model_abs = self._resolve_path(model_path, must_exist=False)
 
-        suffix = Path(source_file_name).suffix.lower()
-        if suffix not in {".csv", ".pdf"}:
-            raise LoanAppraisalServiceError("Only CSV or PDF statements are supported", 400)
+        normalized_source_name = Path(urlparse(source_file_name).path).name or Path(source_file_name).name
+        suffix = Path(normalized_source_name).suffix.lower()
+        if suffix not in {".csv", ".pdf", ".xlsx", ".xls"}:
+            suffix = self._infer_suffix_from_bytes(payload_bytes)
+        if suffix not in {".csv", ".pdf", ".xlsx", ".xls"}:
+            raise LoanAppraisalServiceError("Only CSV, XLS, XLSX, or PDF statements are supported", 400)
 
         with tempfile.TemporaryDirectory(prefix="loan_appraisal_") as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -1270,14 +1387,29 @@ class LoanAppraisalService:
                 raw_df = self._extract_pdf_to_dataframe(source_path)
                 detected_format = "pdf"
             else:
-                try:
-                    raw_df = pd.read_csv(source_path, dtype=str)
-                except Exception as exc:
-                    raise LoanAppraisalServiceError(f"Unable to read CSV statement: {exc}", 400) from exc
-                detected_format = "csv"
+                if suffix == ".csv":
+                    try:
+                        raw_df = pd.read_csv(source_path, dtype=str)
+                    except Exception as exc:
+                        raise LoanAppraisalServiceError(f"Unable to read CSV statement: {exc}", 400) from exc
+                    detected_format = "csv"
+                else:
+                    excel_engine = "xlrd" if suffix == ".xls" else "openpyxl"
+                    try:
+                        raw_df = pd.read_excel(source_path, dtype=str, engine=excel_engine)
+                    except ModuleNotFoundError as exc:
+                        raise LoanAppraisalServiceError(
+                            f"Excel parsing for {suffix} requires '{excel_engine}' package in backend environment",
+                            500,
+                        ) from exc
+                    except Exception as exc:
+                        raise LoanAppraisalServiceError(f"Unable to read Excel statement ({suffix}): {exc}", 400) from exc
+                    detected_format = "xlsx" if suffix == ".xlsx" else "xls"
 
             normalized = self._normalize_statement_df(raw_df)
             normalized, period_meta = self._restrict_to_recent_one_year(normalized)
+            monthly_balance_table = self._build_monthly_balance_table(normalized)
+            period_meta = {**period_meta, "month_count": str(len(monthly_balance_table))}
             notable_transactions = self._extract_notable_transactions(normalized)
             normalized_csv_path = tmp_path / "normalized_statement.csv"
             normalized.to_csv(normalized_csv_path, index=False, header=False)
@@ -1315,6 +1447,7 @@ class LoanAppraisalService:
         result["loan_type"] = loan_type
         result["loan_type_insights"] = self._loan_type_insights(loan_type, result)
         result["analysis_period"] = period_meta
+        result["monthly_balance_table"] = monthly_balance_table
         result["rulebook_top_insights"] = self._summarize_rule_insights(result)
 
         validated_appraisal = self._build_validated_appraisal(
@@ -1472,6 +1605,7 @@ class LoanAppraisalService:
 
         professional_appraisal = _as_dict(result_block.get("professional_appraisal"))
         validated = _as_dict(result_block.get("validated_appraisal"))
+        strict_metrics = _as_dict(result_block.get("strict_pipeline_metrics"))
 
         top_income = _as_dict(result_block.get("income_analysis"))
         top_cashflow = _as_dict(result_block.get("cashflow_analysis"))
@@ -1481,11 +1615,31 @@ class LoanAppraisalService:
         cashflow_diag = _as_dict(professional_appraisal.get("cashflow_diagnostics"))
         liability_diag = _as_dict(professional_appraisal.get("liability_diagnostics"))
         loan_amount_diag = _as_dict(professional_appraisal.get("loan_amount_analysis"))
+        final_underwriting_view = _as_dict(professional_appraisal.get("final_underwriting_view"))
 
-        monthly_income = _to_float(income_diag.get("monthly_income_estimate") or top_income.get("salary_mean"))
+        month_count = len(_as_list(result_block.get("monthly_balance_table")))
+        if month_count <= 0:
+            try:
+                month_count = int(analysis_result.get("analysis_period", {}).get("month_count", 0) or 0)
+            except (TypeError, ValueError):
+                month_count = 0
+        month_count = max(1, month_count)
+
+        monthly_income = _to_float(
+            income_diag.get("monthly_income_estimate")
+            or cashflow_diag.get("monthly_income")
+            or top_cashflow.get("monthly_income")
+            or strict_metrics.get("monthly_income")
+            or top_income.get("salary_mean")
+        )
         total_inflow = _to_float(top_cashflow.get("total_inflow"))
         total_outflow = _to_float(top_cashflow.get("total_outflow"))
-        monthly_expenses = (total_outflow / 12.0) if total_outflow > 0 else 0.0
+        monthly_expenses = _to_float(
+            cashflow_diag.get("monthly_expense")
+            or top_cashflow.get("monthly_expense")
+            or strict_metrics.get("monthly_expense")
+            or ((total_outflow / month_count) if total_outflow > 0 else 0.0)
+        )
         net_savings_ratio = _to_float(top_cashflow.get("net_savings_ratio"))
         low_balance_days = int(_to_float(top_cashflow.get("low_balance_days"), 0.0))
         min_balance = _to_float(top_cashflow.get("minimum_balance"))
@@ -1498,16 +1652,38 @@ class LoanAppraisalService:
         final_score = _to_float(result_block.get("final_score"))
         risk_level = str(result_block.get("risk_level", "Not Assessed"))
         recommendation = str(result_block.get("recommendation", "PENDING"))
-        confidence_level = _confidence_band(result_block.get("confidence_score"))
+        confidence_level = _confidence_band(
+            final_underwriting_view.get("confidence") or result_block.get("confidence_score")
+        )
 
         classification = str(income_diag.get("classification") or "Unknown")
         behavior_summary = str(professional_appraisal.get("executive_summary", ""))
-        risk_justification = professional_appraisal.get("risk_justification", "")
+        risk_justification = (
+            final_underwriting_view.get("justification")
+            or professional_appraisal.get("risk_justification", "")
+        )
 
         affordability_class = str(
             loan_amount_diag.get("affordability")
             or loan_amount_diag.get("classification")
             or "N/A"
+        )
+
+        salary_months_detected = int(_to_float(top_income.get("salary_months_detected"), 0.0))
+        salary_variance_ratio = _to_float(top_income.get("salary_variance_ratio"), 0.0)
+        salary_trend_pct = _to_float(top_income.get("salary_trend_pct"), 0.0)
+        salary_delay_std_days = _to_float(top_income.get("salary_delay_std_days"), 0.0)
+        employer_switch_count = int(_to_float(top_income.get("employer_switch_count"), 0.0))
+        employers_detected = _as_list(top_income.get("employers_detected"))
+
+        salary_reduction_signal = (
+            "Detected" if salary_trend_pct < -0.05 else "Not detected"
+        )
+        salary_delay_signal = (
+            "Likely delayed/irregular" if salary_delay_std_days > 3.0 else "Mostly on-time"
+        )
+        company_switch_signal = (
+            "Detected" if employer_switch_count > 0 else "Not detected"
         )
 
         corrected_rules = _as_list(validated.get("corrected_rule_evaluations"))
@@ -1558,6 +1734,7 @@ class LoanAppraisalService:
             "source_file": analysis_result.get("source_file", "N/A"),
             "analysis_period": analysis_result.get("analysis_period", {}),
             "rows_analyzed": analysis_result.get("rows_analyzed", 0),
+            "monthly_balance_table": result_block.get("monthly_balance_table", []),
             "applicant_profile": {
                 "classification": classification,
                 "financial_health": ("Weak" if final_score < 40 else "Moderate" if final_score < 70 else "Strong"),
@@ -1588,7 +1765,7 @@ class LoanAppraisalService:
                 "confidence_level": confidence_level,
                 "final_score": final_score,
                 "justification": str(risk_justification)[:500],
-                "confidence_explanation": str(professional_appraisal.get("final_underwriting_view", "")),
+                "confidence_explanation": str(final_underwriting_view),
             },
             "income_analysis": {
                 "source": ", ".join(_as_list(top_income.get("employers_detected"))) or "Unknown",
@@ -1602,6 +1779,15 @@ class LoanAppraisalService:
                 "risks": ", ".join(_as_list(income_diag.get("stability_observations"))) or "None identified",
                 "classification": classification,
                 "detailed_observation": income_diag or "Standard income pattern.",
+                "salary_months_detected": salary_months_detected,
+                "salary_variance_ratio": salary_variance_ratio,
+                "salary_trend_pct": salary_trend_pct,
+                "salary_delay_std_days": salary_delay_std_days,
+                "employer_switch_count": employer_switch_count,
+                "employers_detected": employers_detected,
+                "salary_reduction_signal": salary_reduction_signal,
+                "salary_delay_signal": salary_delay_signal,
+                "company_switch_signal": company_switch_signal,
             },
             "cashflow_analysis": {
                 "total_inflow": total_inflow,
@@ -1665,7 +1851,7 @@ class LoanAppraisalService:
                 "stress_level": ("High" if low_balance_days > 100 else "Moderate" if low_balance_days > 50 else "Low"),
                 "stress_indicators": _as_list(cashflow_diag.get("liquidity_observations")) or "Standard financial behavior",
                 "repayment_prediction": ("Likely regular" if final_score > 50 else "May need monitoring" if final_score > 40 else "High default risk"),
-                "detailed_assessment": professional_appraisal.get("final_underwriting_view", ""),
+                "detailed_assessment": str(risk_justification or "Applicant demonstrates acceptable financial discipline."),
             },
             "notable_transactions": _as_list(professional_appraisal.get("notable_transactions")),
             "rule_insights": structured_rules,

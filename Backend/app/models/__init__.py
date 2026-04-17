@@ -4,6 +4,17 @@ from app.models.borrower_kyc_profile import BorrowerKycProfile
 from app.models.loan_application import LoanApplication
 from app.models.aadhaar_registry import AadhaarRegistry
 from app.models.document import Document
+from app.models.credit_memo import CreditMemo
+from app.models.field_verification_evidence import FieldVerificationEvidence
 
-__all__ = ["User", "Borrower", "BorrowerKycProfile", "LoanApplication", "AadhaarRegistry", "Document"]
+__all__ = [
+	"User",
+	"Borrower",
+	"BorrowerKycProfile",
+	"LoanApplication",
+	"AadhaarRegistry",
+	"Document",
+	"CreditMemo",
+	"FieldVerificationEvidence",
+]
 

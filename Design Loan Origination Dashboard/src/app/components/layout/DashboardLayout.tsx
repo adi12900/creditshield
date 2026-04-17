@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useStore } from '../../store';
@@ -10,6 +10,11 @@ import { workflowApi } from '../../lib/workflowApi';
 export function DashboardLayout() {
   const { user, selectedApplicationArn, setSelectedApplicationArn } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -62,7 +67,7 @@ export function DashboardLayout() {
   if (!user) return null;
 
   return (
-    <div className="h-screen flex" style={{ backgroundColor: '#F5F7FA' }}>
+    <div className="min-h-screen flex" style={{ backgroundColor: '#F5F7FA' }}>
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
@@ -73,7 +78,7 @@ export function DashboardLayout() {
 
       {/* Sidebar */}
       <div
-        className={`fixed lg:relative inset-y-0 left-0 z-50 transform transition-transform duration-300 lg:transform-none ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen transform transition-transform duration-300 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -87,7 +92,7 @@ export function DashboardLayout() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Mobile Menu Button */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
           <button
@@ -101,7 +106,7 @@ export function DashboardLayout() {
         </div>
 
         <Navbar />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 p-4 md:p-6">
           <Outlet />
         </main>
       </div>

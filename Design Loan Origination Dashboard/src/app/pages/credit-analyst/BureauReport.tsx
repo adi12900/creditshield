@@ -29,6 +29,7 @@ export function BureauReportPage() {
   const utilizationPct = totalLimit > 0 ? Math.round((totalBalance / totalLimit) * 100) : 0;
   const derogatoryMarks = tradelines.filter((line) => line.dpd > 0).length;
   const activeAccounts = tradelines.filter((line) => line.status === 'Active').length;
+  const hasBureauData = tradelines.length > 0 || scoreData.length > 0;
 
   return (
     <div className="space-y-6">
@@ -81,15 +82,21 @@ export function BureauReportPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <h3 className="font-semibold text-slate-900 mb-4">Score Trend (24 Months)</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={scoreData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-              <XAxis dataKey="month" stroke="#64748B" />
-              <YAxis stroke="#64748B" domain={[600, 800]} />
-              <Tooltip />
-              <Line type="monotone" dataKey="score" stroke="#00A86B" strokeWidth={3} />
-            </LineChart>
-          </ResponsiveContainer>
+          {scoreData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={scoreData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="month" stroke="#64748B" />
+                <YAxis stroke="#64748B" domain={[600, 800]} />
+                <Tooltip />
+                <Line type="monotone" dataKey="score" stroke="#00A86B" strokeWidth={3} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-500">
+              No score trend found in database for this application.
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -127,38 +134,47 @@ export function BureauReportPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="font-semibold text-slate-900 mb-4">Active Tradelines</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Lender</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Limit</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Balance</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">DPD</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {tradelines.map((trade, idx) => (
-                <tr key={idx}>
-                  <td className="px-4 py-3 text-sm text-slate-900">{trade.lender}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{trade.type}</td>
-                  <td className="px-4 py-3 text-sm text-slate-900">₹{(trade.limit / 100000).toFixed(2)}L</td>
-                  <td className="px-4 py-3 text-sm text-slate-900">₹{(trade.balance / 100000).toFixed(2)}L</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      trade.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {trade.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-semibold text-green-600">{trade.dpd}</td>
+        {tradelines.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Lender</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Limit</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Balance</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">DPD</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {tradelines.map((trade, idx) => (
+                  <tr key={idx}>
+                    <td className="px-4 py-3 text-sm text-slate-900">{trade.lender}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{trade.type}</td>
+                    <td className="px-4 py-3 text-sm text-slate-900">₹{(trade.limit / 100000).toFixed(2)}L</td>
+                    <td className="px-4 py-3 text-sm text-slate-900">₹{(trade.balance / 100000).toFixed(2)}L</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        trade.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {trade.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold text-green-600">{trade.dpd}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+            No tradelines found in database for this application yet.
+          </div>
+        )}
+        {!hasBureauData && (
+          <p className="mt-3 text-xs text-slate-500">This page now shows only database-backed bureau data and does not use demo values.</p>
+        )}
       </div>
     </div>
   );

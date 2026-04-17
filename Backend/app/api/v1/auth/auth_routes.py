@@ -27,6 +27,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             expires_in_seconds=expires_in_seconds,
         )
 
+    if username == settings.field_officer_username and payload.password == settings.field_officer_password:
+        token, expires_in_seconds = create_access_token(
+            username=settings.field_officer_username,
+            role="field_officer",
+            full_name=settings.field_officer_full_name,
+        )
+        return TokenResponse(
+            access_token=token,
+            role="field_officer",
+            full_name=settings.field_officer_full_name,
+            expires_in_seconds=expires_in_seconds,
+        )
+
     user = user_service.get_user_by_email(db, username)
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(

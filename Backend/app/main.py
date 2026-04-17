@@ -16,12 +16,16 @@ from app.api.v1.borrower.kyc_otp_routes import router as kyc_otp_router
 from app.api.v1.risk.setu_routes import router as setu_router
 from app.api.v1.users.user_routes import router as users_router
 from app.api.v1.workflow.role_routes import router as workflow_router
+from app.api.v1.workflow.field_evidence_routes import router as field_evidence_router
 from app.api.v1.workflow.document_proxy_routes import router as document_proxy_router
+from app.api.v1.document_verification_routes import router as document_verification_router
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import Base, SessionLocal, engine
 from app.models import borrower as _borrower_models  # noqa: F401
 from app.models import user as _user_models  # noqa: F401
 from app.models import aadhaar_registry as _aadhaar_models  # noqa: F401
+from app.models import credit_memo as _credit_memo_models  # noqa: F401
+from app.models import field_verification_evidence as _field_evidence_models  # noqa: F401
 from app.services.risk.setu_aa_service import setu_aa_service
 
 logger = logging.getLogger("uvicorn.error")
@@ -53,7 +57,22 @@ if agent_router is not None:
 @app.on_event("startup")
 def startup_database_check() -> None:
     try:
+        # Ensure all imported models are present in metadata and created if missing.
+        Base.metadata.create_all(bind=engine)
         with SessionLocal() as db:
+            # Backfill legacy credit_memos schema safely when database table exists from older versions.
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS summary TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS strengths TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS risk_factors TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS recommendation VARCHAR(40)"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS conditions TEXT"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS payload JSON"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS is_submitted BOOLEAN DEFAULT FALSE"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+            db.execute(text("ALTER TABLE IF EXISTS credit_memos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_credit_memos_application_id ON credit_memos (application_id)"))
+            db.commit()
             db.execute(text("SELECT 1"))
         logger.info("Database connection status: connected")
     except SQLAlchemyError as exc:
@@ -92,4 +111,6 @@ app.include_router(document_upload_router)  # No prefix - uses /borrower from ro
 app.include_router(kyc_otp_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(workflow_router, prefix="/api/v1")
+app.include_router(field_evidence_router, prefix="/api/v1")
 app.include_router(document_proxy_router)  # Uses /api/v1/documents from router
+app.include_router(document_verification_router)

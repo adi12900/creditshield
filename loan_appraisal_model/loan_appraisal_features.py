@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -52,6 +52,7 @@ BILL_KEYWORDS = [
     "prime",
     "hotstar",
     "utility",
+    "spotify",
 ]
 
 LIFESTYLE_KEYWORDS = [
@@ -85,6 +86,45 @@ ADDICTION_KEYWORDS = [
 
 EMI_KEYWORDS = ["emi", "loan", "nach", "ecs", "ach", "autopay", "auto debit", "autodebit"]
 
+EXPENSE_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+    "Food": ["swiggy", "zomato", "restaurant", "food", "cafe", "bigbasket", "dmart", "grocery"],
+    "Bills": [
+        "electricity",
+        "water",
+        "internet",
+        "airtel",
+        "jio",
+        "recharge",
+        "gas",
+        "utility",
+        "bill",
+        "netflix",
+        "prime",
+        "hotstar",
+        "spotify",
+        "insurance",
+        "dth",
+    ],
+    "Rent": ["rent", "landlord", "lease", "warehouse rent"],
+    "Travel": ["ola", "uber", "irctc", "flight", "travel", "metro", "bus"],
+    "Shopping": ["amazon", "flipkart", "myntra", "shopping", "store", "bookmyshow"],
+    "Transfers": [
+        "p2p transfer",
+        "account transfer",
+        "savings transfer",
+        "trf",
+        "neft dr",
+        "rtgs dr",
+        "imps",
+        "transfer",
+        "vendor payment",
+        "supplier payment",
+    ],
+}
+
+INCOME_FREELANCE_KEYWORDS = ["project", "invoice", "inv", "consult", "freelance", "contract"]
+INCOME_BUSINESS_KEYWORDS = ["bulk receipt", "invoice settlement", "clt", "rtgs cr", "business"]
+
 
 @dataclass
 class FeatureResult:
@@ -101,7 +141,7 @@ def _to_amount(value: Any) -> float:
     if value is None:
         return 0.0
     s = str(value).strip().replace(",", "")
-    if s in {"", "-", "nan", "None"}:
+    if s in {"", "-", "nan", "None", "null", "0.00"}:
         return 0.0
     try:
         return float(s)
@@ -147,17 +187,99 @@ def _parse_employer(description: str) -> str:
     return "UNKNOWN"
 
 
+def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    col_map = {str(c).strip().lower(): c for c in df.columns}
+
+    def pick(*names: str) -> pd.Series:
+        for n in names:
+            key = n.lower()
+            if key in col_map:
+                return df[col_map[key]]
+        return pd.Series([""] * len(df), index=df.index, dtype="object")
+
+    out = pd.DataFrame(index=df.index)
+    out["txn_date"] = pick("txn_date", "post_date", "date")
+    out["value_date"] = pick("value_date", "txn_date", "post_date")
+    out["description"] = pick("description", "details", "narration", "remarks")
+    out["reference"] = pick("reference", "ref_no", "ref", "chq")
+    out["debit"] = pick("debit", "withdrawal", "dr")
+    out["credit"] = pick("credit", "deposit", "cr")
+    out["balance"] = pick("balance", "closing_balance", "bal")
+    return out
+
+
+def _categorize_expenses(df: pd.DataFrame) -> Dict[str, float]:
+    totals = {k: 0.0 for k in ["Food", "Bills", "Rent", "Travel", "Shopping", "Transfers", "Unknown"]}
+    debit_df = df[df["debit_amt"] > 0].copy()
+
+    for _, row in debit_df.iterrows():
+        desc = str(row.get("description", "")).lower()
+        amt = float(row.get("debit_amt", 0.0) or 0.0)
+        assigned = False
+        for cat, kws in EXPENSE_CATEGORY_KEYWORDS.items():
+            if any(k in desc for k in kws):
+                totals[cat] += amt
+                assigned = True
+                break
+        if not assigned:
+            totals["Unknown"] += amt
+
+    return {k: round(v, 2) for k, v in totals.items()}
+
+
+def _classify_income_type(df: pd.DataFrame, salary_months: int) -> str:
+    credits = df[df["credit_amt"] > 0].copy()
+    if credits.empty:
+        return "Unemployed"
+
+    desc_text = " ".join(credits["description"].astype(str).str.lower().tolist())
+    salary_hits = int(credits["description"].str.lower().str.contains("sal|salary|payroll", regex=True).sum())
+    freelance_hits = sum(desc_text.count(k) for k in INCOME_FREELANCE_KEYWORDS)
+    business_hits = sum(desc_text.count(k) for k in INCOME_BUSINESS_KEYWORDS)
+
+    if salary_months >= 3 and salary_hits >= 3:
+        return "Salaried"
+    if business_hits >= max(3, freelance_hits):
+        return "Business"
+    if freelance_hits >= 2:
+        return "Freelance"
+    return "Informal income"
+
+
 def load_transactions(csv_path: str) -> pd.DataFrame:
-    df = pd.read_csv(csv_path, names=TX_COLUMNS, header=None, dtype=str)
-    for c in ["description", "reference"]:
+    try:
+        raw = pd.read_csv(csv_path, dtype=str)
+    except Exception:
+        raw = pd.read_csv(csv_path, names=TX_COLUMNS, header=None, dtype=str)
+
+    if not set(str(c).strip().lower() for c in raw.columns).intersection(
+        {"debit", "credit", "balance", "details", "description", "post_date", "txn_date"}
+    ):
+        raw = pd.read_csv(csv_path, names=TX_COLUMNS, header=None, dtype=str)
+
+    df = _standardize_columns(raw)
+    for c in ["description", "reference", "txn_date", "value_date", "debit", "credit", "balance"]:
         df[c] = df[c].fillna("").astype(str)
 
     df["txn_date"] = pd.to_datetime(df["txn_date"], format="%d/%m/%Y", errors="coerce")
     df["value_date"] = pd.to_datetime(df["value_date"], format="%d/%m/%Y", errors="coerce")
+
+    # Never drop transactions: fallback order for missing dates keeps every row in analysis.
+    df["txn_date"] = df["txn_date"].fillna(df["value_date"])
+    if df["txn_date"].isna().all():
+        df["txn_date"] = pd.Timestamp.utcnow().normalize()
+    else:
+        df["txn_date"] = df["txn_date"].ffill().bfill()
+
+    df["value_date"] = df["value_date"].fillna(df["txn_date"])
+
     df["debit_amt"] = df["debit"].apply(_to_amount)
     df["credit_amt"] = df["credit"].apply(_to_amount)
     df["balance_amt"] = df["balance"].apply(_to_amount)
-    df = df[df["txn_date"].notna()].copy()
+
+    df = df.reset_index(drop=True)
+    df["row_id"] = df.index
+    df = df.sort_values(["txn_date", "value_date", "row_id"]).reset_index(drop=True)
     df["month"] = df["txn_date"].dt.to_period("M")
     df["day"] = df["txn_date"].dt.day
     return df
@@ -201,20 +323,29 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
 
     total_inflow = float(df["credit_amt"].sum())
     total_outflow = float(df["debit_amt"].sum())
-    net_savings_ratio = (total_inflow - total_outflow) / total_inflow if total_inflow > 0 else -1.0
+
+    monthly_income = float(monthly_credit.mean()) if not monthly_credit.empty else 0.0
+    monthly_expense = float(monthly_debit.mean()) if not monthly_debit.empty else 0.0
+    monthly_savings = monthly_income - monthly_expense
+    if round(monthly_savings, 2) != round(monthly_income - monthly_expense, 2):
+        monthly_savings = monthly_income - monthly_expense
+    savings_ratio_pct = (monthly_savings / monthly_income) * 100.0 if monthly_income > 0 else 0.0
+    net_savings_ratio = (monthly_savings / monthly_income) if monthly_income > 0 else -1.0
 
     min_balance = float(df["balance_amt"].min())
     peak_balance = float(df["balance_amt"].max())
 
-    low_balance_threshold = max(5000.0, salary_mean * 0.2) if salary_mean > 0 else 5000.0
-    daily_min_balance = df.groupby(df["txn_date"].dt.normalize())["balance_amt"].min()
-    low_balance_days = int((daily_min_balance < low_balance_threshold).sum())
-    month_end_daily_min = (
-        df[df["day"] >= 25]
-        .groupby(df[df["day"] >= 25]["txn_date"].dt.normalize())["balance_amt"]
-        .min()
+    daily_closing_balance = (
+        df.sort_values(["txn_date", "value_date", "row_id"]) 
+        .groupby(df["txn_date"].dt.normalize())["balance_amt"]
+        .last()
     )
-    month_end_stress_count = int((month_end_daily_min < low_balance_threshold).sum())
+    low_balance_days = int((daily_closing_balance < 5000.0).sum())
+    total_balance_days = max(int(daily_closing_balance.shape[0]), 1)
+    liquidity_stress_pct = (low_balance_days / total_balance_days) * 100.0
+
+    month_end_daily_close = daily_closing_balance[daily_closing_balance.index.day >= 25]
+    month_end_stress_count = int((month_end_daily_close < 5000.0).sum())
 
     emi_mask = (df["debit_amt"] > 0) & df["description"].apply(lambda x: _contains_any(x, EMI_KEYWORDS))
     emi_df = df[emi_mask].copy()
@@ -260,6 +391,9 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         second_half = float(monthly_net.tail(len(monthly_net) - len(monthly_net) // 2).mean())
         if abs(first_half) > 1:
             credit_dependency_trend = (first_half - second_half) / abs(first_half)
+
+    expense_categories = _categorize_expenses(df)
+    income_classification = _classify_income_type(df, salary_months)
 
     income_risk = 0.0
     income_risk += 0.35 * (1.0 - min(1.0, salary_months / max(1, months)))
@@ -310,7 +444,7 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         "bill_bill_regular_tier": _tier_from_risk(min(1.0, bill_irregularity)),
         "lifestyle_spending_spike_tier": _tier_from_risk(min(1.0, spend_spike_months / max(1, months))),
         "lifestyle_addiction_tier": _tier_from_risk(min(1.0, addiction_ratio / 0.07)),
-        "stress_low_balance_tier": _tier_from_risk(min(1.0, low_balance_days / max(1, active_days * 0.3))),
+        "stress_low_balance_tier": _tier_from_risk(min(1.0, liquidity_stress_pct / 35.0)),
         "stress_credit_dependency_tier": _tier_from_risk(min(1.0, max(0.0, credit_dependency_trend))),
         "metric_salary_months": salary_months,
         "metric_salary_cv": round(salary_cv, 4),
@@ -319,9 +453,15 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         "metric_total_inflow": round(total_inflow, 2),
         "metric_total_outflow": round(total_outflow, 2),
         "metric_net_savings_ratio": round(net_savings_ratio, 4),
+        "metric_monthly_income": round(monthly_income, 2),
+        "metric_monthly_expense": round(monthly_expense, 2),
+        "metric_monthly_savings": round(monthly_savings, 2),
+        "metric_savings_ratio_pct": round(savings_ratio_pct, 2),
         "metric_min_balance": round(min_balance, 2),
         "metric_peak_balance": round(peak_balance, 2),
         "metric_month_end_stress_count": month_end_stress_count,
+        "metric_low_balance_days": low_balance_days,
+        "metric_liquidity_stress_pct": round(liquidity_stress_pct, 2),
         "metric_emi_months": emi_months,
         "metric_hidden_emi_count": hidden_emi_count,
         "metric_digital_lending_count": digital_lending_count,
@@ -354,9 +494,9 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
     if net_savings_ratio < 0.05:
         behavioral_flags.append("Very low savings cushion against monthly outflows")
         red_flags.append("Thin repayment buffer with low net savings")
-    if low_balance_days > active_days * 0.4:
+    if liquidity_stress_pct > 40.0:
         behavioral_flags.append("Frequent low-balance days indicate liquidity stress")
-        red_flags.append("Sustained low-balance pattern across active transaction days")
+        red_flags.append("Sustained low-balance pattern across daily closing balances")
     if addiction_ratio > 0.04:
         behavioral_flags.append("Addiction-related spending pattern detected")
         red_flags.append("Potential gambling/alcohol/high-risk discretionary spend")
@@ -372,17 +512,24 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         "employers_detected": employer_list,
         "employer_switch_count": employer_switch_count,
         "salary_delay_std_days": round(salary_day_std, 2),
+        "income_classification": income_classification,
     }
 
     cashflow_analysis = {
         "total_inflow": round(total_inflow, 2),
         "total_outflow": round(total_outflow, 2),
+        "monthly_income": round(monthly_income, 2),
+        "monthly_expense": round(monthly_expense, 2),
+        "monthly_savings": round(monthly_savings, 2),
+        "savings_ratio_pct": round(savings_ratio_pct, 2),
         "net_savings_ratio": round(net_savings_ratio, 4),
         "minimum_balance": round(min_balance, 2),
         "peak_balance": round(peak_balance, 2),
         "low_balance_days": low_balance_days,
+        "liquidity_stress_pct": round(liquidity_stress_pct, 2),
         "month_end_stress_count": month_end_stress_count,
         "negative_savings_months": negative_savings_months,
+        "expense_categories": expense_categories,
     }
 
     loan_analysis = {
@@ -410,6 +557,176 @@ def extract_features(df: pd.DataFrame) -> FeatureResult:
         cashflow_analysis=cashflow_analysis,
         loan_analysis=loan_analysis,
         behavioral_flags=behavioral_flags,
+        red_flags=red_flags,
+        category_scores=category_scores,
+    )
+
+
+# =====================================================
+# EDUCATION LOAN FEATURE EXTRACTION
+# =====================================================
+
+@dataclass
+class EducationFeatureResult:
+    features: Dict[str, Any]
+    student_analysis: Dict[str, Any]
+    co_applicant_cashflow: Dict[str, Any]
+    red_flags: List[str]
+    category_scores: Dict[str, float]
+
+
+def _gpa_to_score(gpa: float, scale: float = 10.0) -> float:
+    if scale <= 0:
+        return 0.0
+    return max(0.0, min(1.0, gpa / scale))
+
+
+def extract_education_features(
+    education_context: Dict[str, Any],
+    co_applicant_csv_path: str | None = None,
+) -> "EducationFeatureResult":
+    """
+    education_context keys:
+        university_rank        – int, lower = better (0 = unranked)
+        university_tier        – 'tier1' | 'tier2' | 'tier3'
+        course                 – str e.g. 'B.Tech', 'MBA'
+        course_duration_years  – int
+        marks_pct              – float 0-100
+        gpa                    – float
+        gpa_scale              – float default 10.0
+        loan_amount            – float
+        annual_fee             – float
+        living_expenses_annual – float
+        employment_prospects   – 'high' | 'medium' | 'low'
+        admission_confirmed    – bool
+        scholarship_amount     – float
+    """
+    ctx = education_context or {}
+
+    university_rank: int = int(ctx.get("university_rank", 0) or 0)
+    university_tier: str = str(ctx.get("university_tier", "tier3")).lower()
+    course: str = str(ctx.get("course", "")).strip()
+    course_duration: int = max(1, int(ctx.get("course_duration_years", 3) or 3))
+    marks_pct: float = float(ctx.get("marks_pct", 0.0) or 0.0)
+    gpa: float = float(ctx.get("gpa", 0.0) or 0.0)
+    gpa_scale: float = float(ctx.get("gpa_scale", 10.0) or 10.0)
+    loan_amount: float = float(ctx.get("loan_amount", 0.0) or 0.0)
+    annual_fee: float = float(ctx.get("annual_fee", 0.0) or 0.0)
+    living_expenses_annual: float = float(ctx.get("living_expenses_annual", 0.0) or 0.0)
+    employment_prospects: str = str(ctx.get("employment_prospects", "medium")).lower()
+    admission_confirmed: bool = bool(ctx.get("admission_confirmed", False))
+    scholarship_amount: float = float(ctx.get("scholarship_amount", 0.0) or 0.0)
+
+    if marks_pct > 0:
+        academic_score_norm = max(0.0, min(1.0, marks_pct / 100.0))
+    elif gpa > 0:
+        academic_score_norm = _gpa_to_score(gpa, gpa_scale)
+    else:
+        academic_score_norm = 0.5
+
+    tier_score_map = {"tier1": 1.0, "tier2": 0.70, "tier3": 0.40}
+    tier_score = tier_score_map.get(university_tier, 0.40)
+    if university_rank > 0:
+        rank_score = max(0.1, 1.0 - (university_rank / 1000.0))
+        university_quality = round((tier_score * 0.5) + (rank_score * 0.5), 4)
+    else:
+        university_quality = tier_score
+
+    prospect_score_map = {"high": 1.0, "medium": 0.6, "low": 0.3}
+    prospect_score = prospect_score_map.get(employment_prospects, 0.6)
+
+    total_cost = (annual_fee + living_expenses_annual) * course_duration
+    net_loan = max(0.0, loan_amount - scholarship_amount)
+    loan_to_cost_ratio = (net_loan / total_cost) if total_cost > 0 else 1.0
+
+    academic_cat = round(academic_score_norm * 100.0, 2)
+    university_cat = round(university_quality * 100.0, 2)
+    employability_cat = round(prospect_score * 100.0, 2)
+    loan_feasibility_cat = round(max(0.0, (1.0 - min(1.0, loan_to_cost_ratio)) * 100.0), 2)
+
+    red_flags: List[str] = []
+    if not admission_confirmed:
+        red_flags.append("Admission not yet confirmed — loan disbursement risk")
+    if academic_score_norm < 0.50:
+        red_flags.append("Academic performance below 50% — repayment capability concern")
+    if loan_to_cost_ratio > 0.90:
+        red_flags.append("Loan covers >90% of total education cost — high exposure")
+    if employment_prospects == "low":
+        red_flags.append("Low employment prospects in chosen field — repayment risk")
+    if university_quality < 0.45:
+        red_flags.append("University tier/rank indicates low placement quality")
+
+    student_analysis: Dict[str, Any] = {
+        "university_tier": university_tier,
+        "university_rank": university_rank,
+        "university_quality_score": round(university_quality, 4),
+        "course": course,
+        "course_duration_years": course_duration,
+        "marks_pct": marks_pct,
+        "gpa": gpa,
+        "academic_score_normalised": round(academic_score_norm, 4),
+        "loan_amount": round(loan_amount, 2),
+        "net_loan_after_scholarship": round(net_loan, 2),
+        "total_education_cost": round(total_cost, 2),
+        "loan_to_cost_ratio": round(loan_to_cost_ratio, 4),
+        "employment_prospects": employment_prospects,
+        "admission_confirmed": admission_confirmed,
+        "scholarship_amount": round(scholarship_amount, 2),
+    }
+
+    co_applicant_cashflow: Dict[str, Any] = {}
+    if co_applicant_csv_path:
+        try:
+            co_df = load_transactions(co_applicant_csv_path)
+            co_feat = extract_features(co_df)
+            co_cash = co_feat.cashflow_analysis
+            co_monthly_income = float(co_cash.get("monthly_income", 0.0) or 0.0)
+            co_monthly_expense = float(co_cash.get("monthly_expense", 0.0) or 0.0)
+            co_monthly_savings = co_monthly_income - co_monthly_expense
+            monthly_emi_capacity = net_loan / (course_duration * 12 + 12) if net_loan > 0 else 0.0
+            repayment_ratio = (monthly_emi_capacity / co_monthly_income) if co_monthly_income > 0 else 99.0
+
+            if repayment_ratio > 0.5:
+                red_flags.append("Co-applicant EMI burden >50% of income — repayment stress")
+            if float(co_cash.get("liquidity_stress_pct", 0.0)) > 40.0:
+                red_flags.append("Co-applicant shows frequent low-balance days")
+
+            co_cashflow_score = round(max(0.0, min(100.0, (1.0 - min(1.0, repayment_ratio)) * 100.0)), 2)
+            co_applicant_cashflow = {
+                "monthly_income": round(co_monthly_income, 2),
+                "monthly_expense": round(co_monthly_expense, 2),
+                "monthly_savings": round(co_monthly_savings, 2),
+                "liquidity_stress_pct": co_cash.get("liquidity_stress_pct", 0.0),
+                "min_balance": co_cash.get("minimum_balance", 0.0),
+                "income_classification": co_feat.income_analysis.get("income_classification", "Unknown"),
+                "estimated_monthly_emi_on_repayment": round(monthly_emi_capacity, 2),
+                "emi_to_income_ratio": round(repayment_ratio, 4),
+                "co_applicant_cashflow_score": co_cashflow_score,
+            }
+            loan_feasibility_cat = round((loan_feasibility_cat + co_cashflow_score) / 2.0, 2)
+        except Exception as exc:
+            co_applicant_cashflow = {"error": str(exc)}
+
+    features: Dict[str, Any] = {
+        "edu_academic_score": round(academic_score_norm, 4),
+        "edu_university_quality": round(university_quality, 4),
+        "edu_prospect_score": round(prospect_score, 4),
+        "edu_loan_to_cost_ratio": round(loan_to_cost_ratio, 4),
+        "edu_admission_confirmed": int(admission_confirmed),
+        "edu_co_applicant_emi_ratio": float(co_applicant_cashflow.get("emi_to_income_ratio", 0.5)),
+    }
+
+    category_scores: Dict[str, float] = {
+        "Academic Performance": academic_cat,
+        "University Quality": university_cat,
+        "Employability": employability_cat,
+        "Loan Feasibility": loan_feasibility_cat,
+    }
+
+    return EducationFeatureResult(
+        features=features,
+        student_analysis=student_analysis,
+        co_applicant_cashflow=co_applicant_cashflow,
         red_flags=red_flags,
         category_scores=category_scores,
     )

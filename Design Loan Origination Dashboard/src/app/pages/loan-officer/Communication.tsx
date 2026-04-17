@@ -63,7 +63,7 @@ export function CommunicationPage() {
 
 📧 Email delivered to: ${selectedApplication.email}
 🔗 Upload Link: ${response.upload_link}
-⏰ Link expires: ${new Date(response.expires_at).toLocaleString()}
+⏰ Link expires: ${response.expires_at ? new Date(response.expires_at).toLocaleString() : 'N/A'}
 
 The borrower can use this link to upload documents without logging in.
 Link is valid for 72 hours and can be used multiple times.
