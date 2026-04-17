@@ -279,6 +279,7 @@ export interface WorkflowAiScore {
     rulebook_top_insights?: string[];
     report_pdf_access_url?: string | null;
     report_pdf_download_url?: string | null;
+    report_pdf_storage_url?: string | null;
     report_text?: string | null;
     month_count?: number;
   } | null;
@@ -346,6 +347,16 @@ export interface UnderwriterCaseActionResponse {
   requested_documents?: string[];
   existing_documents?: string[];
   loan_officer_email_results?: Array<{ email: string; status: string; error?: string | null }>;
+}
+
+export interface WorkflowLoanOfferResponse {
+  arn: string;
+  emi: number;
+  total_interest: number;
+  total_payable: number;
+  email_status?: string | null;
+  email_error?: string | null;
+  email_to?: string | null;
 }
 
 export interface WorkflowDocumentItem {
@@ -543,7 +554,7 @@ export const workflowApi = {
     }, role),
 
   generateLoanOffer: (arn: string, role: WorkflowRole, payload: { loan_amount: number; tenure_months: number; interest_rate: number }) =>
-    request(`/api/v1/workflow/underwriter/loan-structuring/${arn}/offer`, {
+    request<WorkflowLoanOfferResponse>(`/api/v1/workflow/underwriter/loan-structuring/${arn}/offer`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }, role),

@@ -18,6 +18,11 @@ interface ApplicationSelectorProps {
   }>;
 }
 
+function isCreditAnalystStage(stage: string): boolean {
+  const normalized = stage.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return normalized === 'CREDIT_ANALYST' || normalized === 'CREDIT_ANALYST_REVIEW';
+}
+
 export function ApplicationSelector({ selectedArn, onSelect, subtitle, applications: applicationsProp }: ApplicationSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState('All stages');
@@ -60,7 +65,7 @@ export function ApplicationSelector({ selectedArn, onSelect, subtitle, applicati
       .listApplications()
       .then((rows) => {
         if (user?.role === 'credit_analyst') {
-          setApplications(rows.filter((application) => application.stage === 'CREDIT_ANALYST'));
+          setApplications(rows.filter((application) => isCreditAnalystStage(application.stage)));
           return;
         }
         setApplications(rows);
