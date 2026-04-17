@@ -160,6 +160,7 @@ export const workflowApi = {
 
   listApplications: () => request<WorkflowApplication[]>('/api/v1/workflow/applications'),
   getApplication: (arn: string) => request<WorkflowApplication>(`/api/v1/workflow/applications/${arn}`),
+  getFinalScore: (arn: string) => request<{ final_score: number | null; exists: boolean }>(`/api/v1/workflow/applications/${arn}/final-score`),
 
   loanOfficerDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/loan-officer/dashboard', {}, role),
   creditAnalystDashboard: (role: WorkflowRole) => request<WorkflowDashboardResponse>('/api/v1/workflow/credit-analyst/dashboard', {}, role),

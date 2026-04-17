@@ -169,6 +169,31 @@ def credit_analyst_dashboard() -> DashboardResponse:
     return DashboardResponse(**workflow_service.role_dashboard("credit_analyst"))
 
 
+@router.get("/applications/{arn}/final-score")
+def get_application_final_score(
+    arn: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_auth_roles({"loan_officer", "credit_analyst", "underwriter"})),
+) -> dict:
+    try:
+        application_row = db.query(LoanApplication).filter(LoanApplication.arn == arn).first()
+        if not application_row:
+            return {"final_score": None, "exists": False}
+        record = (
+            db.query(LoanAppraisalRecord)
+            .filter(LoanAppraisalRecord.application_id == application_row.id)
+            .filter(LoanAppraisalRecord.status == "success")
+            .filter(LoanAppraisalRecord.final_score.isnot(None))
+            .order_by(LoanAppraisalRecord.created_at.desc())
+            .first()
+        )
+        if not record:
+            return {"final_score": None, "exists": False}
+        return {"final_score": float(record.final_score), "exists": True}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Failed to fetch final score: {exc}") from exc
+
+
 @router.get(
     "/credit-analyst/bureau/{arn}",
     dependencies=[Depends(require_roles({"credit_analyst"}))],
