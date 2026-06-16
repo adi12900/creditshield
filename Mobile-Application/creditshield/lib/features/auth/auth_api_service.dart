@@ -15,7 +15,7 @@ String get _defaultApiBaseUrl {
     return configured;
   }
 
-  return 'http://10.30.126.216:8000';
+  return 'http://13.203.65.44/:8000';
 }
 
 class BorrowerProfileDto {

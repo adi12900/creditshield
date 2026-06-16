@@ -503,8 +503,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
 
     final isCsvAllowedDoc =
-        key == 'bank_statement_12m' ||
-        key == 'co_applicant_bank_statement_12m';
+        key == 'bank_statement_12m' || key == 'co_applicant_bank_statement_12m';
     final allowedExtensions = isCsvAllowedDoc
         ? const ['csv', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png']
         : const ['pdf', 'jpg', 'jpeg', 'png'];
@@ -520,7 +519,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final fileName = picked.name.trim().isEmpty ? 'document' : picked.name;
     final localPath = picked.path;
     if (localPath == null || localPath.trim().isEmpty) {
-      throw Exception('Unable to access selected file. Please pick another file.');
+      throw Exception(
+        'Unable to access selected file. Please pick another file.',
+      );
     }
 
     return _SelectedDocument(

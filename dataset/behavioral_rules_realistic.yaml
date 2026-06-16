@@ -1,6 +1,6 @@
 version: '4.0'
 design: realistic_underwriting_rule_engine_v2
-generated_rules: 30
+generated_rules: 34
 minimum_target: 5000
 categories:
   - income_stability
@@ -293,3 +293,39 @@ rules:
     severity: critical
     score_impact: -0.18
     reason: severe affordability stress across multiple core indicators warrants rejection
+
+  - rule_id: R20031
+    id: R20031
+    category: affordability
+    subcategory: debit_income_rbi_compliant_strong
+    condition: metric_debit_income_ratio <= 0.60 and metric_rbi_debit_income_compliant == True
+    severity: low
+    score_impact: 0.05
+    reason: debit-to-income is comfortably within RBI-aligned affordability discipline
+
+  - rule_id: R20032
+    id: R20032
+    category: affordability
+    subcategory: debit_income_rbi_borderline
+    condition: metric_debit_income_ratio > 0.60 and metric_debit_income_ratio <= 0.70 and metric_rbi_debit_income_compliant == True
+    severity: medium
+    score_impact: -0.04
+    reason: debit-to-income is near RBI-aligned upper comfort zone and needs caution
+
+  - rule_id: R20033
+    id: R20033
+    category: policy_overrides
+    subcategory: debit_income_rbi_breach
+    condition: metric_debit_income_ratio > 0.70 or metric_rbi_debit_income_breach == True
+    severity: high
+    score_impact: -0.10
+    reason: debit-to-income breaches RBI-aligned affordability threshold and signals structural stress
+
+  - rule_id: R20034
+    id: R20034
+    category: policy_overrides
+    subcategory: debit_income_rbi_severe_breach
+    condition: metric_debit_income_ratio > 0.85
+    severity: critical
+    score_impact: -0.15
+    reason: severe debit-to-income stress indicates materially weak repayment headroom

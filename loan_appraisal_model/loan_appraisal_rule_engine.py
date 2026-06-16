@@ -209,14 +209,27 @@ def _build_underwriting_metrics(features: Dict[str, Any], loan_context: Dict[str
     tenure_months = max(1.0, _to_float(ctx.get("tenure_months", 24.0), 24.0))
     estimated_emi = (loan_amount / tenure_months) if loan_amount > 0 else 0.0
 
-    emi_to_income_ratio = (estimated_emi / monthly_income) if monthly_income > 0 else 99.0
-    expense_to_income_ratio = (monthly_expense / monthly_income) if monthly_income > 0 else 99.0
+    # Guard near-zero denominators to avoid unstable/meaningless ratio explosions.
+    effective_income = monthly_income if monthly_income > 1e-6 else 0.0
+
+    emi_to_income_ratio = (estimated_emi / effective_income) if effective_income > 0 else 99.0
+    expense_to_income_ratio = (monthly_expense / effective_income) if effective_income > 0 else 99.0
+    debit_income_ratio = expense_to_income_ratio
+
+    # RBI-aligned operational affordability guardrails (internal policy interpretation):
+    # - <= 70%: compliant
+    # - > 70%: elevated stress, review/restrict auto-approval 
+    rbi_debit_income_threshold = 0.70
+    rbi_debit_income_compliant = debit_income_ratio <= rbi_debit_income_threshold
 
     annual_income = monthly_income * 12.0
     loan_size_sensitivity = (loan_amount / annual_income) if annual_income > 0 else 99.0
     net_surplus_after_emi = monthly_income - monthly_expense - estimated_emi
 
-    dti_ratio = ((monthly_expense + estimated_emi) / monthly_income) if monthly_income > 0 else 99.0
+    # Strict DTI: debt obligation only (estimated EMI) over income.
+    dti_ratio = (estimated_emi / effective_income) if effective_income > 0 else 99.0
+    # Cash burden ratio keeps prior holistic affordability stress view.
+    cash_burden_ratio = ((monthly_expense + estimated_emi) / effective_income) if effective_income > 0 else 99.0
     income_consistency_score = max(0.0, min(1.0, 1.0 - min(1.0, salary_cv)))
 
     return {
@@ -224,9 +237,14 @@ def _build_underwriting_metrics(features: Dict[str, Any], loan_context: Dict[str
         "metric_monthly_expense_proxy": round(monthly_expense, 2),
         "metric_monthly_savings_proxy": round(monthly_income - monthly_expense, 2),
         "metric_expense_to_income_ratio": round(expense_to_income_ratio, 4),
+        "metric_debit_income_ratio": round(debit_income_ratio, 4),
+        "metric_rbi_debit_income_threshold": round(rbi_debit_income_threshold, 4),
+        "metric_rbi_debit_income_compliant": rbi_debit_income_compliant,
+        "metric_rbi_debit_income_breach": not rbi_debit_income_compliant,
         "metric_estimated_emi": round(estimated_emi, 2),
         "metric_emi_to_income_ratio": round(emi_to_income_ratio, 4),
         "metric_dti_ratio": round(dti_ratio, 4),
+        "metric_cash_burden_ratio": round(cash_burden_ratio, 4),
         "metric_annual_income_proxy": round(annual_income, 2),
         "metric_loan_size_sensitivity": round(loan_size_sensitivity, 4),
         "metric_net_surplus_after_emi": round(net_surplus_after_emi, 2),
