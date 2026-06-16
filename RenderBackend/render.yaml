@@ -3,7 +3,7 @@ services:
     name: creditshield-backend
     env: python
     region: singapore
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -43,29 +43,13 @@ services:
       - key: SETU_REQUEST_TIMEOUT_SECONDS
         value: 60
       - key: MOCK_MODE
-        value: false
+        value: true
       - key: AWS_REGION
         sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
         sync: false
-      - key: BEDROCK_MODEL_ID
-        sync: false
-      - key: BEDROCK_EMBEDDING_MODEL
-        sync: false
-      - key: VECTOR_STORE
-        value: in_memory
-      - key: RAG_TOP_K
-        value: 5
-      - key: RAG_CHUNK_SIZE
-        value: 512
-      - key: RAG_CHUNK_OVERLAP
-        value: 50
-      - key: MAX_TOKENS
-        value: 2048
-      - key: TEMPERATURE
-        value: 0.1
       - key: AWS_ACCESS_KEY
         sync: false
       - key: AWS_SECRET_KEY
