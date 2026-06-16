@@ -1,0 +1,20 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from app.core.config import settings
+
+_engine_kwargs = {"pool_pre_ping": True}
+if settings.database_url.startswith("postgresql"):
+    _engine_kwargs["connect_args"] = {"connect_timeout": 8}
+
+engine = create_engine(settings.database_url, **_engine_kwargs)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

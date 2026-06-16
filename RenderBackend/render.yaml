@@ -1,0 +1,84 @@
+services:
+  - type: web
+    name: creditshield-backend
+    env: python
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_NAME
+        value: CreditShield Backend
+      - key: APP_ENV
+        value: production
+      - key: SYSTEM_ADMIN_USERNAME
+        sync: false
+      - key: SYSTEM_ADMIN_PASSWORD
+        sync: false
+      - key: SYSTEM_ADMIN_FULL_NAME
+        value: System Administrator
+      - key: SETU_BASE_URL
+        sync: false
+      - key: SETU_PRODUCTION_BASE_URL
+        sync: false
+      - key: SETU_CLIENT_ID
+        sync: false
+      - key: SETU_CLIENT_SECRET
+        sync: false
+      - key: SETU_PRODUCT_INSTANCE_ID
+        sync: false
+      - key: SETU_TOKEN_URL
+        sync: false
+      - key: SETU_CONSENT_PATH
+        value: /v2/consents
+      - key: SETU_CONSENT_GET_PATH_TEMPLATE
+        value: /v2/consents/{request_id}
+      - key: SETU_SESSIONS_PATH
+        value: /v2/sessions
+      - key: SETU_SESSIONS_GET_PATH_TEMPLATE
+        value: /v2/sessions/{session_id}
+      - key: SETU_REQUEST_TIMEOUT_SECONDS
+        value: 60
+      - key: MOCK_MODE
+        value: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BEDROCK_MODEL_ID
+        sync: false
+      - key: BEDROCK_EMBEDDING_MODEL
+        sync: false
+      - key: VECTOR_STORE
+        value: in_memory
+      - key: RAG_TOP_K
+        value: 5
+      - key: RAG_CHUNK_SIZE
+        value: 512
+      - key: RAG_CHUNK_OVERLAP
+        value: 50
+      - key: MAX_TOKENS
+        value: 2048
+      - key: TEMPERATURE
+        value: 0.1
+      - key: AWS_ACCESS_KEY
+        sync: false
+      - key: AWS_SECRET_KEY
+        sync: false
+      - key: AWS_REGIONS3
+        sync: false
+      - key: AWS_BUCKET_NAME
+        sync: false
+      - key: STORAGE_URL
+        sync: false
+      - key: OTP_SERVICE_URL
+        sync: false
+      - key: BACKEND_BASE_URL
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false

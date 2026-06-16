@@ -19,22 +19,54 @@ Backend/
 
 ## Setup
 
-1. Create and activate a virtual environment.
+1. Create and activate a virtual environment:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
 2. Install dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Create `.env` from `.env.example` and update password.
-4. Run the API:
+3. Create `.env` from `.env.example` and configure required variables:
 
    ```bash
-   uvicorn app.main:app --reload
-   uvicorn app.main:app --host 0.0.0.0 --port 8000
+   cp .env.example .env
+   # Edit .env with your database credentials and API keys
    ```
 
-5. Open docs at `http://127.0.0.1:8000/docs`.
+4. Run the API (make sure you're in the Backend directory):
+
+   ```bash
+   # Navigate to Backend directory first
+   cd Backend
+   
+   # Development mode with auto-reload
+   uvicorn app.main:app --reload
+   
+   # Or with custom host/port
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+5. Access the API:
+   - API Docs: `http://127.0.0.1:8000/docs`
+   - Alternative Docs: `http://127.0.0.1:8000/redoc`
+   - Health Check: `http://127.0.0.1:8000/health/db`
+
+## Common Issues
+
+**ModuleNotFoundError: No module named 'app'**
+
+This error occurs when uvicorn is run from the wrong directory. Make sure you're in the `Backend` folder before running uvicorn:
+
+```bash
+cd Backend
+uvicorn app.main:app --reload
+```
 
 ## Notes
 
