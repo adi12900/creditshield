@@ -32,6 +32,7 @@ git push -u origin main
 1. New + → Web Service
 2. Connect your repository
 3. Settings:
+   - **Root Directory**: `RenderBackend`
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 4. Add environment variable:

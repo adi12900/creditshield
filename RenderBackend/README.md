@@ -30,6 +30,7 @@ Clean FastAPI backend ready for Render deployment.
 1. Create a new Web Service on Render
 2. Connect your Git repository
 3. Configure the service:
+   - **Root Directory**: `RenderBackend`
    - **Environment**: Python 3
    - **Region**: Singapore (or your preferred region)
    - **Build Command**: `pip install -r requirements.txt`

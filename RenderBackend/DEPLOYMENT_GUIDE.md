@@ -36,8 +36,8 @@ git push -u origin main
 3. Configure:
    - **Name**: creditshield-backend
    - **Region**: Singapore
-   - **Branch**: main
-   - **Root Directory**: (leave empty if repo root is RenderBackend, otherwise specify path)
+   - **Branch**: aditya
+   - **Root Directory**: `RenderBackend` (IMPORTANT: This tells Render where to find your app)
    - **Environment**: Python 3
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
